@@ -90,6 +90,15 @@ enum BuildStatus {
     },
 }
 
+/// What is known about a keyboard connected for direct updates.
+#[derive(Debug, Clone, PartialEq)]
+enum LiveStatus {
+    Idle,
+    Working(String),
+    Found(kc_studio::session::Found),
+    Message(String),
+}
+
 /// A key being dragged on the canvas.
 #[derive(Debug, Clone, Copy)]
 struct KeyDrag {
@@ -144,6 +153,7 @@ pub struct Workspace {
     /// The local clone of the firmware repository for this project.
     repo_dir: Option<PathBuf>,
     build: BuildStatus,
+    live: LiveStatus,
     /// The binding inside a behaviour or combo that the picker assigns to,
     /// in the Behaviors and Combos modes.
     slot: Option<Slot>,
@@ -314,6 +324,7 @@ impl Workspace {
             flash,
             repo_dir,
             build: BuildStatus::Idle,
+            live: LiveStatus::Idle,
             slot: None,
             behavior: None,
             combo: None,
@@ -1801,6 +1812,187 @@ impl Workspace {
         .detach();
     }
 
+    /// Looks for a connected keyboard and compares it with the project.
+    fn find_keyboard(&mut self, cx: &mut Context<Self>) {
+        let project = self.project().clone();
+        self.live = LiveStatus::Working("Looking for a keyboard…".into());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let found = cx
+                .background_executor()
+                .spawn(async move { kc_studio::session::find(&project) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.live = match found {
+                    Ok(Some(found)) => LiveStatus::Found(found),
+                    Ok(None) => LiveStatus::Message(
+                        "No keyboard answered. Connect the main half by USB; its firmware must be built with ZMK Studio.".into(),
+                    ),
+                    Err(error) => LiveStatus::Message(format!("{error}.")),
+                };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Sends the keys that can be changed directly, then looks again.
+    fn send_to_keyboard(&mut self, port: String, cx: &mut Context<Self>) {
+        let project = self.project().clone();
+        self.live = LiveStatus::Working("Updating the keyboard…".into());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let sent = cx
+                .background_executor()
+                .spawn(async move { kc_studio::session::send(&project, &port) })
+                .await;
+            let _ = this.update(cx, |this, cx| match sent {
+                Ok(count) => {
+                    this.notice = Some(format!(
+                        "Updated {count} key(s) on the keyboard and saved them there."
+                    ));
+                    this.find_keyboard(cx);
+                }
+                Err(error) => {
+                    this.live = LiveStatus::Message(format!("{error}."));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Brings the keyboard's keys into the project, as one undo step.
+    fn read_from_keyboard(&mut self, port: String, window: &mut Window, cx: &mut Context<Self>) {
+        let project = self.project().clone();
+        self.live = LiveStatus::Working("Reading the keyboard…".into());
+        cx.notify();
+        cx.spawn_in(window, async move |this, cx| {
+            let read = cx
+                .background_executor()
+                .spawn(async move { kc_studio::session::read(&project, &port) })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| match read {
+                Ok(differences) => {
+                    let count = differences.len();
+                    this.change("Read From Keyboard", window, cx, |p| {
+                        for (layer, position, binding) in differences {
+                            let id = p.layers[layer].id;
+                            p.set_binding(id, position, binding)?;
+                        }
+                        Ok(())
+                    });
+                    this.notice = Some(format!(
+                        "Read {count} key(s) from the keyboard into the project."
+                    ));
+                    this.find_keyboard(cx);
+                }
+                Err(error) => {
+                    this.live = LiveStatus::Message(format!("{error}."));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn render_live(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (border, muted, success) = (theme.border, theme.muted_foreground, theme.success);
+        let working = matches!(self.live, LiveStatus::Working(_));
+        let panel = div()
+            .w(px(640.))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .rounded_lg()
+            .border_1()
+            .border_color(border)
+            .child(div().text_lg().child("Update the keyboard directly"))
+            .child(div().text_sm().text_color(muted).child(
+                "With firmware built for ZMK Studio, changes to what keys do can be sent over USB in a moment, without a build. New layers, behaviors, combos, lighting and settings still need a build.",
+            ))
+            .when(!working, |panel| {
+                panel.child(
+                    div().flex().child(
+                        Button::new("find-keyboard")
+                            .label("Find Keyboard")
+                            .on_click(cx.listener(|this, _, _, cx| this.find_keyboard(cx))),
+                    ),
+                )
+            });
+        let panel = match &self.live {
+            LiveStatus::Idle => panel,
+            LiveStatus::Working(text) | LiveStatus::Message(text) => {
+                panel.child(div().text_sm().child(text.clone()))
+            }
+            LiveStatus::Found(found) => {
+                let panel = panel.child(
+                    div()
+                        .text_sm()
+                        .text_color(success)
+                        .child(format!("Connected to {}.", found.name)),
+                );
+                match &found.comparison {
+                    None => panel.child(div().text_sm().child(format!(
+                        "It is locked. {} Then press Find Keyboard again.",
+                        self.board
+                            .flash
+                            .studio_unlock
+                            .as_deref()
+                            .unwrap_or("Press the key assigned to Studio Unlock.")
+                    ))),
+                    Some(comparison) => match &comparison.mismatch {
+                        Some(mismatch) => panel.child(div().text_sm().child(mismatch.clone())),
+                        None => {
+                            let (send_port, read_port) = (found.port.clone(), found.port.clone());
+                            let count = comparison.changes.len();
+                            let summary = match (count, comparison.needs_build) {
+                                (0, 0) => "The keyboard matches the project.".to_string(),
+                                (0, n) => format!("{n} key(s) differ in ways that need a firmware build."),
+                                (c, 0) => format!("{c} key(s) differ and can be sent now."),
+                                (c, n) => format!("{c} key(s) differ and can be sent now; {n} more need a firmware build."),
+                            };
+                            panel.child(div().text_sm().child(summary)).child(
+                                div()
+                                    .flex()
+                                    .gap_2()
+                                    .when(count > 0, |row| {
+                                        row.child(
+                                            Button::new("send-live")
+                                                .primary()
+                                                .label("Send to Keyboard")
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.send_to_keyboard(send_port.clone(), cx);
+                                                })),
+                                        )
+                                    })
+                                    .when(count > 0, |row| {
+                                        row.child(
+                                            Button::new("read-live")
+                                                .ghost()
+                                                .label("Use the Keyboard's Keys Instead")
+                                                .on_click(cx.listener(
+                                                    move |this, _, window, cx| {
+                                                        this.read_from_keyboard(
+                                                            read_port.clone(),
+                                                            window,
+                                                            cx,
+                                                        );
+                                                    },
+                                                )),
+                                        )
+                                    }),
+                            )
+                        }
+                    },
+                }
+            }
+        };
+        div().w_full().flex().justify_center().pb_4().child(panel)
+    }
+
     fn render_build(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted, danger, success) = (
@@ -2173,6 +2365,7 @@ impl Render for Workspace {
                                 .min_h_0()
                                 .overflow_y_scroll()
                                 .child(self.render_build(cx))
+                                .child(self.render_live(cx))
                                 .child(self.flash.clone()),
                         ),
                     })

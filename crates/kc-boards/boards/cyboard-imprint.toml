@@ -25,6 +25,7 @@ starter_keys = [
 # Both halves mount under the same volume name, so the app must sequence them.
 order = ["left", "right"]
 bootloader_entry = "Double-tap the reset button next to the USB-C port on the half you are flashing."
+studio_unlock = "Hold the A and F key positions on the left half together for three seconds."
 
 [[halves]]
 side = "left"

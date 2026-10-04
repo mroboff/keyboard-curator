@@ -10,6 +10,7 @@ pub mod codec;
 pub mod framing;
 pub mod proto;
 pub mod serial;
+pub mod session;
 
 pub use client::{Client, DeviceBehavior, StudioError};
 pub use codec::{compare, BehaviorTable, Change, Comparison};

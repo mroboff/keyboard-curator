@@ -3631,6 +3631,7 @@ dependencies = [
  "kc-flash",
  "kc-import",
  "kc-model",
+ "kc-studio",
  "kc-zmk",
  "serde",
  "serde_json",

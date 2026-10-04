@@ -106,6 +106,9 @@ pub struct FlashInfo {
     pub order: Vec<Side>,
     /// How to put a half into its bootloader, in the user's terms.
     pub bootloader_entry: String,
+    /// How to unlock ZMK Studio on the keyboard, when its firmware is built
+    /// with Studio.
+    pub studio_unlock: Option<String>,
 }
 
 /// A feature a firmware profile provides.
