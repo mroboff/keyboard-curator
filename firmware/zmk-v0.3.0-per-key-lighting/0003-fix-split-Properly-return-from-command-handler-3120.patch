@@ -1,0 +1,35 @@
+From 65c619f0fba0408a4fd84e4a9b7e7c614963c354 Mon Sep 17 00:00:00 2001
+From: Willow Herring <31960031+ReFil@users.noreply.github.com>
+Date: Sun, 7 Dec 2025 04:09:31 +0000
+Subject: [PATCH 03/10] fix(split): Properly return from command handler
+ (#3120)
+
+(cherry picked from commit 2f74ab7c82a47c510ef0495a56cc587a2e4980d7)
+---
+ app/src/split/peripheral.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/app/src/split/peripheral.c b/app/src/split/peripheral.c
+index e9317bb8..b814df61 100644
+--- a/app/src/split/peripheral.c
++++ b/app/src/split/peripheral.c
+@@ -55,13 +55,14 @@ int zmk_split_transport_peripheral_command_handler(
+         if (err) {
+             LOG_ERR("Failed to invoke behavior %s: %d", binding.behavior_dev, err);
+         }
++        return err;
+     }
+     case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_PHYSICAL_LAYOUT: {
+-        zmk_physical_layouts_select(cmd.data.set_physical_layout.layout_idx);
++        return zmk_physical_layouts_select(cmd.data.set_physical_layout.layout_idx);
+     }
+ #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+     case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_HID_INDICATORS: {
+-        raise_zmk_hid_indicators_changed((struct zmk_hid_indicators_changed){
++        return raise_zmk_hid_indicators_changed((struct zmk_hid_indicators_changed){
+             .indicators = cmd.data.set_hid_indicators.indicators});
+     }
+ #endif
+-- 
+2.55.0
+

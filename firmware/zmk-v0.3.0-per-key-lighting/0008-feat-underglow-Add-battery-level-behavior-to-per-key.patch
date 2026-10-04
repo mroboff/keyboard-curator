@@ -1,0 +1,183 @@
+From 9dc48bd697f1eb66746cf5e2fc580569ada812df Mon Sep 17 00:00:00 2001
+From: darknao <darknao@drkn.ninja>
+Date: Thu, 15 Jan 2026 21:01:32 +0100
+Subject: [PATCH 08/10] feat(underglow): Add battery level behavior to per-key
+ RGB
+
+(cherry picked from commit c73518229e2b231541b3816d3adb5c2aaac8794f)
+---
+ app/CMakeLists.txt                            |  1 +
+ app/dts/behaviors.dtsi                        |  1 +
+ app/dts/behaviors/ug_battery.dtsi             | 34 ++++++++
+ .../zmk,behavior-underglow-battery.yaml       | 12 +++
+ .../behaviors/behavior_underglow_battery.c    | 77 +++++++++++++++++++
+ 5 files changed, 125 insertions(+)
+ create mode 100644 app/dts/behaviors/ug_battery.dtsi
+ create mode 100644 app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml
+ create mode 100644 app/src/behaviors/behavior_underglow_battery.c
+
+diff --git a/app/CMakeLists.txt b/app/CMakeLists.txt
+index b7640cc8..5b1ee97b 100644
+--- a/app/CMakeLists.txt
++++ b/app/CMakeLists.txt
+@@ -88,6 +88,7 @@ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior
+ if (CONFIG_ZMK_HID_INDICATORS)
+   target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_indicators.c)
+ endif()
++target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_battery.c)
+ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/events/underglow_color_changed.c)
+ target_sources_ifdef(CONFIG_ZMK_BACKLIGHT app PRIVATE src/behaviors/behavior_backlight.c)
+ 
+diff --git a/app/dts/behaviors.dtsi b/app/dts/behaviors.dtsi
+index ff56705d..1f87ef1a 100644
+--- a/app/dts/behaviors.dtsi
++++ b/app/dts/behaviors.dtsi
+@@ -30,3 +30,4 @@
+ #include <behaviors/mouse_keys.dtsi>
+ #include <behaviors/ug_color.dtsi>
+ #include <behaviors/ug_indicators.dtsi>
++#include <behaviors/ug_battery.dtsi>
+diff --git a/app/dts/behaviors/ug_battery.dtsi b/app/dts/behaviors/ug_battery.dtsi
+new file mode 100644
+index 00000000..3e5f75cc
+--- /dev/null
++++ b/app/dts/behaviors/ug_battery.dtsi
+@@ -0,0 +1,34 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++/ {
++    behaviors {
++        ug_b2: ugbat20 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <20>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 20%";
++        };
++        ug_b4: ugbat40 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <40>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 40%";
++        };
++        ug_b6: ugbat60 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <60>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 60%";
++        };
++        ug_b8: ugbat80 {
++            compatible = "zmk,behavior-underglow-battery";
++            threshold = <80>;
++            #binding-cells = <2>;
++            display-name = "Underglow Battery level 80%";
++        };
++    };
++};
+diff --git a/app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml b/app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml
+new file mode 100644
+index 00000000..4c535ea5
+--- /dev/null
++++ b/app/dts/bindings/behaviors/zmk,behavior-underglow-battery.yaml
+@@ -0,0 +1,12 @@
++# Copyright (c) 2024, The ZMK Contributors
++# SPDX-License-Identifier: MIT
++
++description: Set underglow color based on battery level
++
++compatible: "zmk,behavior-underglow-battery"
++
++include: two_param.yaml
++
++properties:
++  threshold:
++    type: int
+diff --git a/app/src/behaviors/behavior_underglow_battery.c b/app/src/behaviors/behavior_underglow_battery.c
+new file mode 100644
+index 00000000..e369f842
+--- /dev/null
++++ b/app/src/behaviors/behavior_underglow_battery.c
+@@ -0,0 +1,77 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define DT_DRV_COMPAT zmk_behavior_underglow_battery
++
++// Dependencies
++#include <zephyr/device.h>
++#include <drivers/behavior.h>
++#include <zephyr/logging/log.h>
++#include <zmk/battery.h>
++#include <zmk/event_manager.h>
++#include <zmk/events/battery_state_changed.h>
++#include <zmk/events/underglow_color_changed.h>
++
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
++
++struct underglow_battery_data {
++    uint32_t layers;
++};
++
++struct underglow_battery_config {
++    int threshold;
++};
++
++static struct underglow_battery_data underglow_battery_data = {.layers = 0};
++
++static int underglow_battery_init(const struct device *dev) { return 0; };
++
++static int underglow_battery_process(struct zmk_behavior_binding *binding,
++                                     struct zmk_behavior_binding_event event) {
++    const struct device *dev = zmk_behavior_get_binding(binding->behavior_dev);
++    const struct underglow_battery_config *config = dev->config;
++    struct underglow_battery_data *data = dev->data;
++    data->layers |= BIT(event.layer);
++    int bat = zmk_battery_state_of_charge();
++
++    if (bat >= config->threshold)
++        return binding->param2;
++    else
++        return binding->param1;
++}
++
++static const struct behavior_driver_api underglow_battery_driver_api = {
++    .binding_pressed = underglow_battery_process,
++    .locality = BEHAVIOR_LOCALITY_GLOBAL,
++#if IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++    .get_parameter_metadata = zmk_behavior_get_empty_param_metadata,
++#endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++};
++
++static int underglow_battery_listener(const zmk_event_t *eh);
++
++ZMK_LISTENER(behavior_underglow_battery, underglow_battery_listener);
++ZMK_SUBSCRIPTION(behavior_underglow_battery, zmk_battery_state_changed);
++
++static int underglow_battery_listener(const zmk_event_t *eh) {
++    raise_zmk_underglow_color_changed((struct zmk_underglow_color_changed){
++        .layers = underglow_battery_data.layers, .wakeup = false});
++
++    return ZMK_EV_EVENT_BUBBLE;
++}
++
++#define KP_INST(n)                                                                                 \
++    static struct underglow_battery_config underglow_battery_config_##n = {                        \
++        .threshold = DT_INST_PROP(n, threshold)};                                                  \
++    BEHAVIOR_DT_INST_DEFINE(n, underglow_battery_init, NULL, &underglow_battery_data,              \
++                            &underglow_battery_config_##n, POST_KERNEL,                            \
++                            CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &underglow_battery_driver_api);
++
++DT_INST_FOREACH_STATUS_OKAY(KP_INST)
++
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+-- 
+2.55.0
+

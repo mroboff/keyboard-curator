@@ -1,0 +1,301 @@
+From d05fd3eba26ab32c826eac4b7a10f19462116851 Mon Sep 17 00:00:00 2001
+From: darknao <darknao@drkn.ninja>
+Date: Tue, 24 Mar 2026 13:37:35 +0100
+Subject: [PATCH 09/10] feat(underglow): Add transparent behavior to per-key
+ RGB
+
+Use &trans behavior to use color from the next visible rgb layer in the
+stack.
+
+(cherry picked from commit db2ba9fcd3dec4c7afcf171f123585a9f8292595)
+---
+ app/CMakeLists.txt                        |  2 +-
+ app/include/dt-bindings/zmk/rgb_colors.h  |  3 +-
+ app/include/zmk/rgb_underglow_layer.h     |  3 +-
+ app/include/zmk/split/peripheral_layers.h |  3 +-
+ app/src/events/underglow_color_changed.c  |  2 +-
+ app/src/rgb_underglow.c                   | 98 ++++++++++++++++++++---
+ app/src/rgb_underglow_layer.c             | 14 +++-
+ app/src/split/peripheral_layers.c         |  4 +-
+ 8 files changed, 109 insertions(+), 20 deletions(-)
+
+diff --git a/app/CMakeLists.txt b/app/CMakeLists.txt
+index 5b1ee97b..cabd8505 100644
+--- a/app/CMakeLists.txt
++++ b/app/CMakeLists.txt
+@@ -41,6 +41,7 @@ target_sources(app PRIVATE src/events/sensor_event.c)
+ target_sources_ifdef(CONFIG_ZMK_WPM app PRIVATE src/events/wpm_state_changed.c)
+ target_sources_ifdef(CONFIG_USB_DEVICE_STACK app PRIVATE src/events/usb_conn_state_changed.c)
+ target_sources(app PRIVATE src/behaviors/behavior_reset.c)
++target_sources(app PRIVATE src/behaviors/behavior_transparent.c)
+ target_sources_ifdef(CONFIG_ZMK_EXT_POWER app PRIVATE src/behaviors/behavior_ext_power.c)
+ target_sources_ifdef(CONFIG_ZMK_BEHAVIOR_SOFT_OFF app PRIVATE src/behaviors/behavior_soft_off.c)
+ add_subdirectory_ifdef(CONFIG_ZMK_POINTING src/pointing/)
+@@ -58,7 +59,6 @@ if ((NOT CONFIG_ZMK_SPLIT) OR CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+   target_sources(app PRIVATE src/behaviors/behavior_outputs.c)
+   target_sources(app PRIVATE src/behaviors/behavior_toggle_layer.c)
+   target_sources(app PRIVATE src/behaviors/behavior_to_layer.c)
+-  target_sources(app PRIVATE src/behaviors/behavior_transparent.c)
+   target_sources(app PRIVATE src/behaviors/behavior_none.c)
+   target_sources_ifdef(CONFIG_ZMK_BEHAVIOR_SENSOR_ROTATE app PRIVATE src/behaviors/behavior_sensor_rotate.c)
+   target_sources_ifdef(CONFIG_ZMK_BEHAVIOR_SENSOR_ROTATE_VAR app PRIVATE src/behaviors/behavior_sensor_rotate_var.c)
+diff --git a/app/include/dt-bindings/zmk/rgb_colors.h b/app/include/dt-bindings/zmk/rgb_colors.h
+index 73e9cc1f..edaa9766 100644
+--- a/app/include/dt-bindings/zmk/rgb_colors.h
++++ b/app/include/dt-bindings/zmk/rgb_colors.h
+@@ -14,5 +14,4 @@
+ #define PURPLE 0x800080
+ #define PINK 0xffc0cb
+ #define WHITE 0xffffff
+-#define ___ 0x000000
+-#define BLACK 0x000000
+\ No newline at end of file
++#define BLACK 0x000000
+diff --git a/app/include/zmk/rgb_underglow_layer.h b/app/include/zmk/rgb_underglow_layer.h
+index 1b14359e..bee13de2 100644
+--- a/app/include/zmk/rgb_underglow_layer.h
++++ b/app/include/zmk/rgb_underglow_layer.h
+@@ -28,4 +28,5 @@ const int zmk_rgbmap_fade_delay(uint8_t layer);
+ const struct zmk_behavior_binding *rgb_underglow_get_bindings(uint8_t layer);
+ 
+ uint8_t rgb_underglow_top_layer_with_state(uint32_t state_to_test);
+-uint8_t rgb_underglow_top_layer(void);
+\ No newline at end of file
++uint8_t rgb_underglow_top_layer(void);
++uint32_t rgb_underglow_layers_state(void);
+diff --git a/app/include/zmk/split/peripheral_layers.h b/app/include/zmk/split/peripheral_layers.h
+index 974a322c..b00e66d9 100644
+--- a/app/include/zmk/split/peripheral_layers.h
++++ b/app/include/zmk/split/peripheral_layers.h
+@@ -2,4 +2,5 @@
+ 
+ void set_peripheral_layers_state(uint32_t new_layers);
+ bool peripheral_layer_active(uint8_t layer);
+-uint8_t peripheral_highest_layer_active(void);
+\ No newline at end of file
++uint8_t peripheral_highest_layer_active(void);
++uint32_t peripheral_layers_state(void);
+diff --git a/app/src/events/underglow_color_changed.c b/app/src/events/underglow_color_changed.c
+index c00bdc6b..468ce83d 100644
+--- a/app/src/events/underglow_color_changed.c
++++ b/app/src/events/underglow_color_changed.c
+@@ -7,4 +7,4 @@
+ #include <zephyr/kernel.h>
+ #include <zmk/events/underglow_color_changed.h>
+ 
+-ZMK_EVENT_IMPL(zmk_underglow_color_changed);
+\ No newline at end of file
++ZMK_EVENT_IMPL(zmk_underglow_color_changed);
+diff --git a/app/src/rgb_underglow.c b/app/src/rgb_underglow.c
+index bd5947ea..d3d9e989 100644
+--- a/app/src/rgb_underglow.c
++++ b/app/src/rgb_underglow.c
+@@ -267,13 +267,15 @@ static int rgb_settings_set(const char *name, size_t len, settings_read_cb read_
+         rc = read_cb(cb_arg, &state, sizeof(state));
+         if (rc >= 0) {
+             if (state.on) {
+-                k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+-            }
+ #if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+-            if (state.layer_enabled) {
+-                zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
+-            }
++                if (state.layer_enabled) {
++                    zmk_rgb_underglow_transient_on();
++                    zmk_rgb_underglow_set_layer(rgb_underglow_top_layer(), true);
++                }
++#else
++                k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+ #endif
++            }
+             return 0;
+         }
+ 
+@@ -311,7 +313,8 @@ static int zmk_rgb_underglow_init(void) {
+         animation_speed : CONFIG_ZMK_RGB_UNDERGLOW_SPD_START,
+         current_effect : CONFIG_ZMK_RGB_UNDERGLOW_EFF_START,
+         animation_step : 0,
+-        on : IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_ON_START)
++        on : IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_ON_START),
++        layer_enabled : false
+     };
+ 
+ #if IS_ENABLED(CONFIG_SETTINGS)
+@@ -351,12 +354,12 @@ int zmk_rgb_underglow_get_state(bool *on_off) {
+ }
+ 
+ int zmk_rgb_underglow_on(void) {
+-    zmk_rgb_underglow_transient_on();
+ #if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+     if (state.current_effect == UNDERGLOW_EFFECT_LAYER_INDICATORS) {
+         state.layer_enabled = true;
+     }
+ #endif
++    zmk_rgb_underglow_transient_on();
+     return zmk_rgb_underglow_save_state();
+ }
+ 
+@@ -374,9 +377,10 @@ int zmk_rgb_underglow_transient_on(void) {
+ #endif
+ 
+     state.on = true;
+-    state.animation_step = 0;
+-    k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+-
++    if (!state.layer_enabled) {
++        state.animation_step = 0;
++        k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
++    }
+     return 0;
+ }
+ 
+@@ -456,8 +460,79 @@ static struct led_rgb hex_to_rgb(uint8_t r, uint8_t g, uint8_t b) {
+     };
+ }
+ 
++static int zmk_rgb_underglow_apply_merged_rgbmap() {
++    LOG_DBG("applying merged rgbmap");
++    int rc = 0;
++    size_t len = 0;
++    uint8_t active_layers[ZMK_KEYMAP_LAYERS_LEN];
++    uint32_t layer_state = rgb_underglow_layers_state();
++    LOG_DBG("layer state: %08x", layer_state);
++    for (uint8_t layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer > 0; layer--) {
++        if ((layer_state & (BIT(layer))) == (BIT(layer)) || layer == 0) {
++            active_layers[len] = layer;
++            len++;
++            LOG_DBG("active layer: %d", layer);
++        }
++    }
++    active_layers[len++] = 0; // add default layer (0)
++    // fast track if no bindings on top layer
++    if (rgb_underglow_get_bindings(active_layers[0]) == NULL) {
++        LOG_DBG("no rgb bindings found for active layer: %d", active_layers[0]);
++        return 0;
++    }
++
++    for (int pixel = 0; pixel < STRIP_NUM_PIXELS; pixel++) {
++        uint8_t midx = rgb_pixel_lookup(pixel);
++        int color = 0;
++        if (midx >= ZMK_KEYMAP_LEN) {
++            LOG_DBG("out of range");
++        } else {
++
++            for (int layer = 0; layer < len; layer++) {
++                // LOG_DBG("getting rgb bindings for active layer: %d", active_layers[layer]);
++                const struct zmk_behavior_binding *bindings =
++                    rgb_underglow_get_bindings(active_layers[layer]);
++                if (bindings != NULL) {
++                    const struct device *dev =
++                        zmk_behavior_get_binding(bindings[midx].behavior_dev);
++                    if (dev != NULL) {
++                        const struct behavior_driver_api *api =
++                            (const struct behavior_driver_api *)dev->api;
++                        if (api->binding_pressed != NULL) {
++                            struct zmk_behavior_binding_event event = {.position = midx,
++                                                                       .layer =
++                                                                           active_layers[layer],
++                                                                       .timestamp = k_uptime_get()};
++
++                            color = api->binding_pressed(
++                                (struct zmk_behavior_binding *)&bindings[midx], event);
++                            if (color == ZMK_BEHAVIOR_TRANSPARENT) {
++                                color = 0;
++                                continue;
++                            }
++                        } // end if binding_pressed != NULL
++                    } // end if dev != NULL
++                } // end if bindings != NULL
++
++                break;
++            } // end for each active layer
++
++            // set pixel color
++            pixels[pixel] =
++                hex_to_rgb((color & 0xFF0000) >> 16, (color & 0xFF00) >> 8, color & 0xFF);
++
++            if (color > 0) {
++                rc = 1; // layer has at least one pixel up
++            }
++        } // end for each pixel
++    }
++    return rc;
++}
++
+ static int zmk_rgb_underglow_apply_rgbmap(const struct zmk_behavior_binding *bindings,
+                                           size_t rgbmap_len, uint8_t layer) {
++    LOG_DBG("applying rgbmap for layer: %d", layer);
++    return zmk_rgb_underglow_apply_merged_rgbmap();
+     int rc = 0;
+     for (int i = 0; i < STRIP_NUM_PIXELS; i++) {
+         uint8_t midx = rgb_pixel_lookup(i);
+@@ -497,8 +572,7 @@ static void zmk_rgb_underglow_set_layer(uint8_t layer, bool wakeup) {
+     if (!state.layer_enabled)
+         return;
+ 
+-    const struct zmk_behavior_binding *rgbmap = rgb_underglow_get_bindings(layer);
+-    if (rgbmap != NULL && zmk_rgb_underglow_apply_rgbmap(rgbmap, ZMK_KEYMAP_LEN, layer)) {
++    if (zmk_rgb_underglow_apply_merged_rgbmap()) {
+         if (!state.on) {
+             if (!wakeup) {
+                 LOG_DBG("rgb off and no wakeup, abort refresh");
+diff --git a/app/src/rgb_underglow_layer.c b/app/src/rgb_underglow_layer.c
+index c1d2965a..6751b8c2 100644
+--- a/app/src/rgb_underglow_layer.c
++++ b/app/src/rgb_underglow_layer.c
+@@ -64,6 +64,10 @@ const struct zmk_behavior_binding *rgb_underglow_get_bindings(uint8_t layer) {
+     }
+ }
+ 
++bool rgb_underglow_layer_active_with_state(uint8_t layer, uint32_t state_to_test) {
++    return (state_to_test & (BIT(layer))) == (BIT(layer));
++};
++
+ uint8_t rgb_underglow_top_layer_with_state(uint32_t state_to_test) {
+     for (uint8_t layer = ZMK_KEYMAP_LAYERS_LEN - 1; layer > 0; layer--) {
+         if ((state_to_test & (BIT(layer))) == (BIT(layer)) || layer == 0) {
+@@ -74,6 +78,14 @@ uint8_t rgb_underglow_top_layer_with_state(uint32_t state_to_test) {
+     return 0;
+ }
+ 
++uint32_t rgb_underglow_layers_state(void) {
++#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
++    return zmk_keymap_layer_state();
++#else
++    return peripheral_layers_state();
++#endif
++}
++
+ uint8_t rgb_underglow_top_layer(void) {
+ #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+     return zmk_keymap_highest_layer_active();
+@@ -81,4 +93,4 @@ uint8_t rgb_underglow_top_layer(void) {
+     return peripheral_highest_layer_active();
+ #endif
+ }
+-#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+\ No newline at end of file
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+diff --git a/app/src/split/peripheral_layers.c b/app/src/split/peripheral_layers.c
+index 95de8f8e..c150bc4a 100644
+--- a/app/src/split/peripheral_layers.c
++++ b/app/src/split/peripheral_layers.c
+@@ -9,6 +9,8 @@ static uint32_t peripheral_layers = 0;
+ 
+ void set_peripheral_layers_state(uint32_t new_layers) { peripheral_layers = new_layers; }
+ 
++uint32_t peripheral_layers_state(void) { return peripheral_layers; }
++
+ bool peripheral_layer_active(uint8_t layer) {
+     return (peripheral_layers & (BIT(layer))) == (BIT(layer));
+ };
+@@ -22,4 +24,4 @@ uint8_t peripheral_highest_layer_active(void) {
+         }
+     }
+     return 0;
+-}
+\ No newline at end of file
++}
+-- 
+2.55.0
+

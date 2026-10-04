@@ -1,0 +1,48 @@
+From ebb86151d8bbcb697913110a6b71c95e29fd5151 Mon Sep 17 00:00:00 2001
+From: Mark Roboff <mark.roboff@bluecircuit.ai>
+Date: Sun, 4 Oct 2026 00:34:41 -0700
+Subject: [PATCH] feat(underglow): allow starting in the per-key layer effect
+
+With EXPERIMENTAL_RGB_LAYER enabled, ZMK_RGB_UNDERGLOW_EFF_START may be 4,
+the per-key layer effect, and the keyboard then starts in it, so per-key
+colours show from power-up without cycling effects first.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ app/Kconfig             | 1 +
+ app/src/rgb_underglow.c | 7 ++++++-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/app/Kconfig b/app/Kconfig
+index 7532ff5d..daf1fe8e 100644
+--- a/app/Kconfig
++++ b/app/Kconfig
+@@ -323,6 +323,7 @@ config ZMK_RGB_UNDERGLOW_SPD_START
+ 
+ config ZMK_RGB_UNDERGLOW_EFF_START
+     int "RGB underglow start effect int value related to the effect enum list"
++    range 0 4 if EXPERIMENTAL_RGB_LAYER
+     range 0 3
+ 
+ config ZMK_RGB_UNDERGLOW_ON_START
+diff --git a/app/src/rgb_underglow.c b/app/src/rgb_underglow.c
+index d3d9e989..6a3f6c3b 100644
+--- a/app/src/rgb_underglow.c
++++ b/app/src/rgb_underglow.c
+@@ -325,7 +325,12 @@ static int zmk_rgb_underglow_init(void) {
+     state.on = zmk_usb_is_powered();
+ #endif
+ 
+-    if (state.on) {
++#if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
++    // Start in the per-key layer effect when it is the configured start effect.
++    state.layer_enabled = state.on && state.current_effect == UNDERGLOW_EFFECT_LAYER_INDICATORS;
++#endif
++
++    if (state.on && !state.layer_enabled) {
+         k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(50));
+     }
+ #if IS_ENABLED(UNDERGLOW_LAYER_ENABLED)
+-- 
+2.55.0
+

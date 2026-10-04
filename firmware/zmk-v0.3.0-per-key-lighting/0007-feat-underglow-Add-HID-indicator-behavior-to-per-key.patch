@@ -1,0 +1,208 @@
+From 5dba48220f27189d958f133f4e5347388679e03a Mon Sep 17 00:00:00 2001
+From: darknao <darknao@drkn.ninja>
+Date: Thu, 15 Jan 2026 21:00:54 +0100
+Subject: [PATCH 07/10] feat(underglow): Add HID indicator behavior to per-key
+ RGB
+
+(cherry picked from commit 2f430dd5ed814ea0f4f0fb247a0436d62c0f6583)
+---
+ app/CMakeLists.txt                            |  3 +
+ app/dts/behaviors.dtsi                        |  1 +
+ app/dts/behaviors/ug_indicators.dtsi          | 33 ++++++++
+ .../zmk,behavior-underglow-indicators.yaml    | 13 +++
+ app/include/dt-bindings/zmk/hid_indicators.h  |  9 ++
+ .../behaviors/behavior_underglow_indicators.c | 83 +++++++++++++++++++
+ 6 files changed, 142 insertions(+)
+ create mode 100644 app/dts/behaviors/ug_indicators.dtsi
+ create mode 100644 app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml
+ create mode 100644 app/include/dt-bindings/zmk/hid_indicators.h
+ create mode 100644 app/src/behaviors/behavior_underglow_indicators.c
+
+diff --git a/app/CMakeLists.txt b/app/CMakeLists.txt
+index 171bf527..b7640cc8 100644
+--- a/app/CMakeLists.txt
++++ b/app/CMakeLists.txt
+@@ -85,6 +85,9 @@ endif()
+ 
+ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_rgb_underglow.c)
+ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_color.c)
++if (CONFIG_ZMK_HID_INDICATORS)
++  target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/behaviors/behavior_underglow_indicators.c)
++endif()
+ target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/events/underglow_color_changed.c)
+ target_sources_ifdef(CONFIG_ZMK_BACKLIGHT app PRIVATE src/behaviors/behavior_backlight.c)
+ 
+diff --git a/app/dts/behaviors.dtsi b/app/dts/behaviors.dtsi
+index c7012549..ff56705d 100644
+--- a/app/dts/behaviors.dtsi
++++ b/app/dts/behaviors.dtsi
+@@ -29,3 +29,4 @@
+ #include <behaviors/studio_unlock.dtsi>
+ #include <behaviors/mouse_keys.dtsi>
+ #include <behaviors/ug_color.dtsi>
++#include <behaviors/ug_indicators.dtsi>
+diff --git a/app/dts/behaviors/ug_indicators.dtsi b/app/dts/behaviors/ug_indicators.dtsi
+new file mode 100644
+index 00000000..b62c79b7
+--- /dev/null
++++ b/app/dts/behaviors/ug_indicators.dtsi
+@@ -0,0 +1,33 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#include <dt-bindings/zmk/hid_indicators.h>
++
++/ {
++    behaviors {
++        ug_nl: ugnumlk {
++            compatible = "zmk,behavior-underglow-indicators";
++            indicator = <NUM_LOCK>;
++            #binding-cells = <2>;
++            display-name = "Underglow NumLock indicator";
++        };
++
++        ug_cl: ugcapslk {
++            compatible = "zmk,behavior-underglow-indicators";
++            indicator = <CAPS_LOCK>;
++            #binding-cells = <2>;
++            display-name = "Underglow CapsLock indicator";
++        };
++
++        ug_sl: ugscrllk {
++            compatible = "zmk,behavior-underglow-indicators";
++            indicator = <SCROLL_LOCK>;
++            #binding-cells = <2>;
++            display-name = "Underglow ScrollLock indicator";
++        };
++
++    };
++};
+diff --git a/app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml b/app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml
+new file mode 100644
+index 00000000..3bd19081
+--- /dev/null
++++ b/app/dts/bindings/behaviors/zmk,behavior-underglow-indicators.yaml
+@@ -0,0 +1,13 @@
++# Copyright (c) 2024, The ZMK Contributors
++# SPDX-License-Identifier: MIT
++
++description: Set underglow for HID indicators
++
++compatible: "zmk,behavior-underglow-indicators"
++
++include: two_param.yaml
++
++properties:
++  indicator:
++    type: int
++    default: 0
+diff --git a/app/include/dt-bindings/zmk/hid_indicators.h b/app/include/dt-bindings/zmk/hid_indicators.h
+new file mode 100644
+index 00000000..860c81db
+--- /dev/null
++++ b/app/include/dt-bindings/zmk/hid_indicators.h
+@@ -0,0 +1,9 @@
++/*
++ * Copyright (c) 2020 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define NUM_LOCK 0
++#define CAPS_LOCK 1
++#define SCROLL_LOCK 2
+diff --git a/app/src/behaviors/behavior_underglow_indicators.c b/app/src/behaviors/behavior_underglow_indicators.c
+new file mode 100644
+index 00000000..913e7f07
+--- /dev/null
++++ b/app/src/behaviors/behavior_underglow_indicators.c
+@@ -0,0 +1,83 @@
++/*
++ * Copyright (c) 2024 The ZMK Contributors
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#define DT_DRV_COMPAT zmk_behavior_underglow_indicators
++
++// Dependencies
++#include <zephyr/device.h>
++#include <drivers/behavior.h>
++#include <zephyr/logging/log.h>
++#include <zmk/hid_indicators.h>
++#include <zmk/event_manager.h>
++#include <zmk/events/hid_indicators_changed.h>
++#include <zmk/events/underglow_color_changed.h>
++
++LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
++
++#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
++
++struct underglow_indicators_data {
++    zmk_hid_indicators_t indicators;
++    uint32_t layers;
++};
++
++struct underglow_indicators_config {
++    int indicator;
++};
++
++static int underglow_indicators_init(const struct device *dev) { return 0; };
++
++static int underglow_indicators_process(struct zmk_behavior_binding *binding,
++                                        struct zmk_behavior_binding_event event) {
++    const struct device *dev = zmk_behavior_get_binding(binding->behavior_dev);
++    if (dev == NULL) {
++        return binding->param1;
++    }
++    struct underglow_indicators_data *data = dev->data;
++    const struct underglow_indicators_config *config = dev->config;
++    data->layers |= BIT(event.layer);
++
++    if (data->indicators & BIT(config->indicator))
++        return binding->param2;
++    else
++        return binding->param1;
++}
++
++static const struct behavior_driver_api underglow_indicators_driver_api = {
++    .binding_pressed = underglow_indicators_process,
++    .locality = BEHAVIOR_LOCALITY_GLOBAL,
++#if IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++    .get_parameter_metadata = zmk_behavior_get_empty_param_metadata,
++#endif // IS_ENABLED(CONFIG_ZMK_BEHAVIOR_METADATA)
++};
++
++static int underglow_indicators_listener(const zmk_event_t *eh);
++
++ZMK_LISTENER(behavior_underglow_indicators, underglow_indicators_listener);
++ZMK_SUBSCRIPTION(behavior_underglow_indicators, zmk_hid_indicators_changed);
++
++static struct underglow_indicators_data underglow_indicators_data = {.indicators = 0, .layers = 0};
++
++static int underglow_indicators_listener(const zmk_event_t *eh) {
++    const struct zmk_hid_indicators_changed *ev = as_zmk_hid_indicators_changed(eh);
++    underglow_indicators_data.indicators = ev->indicators;
++    raise_zmk_underglow_color_changed((struct zmk_underglow_color_changed){
++        .layers = underglow_indicators_data.layers, .wakeup = true});
++
++    return ZMK_EV_EVENT_BUBBLE;
++}
++
++#define KP_INST(n)                                                                                 \
++    static struct underglow_indicators_config underglow_indicators_config_##n = {                  \
++        .indicator = DT_INST_PROP(n, indicator)};                                                  \
++    BEHAVIOR_DT_INST_DEFINE(n, underglow_indicators_init, NULL, &underglow_indicators_data,        \
++                            &underglow_indicators_config_##n, POST_KERNEL,                         \
++                            CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,                                   \
++                            &underglow_indicators_driver_api);
++
++DT_INST_FOREACH_STATUS_OKAY(KP_INST)
++
++#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
+-- 
+2.55.0
+
