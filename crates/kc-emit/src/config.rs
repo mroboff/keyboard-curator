@@ -7,26 +7,27 @@ use kc_model::Project;
 
 use crate::NOTICE;
 
-/// Settings the firmware needs for per-key lighting to be what the
-/// keyboard shows from power-up, unless the project sets them itself.
+/// Settings the firmware needs for per-key lighting, and to start in it
+/// where the firmware allows, unless the project sets them itself.
 fn lighting_settings(profile: &FirmwareProfile) -> Vec<(String, SettingValue)> {
     let Some(backend) = &profile.lighting else {
         return Vec::new();
     };
-    vec![
-        (
-            "CONFIG_EXPERIMENTAL_RGB_LAYER".into(),
-            SettingValue::Bool(true),
-        ),
-        (
+    let mut settings = vec![(
+        "CONFIG_EXPERIMENTAL_RGB_LAYER".to_string(),
+        SettingValue::Bool(true),
+    )];
+    if let Some(effect) = backend.start_effect {
+        settings.push((
             "CONFIG_ZMK_RGB_UNDERGLOW_EFF_START".into(),
-            SettingValue::Int(backend.effect.into()),
-        ),
-        (
+            SettingValue::Int(effect.into()),
+        ));
+        settings.push((
             "CONFIG_ZMK_RGB_UNDERGLOW_ON_START".into(),
             SettingValue::Bool(true),
-        ),
-    ]
+        ));
+    }
+    settings
 }
 
 pub fn conf(project: &Project, profile: &FirmwareProfile) -> String {

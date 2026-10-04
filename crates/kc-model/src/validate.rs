@@ -384,6 +384,28 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         }
     }
 
+    // Per-key colours are one of the lighting effects. Unless the firmware
+    // starts in it, a key has to cycle to it once.
+    let lit = project
+        .lighting
+        .iter()
+        .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit));
+    let starts_lit = board
+        .profile(&project.firmware)
+        .and_then(|p| p.lighting.as_ref())
+        .is_some_and(|l| l.start_effect.is_some());
+    let cycles = project.bindings().iter().any(|(_, b)| {
+        matches!(b, Binding::Behavior { params, .. } if params.iter().any(
+            |p| matches!(p, Param::Command { name, .. } if name == "RGB_EFF" || name == "RGB_EFR"),
+        ))
+    });
+    if lit && !starts_lit && !cycles {
+        c.warning(
+            &root,
+            "per-key colours show once the lighting effect is switched to them, but no key changes the lighting effect",
+        );
+    }
+
     // Without a bootloader key, reflashing needs the hardware reset button.
     let reaches_bootloader = project.bindings().iter().any(|(_, b)| {
         matches!(b, Binding::Behavior { behavior: BehaviorRef::BuiltIn(label), .. } if label == "bootloader")

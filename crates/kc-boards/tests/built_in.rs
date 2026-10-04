@@ -124,7 +124,7 @@ fn go60_halves_and_firmware() {
     assert!(lit
         .lighting
         .as_ref()
-        .is_some_and(|l| l.transparent && l.effect == 4));
+        .is_some_and(|l| l.transparent && l.start_effect.is_none()));
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn validation_rejects_broken_definitions() {
         Err(BoardError::LedOutOfRange { position: 60, .. })
     ));
 
-    let unbacked = src.replace("lighting = { transparent = true, effect = 4 }\n", "");
+    let unbacked = src.replace("lighting = { transparent = true }\n", "");
     assert_eq!(
         Board::from_toml(&unbacked),
         Err(BoardError::LightingMismatch("moergo-zmk-perkey".into()))

@@ -66,6 +66,14 @@ impl Workspace {
         self.features().contains(&Feature::PerKeyLighting)
     }
 
+    /// Whether the firmware shows per-key colours from power-up.
+    fn starts_lit(&self) -> bool {
+        self.board
+            .profile(&self.project().firmware)
+            .and_then(|p| p.lighting.as_ref())
+            .is_some_and(|l| l.start_effect.is_some())
+    }
+
     /// The light the current brush paints.
     fn brush_light(&self) -> KeyLight {
         let color = self.paint_color;
@@ -243,8 +251,13 @@ impl Workspace {
                     .children(others),
             )
             .child(div().text_xs().text_color(muted).child(format!(
-                "Click or drag across keys to paint. Lock lights show the chosen colour while the lock is on; battery lights turn red below the level. Colours are shown at full strength; the keyboard limits brightness to {}%.",
-                self.board.brightness_cap
+                "Click or drag across keys to paint. Lock lights show the chosen colour while the lock is on; battery lights turn red below the level. Colours are shown at full strength; the keyboard limits brightness to {}%.{}",
+                self.board.brightness_cap,
+                if self.starts_lit() {
+                    ""
+                } else {
+                    " After flashing, press the key that changes the lighting effect until these colours appear; the keyboard remembers."
+                }
             )))
     }
 

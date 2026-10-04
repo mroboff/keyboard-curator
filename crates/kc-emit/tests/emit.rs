@@ -377,17 +377,9 @@ fn per_key_lighting_is_written_for_firmware_that_has_it() {
 
     let conf = file(&files, "config/go60.conf");
     assert!(conf.contains("CONFIG_EXPERIMENTAL_RGB_LAYER=y\n"));
-    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_EFF_START=4\n"));
-    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_ON_START=y\n"));
+    // This firmware cannot start in the per-key effect, so it is not asked to.
+    assert!(!conf.contains("EFF_START") && !conf.contains("ON_START"));
     assert!(file(&files, "config/west.yml").contains("url: https://github.com/darknao/zmk"));
-
-    // A choice the user made is not overridden.
-    project.settings.insert(
-        "CONFIG_ZMK_RGB_UNDERGLOW_ON_START".into(),
-        SettingValue::Bool(false),
-    );
-    let conf = file(&generate(&project, &go60).unwrap(), "config/go60.conf");
-    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_ON_START=n\n"));
 
     // An unsupported battery threshold is refused.
     project.lighting_mut(base).unwrap().keys[3] = KeyLight::Battery {

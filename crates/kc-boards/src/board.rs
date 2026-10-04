@@ -175,9 +175,10 @@ pub struct LightingBackend {
     /// Whether `&trans` shows the colour from the layer below. Without
     /// it, a key that inherits is written as unlit.
     pub transparent: bool,
-    /// The number of the per-key effect in the firmware's effect cycle,
-    /// used to make it the effect the keyboard starts in.
-    pub effect: u8,
+    /// The number of the per-key effect, when the firmware lets the
+    /// keyboard start in it. Where it does not, the user reaches the
+    /// effect once with the next-effect key and the keyboard remembers.
+    pub start_effect: Option<u8>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
