@@ -10,3 +10,7 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+kc-boards = { version = "0.1.0", path = "../kc-boards" }
+thiserror = "2.0.21"

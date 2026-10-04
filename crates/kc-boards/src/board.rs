@@ -58,6 +58,9 @@ pub struct Half {
     pub central: bool,
     /// Volume name the UF2 bootloader mounts as.
     pub bootloader_volume: String,
+    /// The UF2 family ID this half's bootloader accepts, when the vendor
+    /// uses a different one per half. Lets a wrong-half file be caught.
+    pub uf2_family: Option<u32>,
     pub leds: Option<LedMap>,
 }
 

@@ -30,6 +30,7 @@ bootloader_entry = "Press the bootloader key on the Magic layer for that half, o
 side = "left"
 central = true
 bootloader_volume = "GO60LHBOOT"
+uf2_family = 0x9809B007
 
 [halves.leds]
 layout = "physical_layout0"
@@ -44,6 +45,7 @@ chain = [
 side = "right"
 central = false
 bootloader_volume = "GO60RHBOOT"
+uf2_family = 0x980AB007
 
 [halves.leds]
 layout = "physical_layout0"

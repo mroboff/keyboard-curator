@@ -2,6 +2,7 @@
 //! to depend on the GUI framework; everything else stays UI-independent.
 
 mod canvas;
+mod flash_view;
 mod shell;
 mod state;
 mod workspace;
@@ -39,6 +40,10 @@ actions!(
         Layer9,
         ToggleAutoAdvance,
         ToggleTypeToAssign,
+        ShowKeyboard,
+        ShowFiles,
+        ShowFlash,
+        ExportConfig,
         OpenHelp,
         OpenZmkDocs
     ]
@@ -58,6 +63,8 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Save", Save),
             MenuItem::action("Save As…", SaveAs),
             MenuItem::separator(),
+            MenuItem::action("Export ZMK Config…", ExportConfig),
+            MenuItem::separator(),
             MenuItem::action("Close Project", CloseProject),
         ]),
         Menu::new("Edit").items([
@@ -68,6 +75,10 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Paste", Paste),
         ]),
         Menu::new("View").items([
+            MenuItem::action("Keyboard", ShowKeyboard),
+            MenuItem::action("Generated Files", ShowFiles),
+            MenuItem::action("Flash Firmware", ShowFlash),
+            MenuItem::separator(),
             MenuItem::action("Next Layer", NextLayer),
             MenuItem::action("Previous Layer", PreviousLayer),
             MenuItem::separator(),
@@ -94,6 +105,7 @@ fn main() {
             KeyBinding::new("cmd-q", Quit, None),
             KeyBinding::new("cmd-n", NewProject, Some("Shell")),
             KeyBinding::new("cmd-o", OpenProject, Some("Shell")),
+            KeyBinding::new("cmd-e", ExportConfig, Some("Workspace")),
             KeyBinding::new("cmd-c", Copy, Some("Workspace")),
             KeyBinding::new("cmd-v", Paste, Some("Workspace")),
             KeyBinding::new("cmd-]", NextLayer, Some("Workspace")),

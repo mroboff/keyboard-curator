@@ -3541,6 +3541,8 @@ dependencies = [
  "dirs 7.0.0",
  "gpui-kit",
  "kc-boards",
+ "kc-emit",
+ "kc-flash",
  "kc-model",
  "kc-zmk",
  "serde",
@@ -3574,6 +3576,10 @@ dependencies = [
 [[package]]
 name = "kc-flash"
 version = "0.1.0"
+dependencies = [
+ "kc-boards",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "kc-import"

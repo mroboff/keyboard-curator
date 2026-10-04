@@ -19,6 +19,8 @@ pub struct WindowFrame {
 pub struct AppState {
     pub recent: Vec<PathBuf>,
     pub window: Option<WindowFrame>,
+    /// The folder the ZMK config was last exported to.
+    pub export_dir: Option<PathBuf>,
 }
 
 fn state_path() -> Option<PathBuf> {

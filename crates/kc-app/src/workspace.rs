@@ -23,9 +23,12 @@ use kc_model::{file, validate, Binding, Editor, KeyExpr, LayerId, ModelError, Pr
 use kc_zmk::{Feature, Modifier};
 
 use crate::canvas::{self, Device, Frame, Palette};
+use crate::flash_view::FlashView;
+use crate::state::AppState;
 use crate::{
-    Copy, Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, Layer7, Layer8, Layer9, NextLayer, Paste,
-    PreviousLayer, ToggleAutoAdvance, ToggleTypeToAssign,
+    Copy, ExportConfig, Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, Layer7, Layer8, Layer9,
+    NextLayer, Paste, PreviousLayer, ShowFiles, ShowFlash, ShowKeyboard, ToggleAutoAdvance,
+    ToggleTypeToAssign,
 };
 
 /// The modifiers offered as toggles, with their keycap symbols.
@@ -48,6 +51,14 @@ const LAYER_TAGS: [Rgb; 6] = [
 
 fn tag_color(tag: Rgb) -> Hsla {
     rgb(u32::from(tag.0) << 16 | u32::from(tag.1) << 8 | u32::from(tag.2)).into()
+}
+
+/// What the main area of the workspace shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Keyboard,
+    Files,
+    Flash,
 }
 
 /// A key being dragged on the canvas.
@@ -86,6 +97,10 @@ pub struct Workspace {
     board: Board,
     path: Option<PathBuf>,
     layer: LayerId,
+    mode: Mode,
+    /// Which generated file the files view shows.
+    file_index: usize,
+    flash: Entity<FlashView>,
     /// Selected key positions; the last one is the key the inspector shows.
     selection: Vec<usize>,
     hovered: Option<usize>,
@@ -196,11 +211,15 @@ impl Workspace {
         )
         .detach();
 
+        let flash = cx.new(|cx| FlashView::new(board.clone(), cx));
         let mut workspace = Self {
             editor,
             board,
             path,
             layer,
+            mode: Mode::Keyboard,
+            file_index: 0,
+            flash,
             selection: Vec::new(),
             hovered: None,
             drag: None,
@@ -1197,6 +1216,213 @@ impl Workspace {
         panel
     }
 
+    /// Writes the generated zmk-config files, and a copy of the project,
+    /// into a folder the user chooses.
+    fn export(&mut self, _: &ExportConfig, window: &mut Window, cx: &mut Context<Self>) {
+        let files = match kc_emit::generate(self.project(), &self.board) {
+            Ok(files) => files,
+            Err(error) => {
+                self.notice = Some(format!("Cannot export: {error}."));
+                self.mode = Mode::Files;
+                cx.notify();
+                return;
+            }
+        };
+        let project = file::to_json(self.project());
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Export Here".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = chosen.await else {
+                return;
+            };
+            let Some(root) = paths.into_iter().next() else {
+                return;
+            };
+            let write = |path: PathBuf, contents: &str| -> std::io::Result<()> {
+                if let Some(dir) = path.parent() {
+                    std::fs::create_dir_all(dir)?;
+                }
+                std::fs::write(path, contents)
+            };
+            let result = files
+                .iter()
+                .try_for_each(|f| write(root.join(&f.path), &f.contents))
+                .and_then(|()| {
+                    write(
+                        root.join(format!("keyboard-curator.{}", file::EXTENSION)),
+                        &project,
+                    )
+                });
+            let _ = this.update(cx, |this, cx| {
+                this.notice = Some(match result {
+                    Ok(()) => {
+                        let mut state = AppState::load();
+                        state.export_dir = Some(root.clone());
+                        state.save();
+                        format!("Exported {} files to {}.", files.len() + 1, root.display())
+                    }
+                    Err(error) => format!("Could not export: {error}."),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn render_mode_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        let muted = cx.theme().muted_foreground;
+        let tab = |id: &'static str, label: &'static str, mode: Mode, cx: &mut Context<Self>| {
+            chip(id, label, self.mode == mode, cx).on_click(cx.listener(move |this, _, _, cx| {
+                this.mode = mode;
+                cx.notify();
+            }))
+        };
+        div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .px_3()
+            .py_2()
+            .border_b_1()
+            .border_color(border)
+            .child(tab("mode-keyboard", "Keyboard", Mode::Keyboard, cx))
+            .child(tab("mode-files", "Generated Files", Mode::Files, cx))
+            .child(tab("mode-flash", "Flash", Mode::Flash, cx))
+            .child(
+                div()
+                    .flex_1()
+                    .px_3()
+                    .text_xs()
+                    .text_color(muted)
+                    .child(self.notice.clone().unwrap_or_default()),
+            )
+            .child(chip("export", "Export ZMK Config…", false, cx).on_click(
+                cx.listener(|this, _, window, cx| this.export(&ExportConfig, window, cx)),
+            ))
+    }
+
+    /// Shows the key a problem is about, when it is about one.
+    fn show_problem(
+        &mut self,
+        location: &kc_model::Location,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let kc_model::Location::Key { layer, position } = location {
+            self.layer = *layer;
+            self.selection = vec![*position];
+            self.mode = Mode::Keyboard;
+            self.after_change(window, cx);
+        }
+    }
+
+    /// The generated zmk-config files, read-only, or what stops them from
+    /// being generated.
+    fn render_files(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (muted, danger, hover, warning) = (
+            theme.muted_foreground,
+            theme.danger,
+            theme.secondary,
+            theme.warning,
+        );
+        let page = div().flex_1().min_h_0().flex().flex_col().gap_2().p_3();
+
+        let problems = validate(self.project(), &self.board);
+        let problem_rows = problems
+            .iter()
+            .enumerate()
+            .map(|(index, problem)| {
+                let location = problem.location.clone();
+                let color = if problem.severity == Severity::Error {
+                    danger
+                } else {
+                    warning
+                };
+                let place = match &problem.location {
+                    kc_model::Location::Key { layer, position } => format!(
+                        "{}, key {position}: ",
+                        self.project()
+                            .layer(*layer)
+                            .map_or("?", |l| l.name.as_str())
+                    ),
+                    _ => String::new(),
+                };
+                div()
+                    .id(("problem", index))
+                    .px_2()
+                    .py_1()
+                    .rounded_md()
+                    .text_sm()
+                    .text_color(color)
+                    .cursor_pointer()
+                    .hover(|row| row.bg(hover))
+                    .child(format!("{place}{}", problem.message))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.show_problem(&location, window, cx);
+                    }))
+            })
+            .collect::<Vec<_>>();
+        let page = page.when(!problem_rows.is_empty(), |page| {
+            page.child(section_title("PROBLEMS", cx))
+                .child(div().flex().flex_col().children(problem_rows))
+        });
+
+        let files = match kc_emit::generate(self.project(), &self.board) {
+            Ok(files) => files,
+            Err(_) => {
+                return page.child(div().text_sm().text_color(muted).child(
+                    "The files cannot be generated until the errors above are fixed. Click one to go to it.",
+                ));
+            }
+        };
+        let index = self.file_index.min(files.len().saturating_sub(1));
+        let tabs = files
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                chip(("file-tab", i), f.path.clone(), i == index, cx).on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        this.file_index = i;
+                        cx.notify();
+                    },
+                ))
+            })
+            .collect::<Vec<_>>();
+        let lines = files[index]
+            .contents
+            .lines()
+            .map(|line| {
+                // Keep blank lines from collapsing.
+                div().child(if line.is_empty() {
+                    " ".to_string()
+                } else {
+                    line.to_string()
+                })
+            })
+            .collect::<Vec<_>>();
+        page.child(div().flex().flex_wrap().gap_1().children(tabs))
+            .child(
+                div()
+                    .id("file-contents")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_scroll()
+                    .p_2()
+                    .rounded_md()
+                    .bg(hover.opacity(0.4))
+                    .font_family("Menlo")
+                    .text_xs()
+                    .whitespace_nowrap()
+                    .children(lines),
+            )
+    }
+
     fn render_status(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted) = (theme.border, theme.muted_foreground);
@@ -1271,6 +1497,19 @@ impl Render for Workspace {
             .on_action(
                 cx.listener(|this, _: &Layer9, window, cx| this.show_layer_at(8, window, cx)),
             )
+            .on_action(cx.listener(Self::export))
+            .on_action(cx.listener(|this, _: &ShowKeyboard, _, cx| {
+                this.mode = Mode::Keyboard;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ShowFiles, _, cx| {
+                this.mode = Mode::Files;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ShowFlash, _, cx| {
+                this.mode = Mode::Flash;
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &ToggleAutoAdvance, _, cx| {
                 this.auto_advance = !this.auto_advance;
                 cx.notify();
@@ -1289,16 +1528,22 @@ impl Render for Workspace {
                     .h_full()
                     .flex()
                     .flex_col()
-                    .child(self.render_canvas(cx))
-                    .child(
-                        div()
-                            .h_72()
-                            .flex()
-                            .border_t_1()
-                            .border_color(border)
-                            .child(self.render_picker(cx))
-                            .child(self.render_inspector(cx)),
-                    )
+                    .child(self.render_mode_bar(cx))
+                    .map(|main| match self.mode {
+                        Mode::Keyboard => main.child(self.render_canvas(cx)).child(
+                            div()
+                                .h_72()
+                                .flex()
+                                .border_t_1()
+                                .border_color(border)
+                                .child(self.render_picker(cx))
+                                .child(self.render_inspector(cx)),
+                        ),
+                        Mode::Files => main.child(self.render_files(cx)),
+                        Mode::Flash => {
+                            main.child(div().flex_1().min_h_0().child(self.flash.clone()))
+                        }
+                    })
                     .child(self.render_status(cx)),
             )
     }
