@@ -135,9 +135,67 @@ pub fn key_at(keys: &[Key], p: Point) -> Option<usize> {
     keys.iter().rposition(|k| k.contains(p))
 }
 
+/// A direction to move the selection in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+/// The key that is the natural neighbour of `from` in `direction`, judged by
+/// key centres: the nearest key that way, preferring ones in line.
+pub fn neighbor(keys: &[Key], from: usize, direction: Direction) -> Option<usize> {
+    let origin = keys.get(from)?.center();
+    let (dx, dy) = match direction {
+        Direction::Left => (-1., 0.),
+        Direction::Right => (1., 0.),
+        Direction::Up => (0., -1.),
+        Direction::Down => (0., 1.),
+    };
+    keys.iter()
+        .enumerate()
+        .filter(|(index, _)| *index != from)
+        .filter_map(|(index, key)| {
+            let center = key.center();
+            let (vx, vy) = (center.x - origin.x, center.y - origin.y);
+            let along = vx * dx + vy * dy;
+            let across = (vx * dy - vy * dx).abs();
+            // Must be clearly that way, and more that way than sideways.
+            (along > 25. && across < along * 1.5).then_some((index, along + 2. * across))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(index, _)| index)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn neighbours_follow_the_physical_grid() {
+        // A 3x2 grid with the middle column dropped by a quarter key.
+        let keys: Vec<Key> = [
+            (0, 0),
+            (100, 25),
+            (200, 0),
+            (0, 100),
+            (100, 125),
+            (200, 100),
+        ]
+        .iter()
+        .map(|&(x, y)| Key::from([100, 100, x, y, 0, 0, 0]))
+        .collect();
+        assert_eq!(neighbor(&keys, 0, Direction::Right), Some(1));
+        assert_eq!(neighbor(&keys, 1, Direction::Right), Some(2));
+        assert_eq!(neighbor(&keys, 2, Direction::Right), None);
+        assert_eq!(neighbor(&keys, 1, Direction::Down), Some(4));
+        assert_eq!(neighbor(&keys, 4, Direction::Up), Some(1));
+        assert_eq!(neighbor(&keys, 5, Direction::Left), Some(4));
+        assert_eq!(neighbor(&keys, 0, Direction::Up), None);
+        assert_eq!(neighbor(&keys, 9, Direction::Up), None);
+    }
 
     fn close(a: Point, x: f32, y: f32) -> bool {
         (a.x - x).abs() < 0.01 && (a.y - y).abs() < 0.01

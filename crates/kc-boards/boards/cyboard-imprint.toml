@@ -69,12 +69,18 @@ name = "Left trackball"
 kind = "trackball"
 side = "left"
 listener = "trackball_central_listener"
+x = 700
+y = 330
+size = 130
 
 [[pointing]]
 name = "Right trackball"
 kind = "trackball"
 side = "right"
 listener = "trackball_peripheral_listener"
+x = 1050
+y = 330
+size = 130
 
 [[firmware]]
 id = "cyboard-zmk-0.3"

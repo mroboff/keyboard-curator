@@ -6,7 +6,7 @@ use kc_zmk::keycodes::{keycodes, Category};
 use kc_zmk::Feature;
 
 use crate::behavior::BehaviorKind;
-use crate::binding::{Binding, KeyExpr, Param};
+use crate::binding::{BehaviorRef, Binding, KeyExpr, Param};
 use crate::project::Project;
 
 /// The tabs of the key picker.
@@ -176,17 +176,24 @@ fn behavior_items(
             ParamKind::Command(commands) => {
                 for command in commands.iter().filter(|c| c.available(features)) {
                     // One entry per value for a single small argument, such
-                    // as the five Bluetooth profiles. Commands with several
-                    // arguments are set up in the inspector.
+                    // as the five Bluetooth profiles. Other commands start
+                    // from mid-range values and are tuned in the inspector.
                     let values: Vec<Vec<u32>> = match command.args {
                         [] => vec![vec![]],
                         [arg] if arg.max - arg.min < 8 => {
                             (arg.min..=arg.max).map(|v| vec![v]).collect()
                         }
-                        _ => continue,
+                        args => vec![args.iter().map(|a| (a.min + a.max) / 2).collect()],
                     };
                     for args in values {
-                        let suffix: String = args.iter().map(|a| format!(" {a}")).collect();
+                        let suffix: String = match command.args {
+                            [_] if args.len() == 1
+                                && command.args[0].max - command.args[0].min < 8 =>
+                            {
+                                format!(" {}", args[0])
+                            }
+                            _ => String::new(),
+                        };
                         out.push(PickerItem::new(
                             group,
                             format!("{}{suffix}", command.name.replace('_', " ")),
@@ -209,6 +216,31 @@ fn behavior_items(
     }
 }
 
+/// Starting parameters for a binding to a user-defined behaviour, chosen
+/// from what the behaviours it wraps expect. They are adjusted afterwards
+/// in the inspector.
+fn default_params(project: &Project, kind: &BehaviorKind) -> Vec<Param> {
+    let for_behavior = |behavior: &BehaviorRef| -> Param {
+        let first = match behavior {
+            BehaviorRef::BuiltIn(label) => behaviors::built_in(label)
+                .and_then(|def| def.params.first())
+                .map(|p| p.kind),
+            BehaviorRef::User { .. } => None,
+        };
+        match first {
+            Some(ParamKind::Layer) => Param::Layer(project.layers[0].id),
+            Some(ParamKind::Keycode) => Param::Key(KeyExpr::new("A")),
+            _ => Param::Number(0),
+        }
+    };
+    match kind {
+        BehaviorKind::HoldTap(h) => vec![for_behavior(&h.hold), for_behavior(&h.tap)],
+        BehaviorKind::StickyKey(s) => vec![for_behavior(&s.behavior)],
+        BehaviorKind::Macro(m) => vec![Param::Number(0); m.params as usize],
+        BehaviorKind::TapDance(_) | BehaviorKind::ModMorph(_) => vec![],
+    }
+}
+
 /// Every one-click binding available to `project` on a firmware with
 /// `features`, in display order.
 pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> {
@@ -227,22 +259,20 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
         behavior_items(project, def, features, &mut items);
     }
     for def in &project.behaviors {
-        // Behaviours that take parameters are assigned through the inspector.
-        if def.kind.param_count() == 0 {
-            let what = match def.kind {
-                BehaviorKind::Macro(_) => "Macro",
-                BehaviorKind::TapDance(_) => "Tap-dance",
-                BehaviorKind::ModMorph(_) => "Mod-morph",
-                _ => "Behaviour",
-            };
-            items.push(PickerItem::new(
-                PickerGroup::Custom,
-                def.name.clone(),
-                format!("{what}: {}", def.name),
-                Binding::user(def.id, vec![]),
-                &def.label,
-            ));
-        }
+        let what = match def.kind {
+            BehaviorKind::Macro(_) => "Macro",
+            BehaviorKind::TapDance(_) => "Tap-dance",
+            BehaviorKind::ModMorph(_) => "Mod-morph",
+            BehaviorKind::HoldTap(_) => "Hold-tap",
+            BehaviorKind::StickyKey(_) => "Sticky key",
+        };
+        items.push(PickerItem::new(
+            PickerGroup::Custom,
+            def.name.clone(),
+            format!("{what}: {}", def.name),
+            Binding::user(def.id, default_params(project, &def.kind)),
+            &def.label,
+        ));
     }
     items
 }

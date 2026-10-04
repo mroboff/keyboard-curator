@@ -13,7 +13,7 @@ use kc_model::{file, Project};
 
 use crate::state::{default_project_dir, AppState, WindowFrame};
 use crate::workspace::Workspace;
-use crate::{CloseProject, OpenProject, Redo, Save, SaveAs, Undo};
+use crate::{CloseProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo};
 
 pub struct Shell {
     boards: Rc<Vec<Board>>,
@@ -70,9 +70,9 @@ impl Shell {
     ) {
         let workspace = cx.new(|cx| Workspace::new(project, board, path, window, cx));
         cx.observe(&workspace, |_, _, cx| cx.notify()).detach();
+        workspace.update(cx, |w, cx| w.focus_canvas(window, cx));
         self.workspace = Some(workspace);
         self.error = None;
-        self.focus.focus(window, cx);
         cx.notify();
     }
 
@@ -179,9 +179,15 @@ impl Shell {
         cx.notify();
     }
 
+    /// Returns to the welcome screen, where new projects are started.
+    fn new_project_screen(&mut self, _: &NewProject, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_project(&CloseProject, window, cx);
+    }
+
     fn close_project(&mut self, _: &CloseProject, window: &mut Window, cx: &mut Context<Self>) {
         if !self.has_unsaved_changes(cx) {
             self.workspace = None;
+            self.focus.focus(window, cx);
             cx.notify();
             return;
         }
@@ -338,6 +344,7 @@ impl Render for Shell {
             .on_action(cx.listener(Self::save))
             .on_action(cx.listener(Self::save_as))
             .on_action(cx.listener(Self::close_project))
+            .on_action(cx.listener(Self::new_project_screen))
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .size_full()

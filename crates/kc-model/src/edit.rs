@@ -76,14 +76,66 @@ pub fn toggle_modifier(binding: &Binding, modifier: Modifier) -> Option<Binding>
 }
 
 /// The binding a key gets when `picked` is chosen in the picker. Picking a
-/// plain key for a key that already has a hold keeps the hold and replaces
-/// only what a tap sends; anything else replaces the binding outright.
+/// plain key for a binding that taps a key and does something else as well
+/// (a mod-tap, layer-tap or user-defined hold-tap) replaces only what a tap
+/// sends; anything else replaces the binding outright.
 pub fn assign(current: &Binding, picked: &Binding) -> Binding {
-    match (hold(current), built_in(picked)) {
-        (Hold::None, _) => picked.clone(),
-        (held, Some(("kp", [Param::Key(key)]))) => build(held, key.clone()),
-        _ => picked.clone(),
+    let Some(("kp", [Param::Key(key)])) = built_in(picked) else {
+        return picked.clone();
+    };
+    let mut updated = current.clone();
+    if let Binding::Behavior { params, .. } = &mut updated {
+        if let [_, .., Param::Key(tap)] = params.as_mut_slice() {
+            *tap = key.clone();
+            return updated;
+        }
     }
+    picked.clone()
+}
+
+/// The numeric arguments of a command binding such as `&bt BT_SEL 2`, with
+/// the catalogue's description of each.
+pub fn command_args(binding: &Binding) -> Vec<(&'static kc_zmk::behaviors::Arg, u32)> {
+    let Some((label, [Param::Command { name, args }])) = built_in(binding) else {
+        return Vec::new();
+    };
+    let commands = kc_zmk::behaviors::built_in(label)
+        .into_iter()
+        .flat_map(|def| def.params)
+        .find_map(|p| match p.kind {
+            kc_zmk::behaviors::ParamKind::Command(commands) => Some(commands),
+            _ => None,
+        });
+    let Some(command) = commands.and_then(|c| c.iter().find(|c| c.name == name)) else {
+        return Vec::new();
+    };
+    command.args.iter().zip(args.iter().copied()).collect()
+}
+
+/// `binding` with one command argument changed, kept within its range.
+pub fn with_command_arg(binding: &Binding, index: usize, value: i64) -> Option<Binding> {
+    let limits = command_args(binding);
+    let (arg, _) = limits.get(index)?;
+    let mut updated = binding.clone();
+    if let Binding::Behavior { params, .. } = &mut updated {
+        if let [Param::Command { args, .. }] = params.as_mut_slice() {
+            args[index] = value.clamp(i64::from(arg.min), i64::from(arg.max)) as u32;
+        }
+    }
+    Some(updated)
+}
+
+/// `binding` with the layer parameter at `index` pointed at another layer.
+pub fn with_layer(binding: &Binding, index: usize, layer: LayerId) -> Option<Binding> {
+    let mut updated = binding.clone();
+    let Binding::Behavior { params, .. } = &mut updated else {
+        return None;
+    };
+    match params.get_mut(index)? {
+        Param::Layer(current) => *current = layer,
+        _ => return None,
+    }
+    Some(updated)
 }
 
 #[cfg(test)]
@@ -149,5 +201,43 @@ mod tests {
         );
         assert_eq!(assign(&kp("A"), &kp("B")), kp("B"));
         assert_eq!(assign(&mod_tap, &Binding::trans()), Binding::trans());
+        // A user-defined hold-tap keeps its hold parameter too.
+        let custom = Binding::user(
+            crate::ids::BehaviorId(7),
+            vec![Param::Layer(LayerId(2)), Param::Key(KeyExpr::new("A"))],
+        );
+        assert_eq!(
+            assign(&custom, &kp("ESC")),
+            Binding::user(
+                crate::ids::BehaviorId(7),
+                vec![Param::Layer(LayerId(2)), Param::Key(KeyExpr::new("ESC"))],
+            )
+        );
+    }
+
+    #[test]
+    fn command_arguments_are_adjusted_within_their_range() {
+        let select = Binding::new(
+            "bt",
+            vec![Param::Command {
+                name: "BT_SEL".into(),
+                args: vec![2],
+            }],
+        );
+        let args = command_args(&select);
+        assert_eq!((args[0].0.name, args[0].1), ("profile", 2));
+        let args_of = |b: &Binding| command_args(b).iter().map(|a| a.1).collect::<Vec<_>>();
+        assert_eq!(args_of(&with_command_arg(&select, 0, 3).unwrap()), [3]);
+        assert_eq!(args_of(&with_command_arg(&select, 0, 99).unwrap()), [4]);
+        assert_eq!(args_of(&with_command_arg(&select, 0, -5).unwrap()), [0]);
+        assert_eq!(with_command_arg(&select, 1, 0), None);
+        assert!(command_args(&kp("A")).is_empty());
+
+        let momentary = Binding::layer("mo", LayerId(1));
+        assert_eq!(
+            with_layer(&momentary, 0, LayerId(5)),
+            Some(Binding::layer("mo", LayerId(5)))
+        );
+        assert_eq!(with_layer(&kp("A"), 0, LayerId(5)), None);
     }
 }

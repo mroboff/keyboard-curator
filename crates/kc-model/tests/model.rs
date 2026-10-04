@@ -695,8 +695,19 @@ fn the_picker_offers_what_the_firmware_supports() {
     // MoErgo's status command is offered on the Go60; backlight is not.
     assert!(find("RGB STATUS").is_some());
     assert!(find("BL TOG").is_none());
-    // Multi-argument commands and parameterised behaviours need the inspector.
-    assert!(find("RGB COLOR HSB").is_none() && find("Magic").is_none());
+    // Multi-argument commands and parameterised behaviours start from
+    // defaults and are tuned in the inspector.
+    assert_eq!(
+        find("RGB COLOR HSB").unwrap().binding,
+        command("rgb_ug", "RGB_COLOR_HSB", &[180, 50, 50])
+    );
+    assert_eq!(
+        find("Magic").unwrap().binding,
+        Binding::user(
+            p.behaviors[0].id,
+            vec![Param::Layer(p.layers[0].id), Param::Key(KeyExpr::new("A"))]
+        )
+    );
 
     let imprint = board("cyboard-imprint");
     let plain = Project::new("Plain", &imprint);
@@ -719,4 +730,64 @@ fn the_picker_offers_what_the_firmware_supports() {
             .unwrap();
         assert_eq!(validate(&all, &go60), [], "{}", item.label);
     }
+}
+
+#[test]
+fn keys_and_layers_copy_and_paste_as_text() {
+    use kc_model::clipboard::{copy_keys, copy_layer, paste, PasteError};
+
+    let (mut p, go60) = rich_project();
+    let (base, nav) = (p.layers[0].id, p.layers[1].id);
+
+    // One key pastes onto every target.
+    let single = copy_keys(&p, base, &[1]).unwrap();
+    assert_eq!(paste(&mut p, nav, &[10, 11], &single), Ok(2));
+    assert_eq!(p.binding(nav, 10), Some(&Binding::layer("mo", nav)));
+    assert_eq!(
+        paste(&mut p, nav, &[10, 11], &single),
+        Ok(0),
+        "nothing left to change"
+    );
+
+    // Several keys keep their arrangement, anchored at the first target.
+    let several = copy_keys(&p, base, &[2, 0]).unwrap();
+    assert_eq!(paste(&mut p, nav, &[20], &several), Ok(2));
+    assert_eq!(p.binding(nav, 20), p.binding(base, 0));
+    assert_eq!(p.binding(nav, 22), p.binding(base, 2));
+    // Keys that would land off the keyboard are skipped.
+    assert_eq!(paste(&mut p, nav, &[59], &several), Ok(1));
+
+    // A whole layer replaces the target layer, references included.
+    let layer = copy_layer(&p, base).unwrap();
+    let extra = p.add_layer("Extra").unwrap();
+    assert!(paste(&mut p, extra, &[], &layer).unwrap() > 40);
+    assert_eq!(
+        p.layer(extra).unwrap().bindings,
+        p.layer(base).unwrap().bindings
+    );
+    assert_eq!(validate(&p, &go60), []);
+
+    // Layers travel by name, so a paste into another project still resolves.
+    let mut other = Project::new("Other", &go60);
+    other.add_layer("Nav").unwrap();
+    let other_base = other.layers[0].id;
+    assert_eq!(paste(&mut other, other_base, &[5], &single), Ok(1));
+    assert_eq!(
+        other.binding(other_base, 5),
+        Some(&Binding::layer("mo", other.layers[1].id))
+    );
+
+    assert_eq!(paste(&mut p, nav, &[], &single), Err(PasteError::NoTarget));
+    assert_eq!(paste(&mut p, nav, &[0], "hello"), Err(PasteError::NotKeys));
+    let mut imprint = Project::new("Imprint", &board("cyboard-imprint"));
+    let first = imprint.layers[0].id;
+    assert_eq!(
+        paste(&mut imprint, first, &[0], &single),
+        Err(PasteError::OtherBoard("moergo-go60".into()))
+    );
+    assert!(copy_keys(&p, base, &[]).is_none());
+
+    p.swap_bindings(base, 0, 1).unwrap();
+    assert_eq!(p.binding(base, 0), Some(&Binding::layer("mo", nav)));
+    assert!(p.swap_bindings(base, 0, 60).is_err());
 }

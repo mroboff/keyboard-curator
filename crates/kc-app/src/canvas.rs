@@ -20,8 +20,15 @@ pub struct Viewport {
 }
 
 impl Viewport {
-    pub fn fit(keys: &[Key], bounds: Bounds<Pixels>) -> Option<Self> {
-        let rect = geometry::bounds(keys)?;
+    pub fn fit(keys: &[Key], devices: &[Device], bounds: Bounds<Pixels>) -> Option<Self> {
+        let mut rect = geometry::bounds(keys)?;
+        for device in devices {
+            let half = device.size / 2.;
+            rect.min.x = rect.min.x.min(device.x - half);
+            rect.min.y = rect.min.y.min(device.y - half);
+            rect.max.x = rect.max.x.max(device.x + half);
+            rect.max.y = rect.max.y.max(device.y + half);
+        }
         let width = f32::from(bounds.size.width) - 2. * PADDING;
         let height = f32::from(bounds.size.height) - 2. * PADDING;
         let scale = (width / rect.width())
@@ -51,10 +58,50 @@ impl Viewport {
     }
 }
 
+/// A trackball or touchpad, drawn alongside the keys.
+#[derive(Debug, Clone)]
+pub struct Device {
+    pub name: String,
+    /// Trackballs are round; touchpads are rounded squares.
+    pub round: bool,
+    pub x: f32,
+    pub y: f32,
+    pub size: f32,
+}
+
 /// The key under a pointer position, if any.
-pub fn key_at(keys: &[Key], bounds: Bounds<Pixels>, position: Point<Pixels>) -> Option<usize> {
-    let view = Viewport::fit(keys, bounds)?;
+pub fn key_at(
+    keys: &[Key],
+    devices: &[Device],
+    bounds: Bounds<Pixels>,
+    position: Point<Pixels>,
+) -> Option<usize> {
+    let view = Viewport::fit(keys, devices, bounds)?;
     geometry::key_at(keys, view.to_layout(position))
+}
+
+/// The keys whose centres lie inside the rectangle spanned by two pointer
+/// positions.
+pub fn keys_in_band(
+    keys: &[Key],
+    devices: &[Device],
+    bounds: Bounds<Pixels>,
+    band: (Point<Pixels>, Point<Pixels>),
+) -> Vec<usize> {
+    let Some(view) = Viewport::fit(keys, devices, bounds) else {
+        return Vec::new();
+    };
+    let (a, b) = (view.to_layout(band.0), view.to_layout(band.1));
+    let (x0, x1) = (a.x.min(b.x), a.x.max(b.x));
+    let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
+    keys.iter()
+        .enumerate()
+        .filter(|(_, key)| {
+            let c = key.center();
+            (x0..=x1).contains(&c.x) && (y0..=y1).contains(&c.y)
+        })
+        .map(|(index, _)| index)
+        .collect()
 }
 
 /// Colours the canvas draws with, taken from the active theme.
@@ -72,9 +119,16 @@ pub struct Palette {
 pub struct Frame {
     pub keys: Vec<Key>,
     pub keycaps: Vec<Keycap>,
-    pub selected: Option<usize>,
+    pub devices: Vec<Device>,
+    pub selected: Vec<usize>,
     pub hovered: Option<usize>,
+    /// A key being dragged, and where the pointer is.
+    pub drag: Option<(usize, Point<Pixels>)>,
+    /// A selection rectangle being dragged out.
+    pub band: Option<(Point<Pixels>, Point<Pixels>)>,
     pub palette: Palette,
+    /// A colour tag per key, when the layer view wants one.
+    pub tint: Option<Hsla>,
 }
 
 /// The outline of a key, inset by the key gap, with rounded corners.
@@ -152,11 +206,36 @@ fn paint_text(
 }
 
 fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-    let Some(view) = Viewport::fit(&frame.keys, bounds) else {
+    let Some(view) = Viewport::fit(&frame.keys, &frame.devices, bounds) else {
         return;
     };
     let palette = frame.palette;
     let unit = px(view.scale * 100.);
+    for device in &frame.devices {
+        let size = px(device.size * view.scale);
+        let center = view.to_screen(LayoutPoint {
+            x: device.x,
+            y: device.y,
+        });
+        let radius = if device.round { size / 2. } else { size * 0.16 };
+        window.paint_quad(quad(
+            Bounds::centered_at(center, gpui_kit::size(size, size)),
+            radius,
+            palette.key.opacity(0.3),
+            px(1.),
+            palette.key_border,
+            Default::default(),
+        ));
+        paint_text(
+            &device.name,
+            center,
+            unit * 0.15,
+            size * 0.9,
+            palette.muted_text,
+            window,
+            cx,
+        );
+    }
     for (index, key) in frame.keys.iter().enumerate() {
         let Some(cap) = frame.keycaps.get(index) else {
             continue;
@@ -167,6 +246,10 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             _ if ghost => palette.key.opacity(0.35),
             _ => palette.key,
         };
+        let fill = match frame.tint {
+            Some(tint) if !ghost => fill.blend(tint.opacity(0.16)),
+            _ => fill,
+        };
         let fill = if frame.hovered == Some(index) {
             fill.blend(palette.accent.opacity(0.18))
         } else {
@@ -175,7 +258,7 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         if let Some(path) = key_path(key, view, None) {
             window.paint_path(path, fill);
         }
-        let selected = frame.selected == Some(index);
+        let selected = frame.selected.contains(&index);
         let (width, color) = if selected {
             (px(2.5), palette.accent)
         } else {
@@ -216,6 +299,43 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
                 window,
                 cx,
             ),
+        }
+    }
+
+    if let Some((a, b)) = frame.band {
+        let band = Bounds::from_corners(
+            point(a.x.min(b.x), a.y.min(b.y)),
+            point(a.x.max(b.x), a.y.max(b.y)),
+        );
+        window.paint_quad(quad(
+            band,
+            px(2.),
+            palette.accent.opacity(0.12),
+            px(1.),
+            palette.accent,
+            Default::default(),
+        ));
+    }
+    if let Some((index, position)) = frame.drag {
+        let ghost = Bounds::centered_at(position, gpui_kit::size(unit * 0.9, unit * 0.9));
+        window.paint_quad(quad(
+            ghost,
+            unit * 0.1,
+            palette.key.opacity(0.85),
+            px(2.),
+            palette.accent,
+            Default::default(),
+        ));
+        if let Some(cap) = frame.keycaps.get(index) {
+            paint_text(
+                &cap.legend,
+                position,
+                unit * 0.26,
+                unit * 0.8,
+                palette.text,
+                window,
+                cx,
+            );
         }
     }
 }

@@ -8,6 +8,7 @@
 
 pub mod behavior;
 pub mod binding;
+pub mod clipboard;
 pub mod edit;
 pub mod editor;
 pub mod features;

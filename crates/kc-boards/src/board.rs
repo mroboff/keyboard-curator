@@ -88,6 +88,11 @@ pub struct PointingDevice {
     pub side: Side,
     /// The devicetree label of the device's input listener.
     pub listener: String,
+    /// Where to draw the device on the canvas: its centre and its width, in
+    /// layout units. Schematic, like the key layout itself.
+    pub x: i32,
+    pub y: i32,
+    pub size: i32,
 }
 
 /// How firmware gets onto the board.

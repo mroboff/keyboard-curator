@@ -312,6 +312,19 @@ impl Project {
         Ok(())
     }
 
+    /// Exchanges the bindings of two keys on a layer.
+    pub fn swap_bindings(&mut self, layer: LayerId, a: usize, b: usize) -> Result<(), ModelError> {
+        let keys = self.key_count;
+        let bindings = &mut self.layer_mut(layer)?.bindings;
+        match [a, b].into_iter().find(|p| *p >= bindings.len()) {
+            Some(position) => Err(ModelError::NoSuchPosition { position, keys }),
+            None => {
+                bindings.swap(a, b);
+                Ok(())
+            }
+        }
+    }
+
     // Lighting
 
     pub fn lighting(&self, layer: LayerId) -> Option<&LayerLighting> {

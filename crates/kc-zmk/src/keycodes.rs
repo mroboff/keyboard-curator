@@ -317,9 +317,82 @@ fn legend(name: &str, description: &str, category: Category) -> String {
     }
 }
 
+/// The keycode for a key typed on the host keyboard, named the way GUI
+/// toolkits report keystrokes (`a`, `1`, `enter`, `-`). Used to assign keys
+/// by typing them.
+pub fn from_typed(key: &str) -> Option<&'static str> {
+    const NAMED: &[(&str, &str)] = &[
+        ("enter", "RET"),
+        ("space", "SPACE"),
+        ("tab", "TAB"),
+        ("backspace", "BSPC"),
+        ("escape", "ESC"),
+        ("delete", "DEL"),
+        ("home", "HOME"),
+        ("end", "END"),
+        ("pageup", "PG_UP"),
+        ("pagedown", "PG_DN"),
+        ("-", "MINUS"),
+        ("=", "EQUAL"),
+        ("[", "LBKT"),
+        ("]", "RBKT"),
+        ("\\", "BSLH"),
+        (";", "SEMI"),
+        ("'", "SQT"),
+        ("`", "GRAVE"),
+        (",", "COMMA"),
+        (".", "DOT"),
+        ("/", "FSLH"),
+    ];
+    const LETTERS: [&str; 26] = [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+        "S", "T", "U", "V", "W", "X", "Y", "Z",
+    ];
+    const DIGITS: [&str; 10] = ["N0", "N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9"];
+    const FUNCTION: [&str; 12] = [
+        "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+    ];
+    let mut chars = key.chars();
+    if let (Some(c), None) = (chars.next(), chars.next()) {
+        if c.is_ascii_lowercase() {
+            return Some(LETTERS[(c as u8 - b'a') as usize]);
+        }
+        if c.is_ascii_digit() {
+            return Some(DIGITS[(c as u8 - b'0') as usize]);
+        }
+    }
+    if let Some(n) = key.strip_prefix('f').and_then(|n| n.parse::<usize>().ok()) {
+        return FUNCTION.get(n.wrapping_sub(1)).copied();
+    }
+    NAMED
+        .iter()
+        .find(|(name, _)| *name == key)
+        .map(|(_, code)| *code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_keys_map_to_real_keycodes() {
+        for (typed, code) in [
+            ("a", "A"),
+            ("z", "Z"),
+            ("0", "N0"),
+            ("7", "N7"),
+            ("enter", "RET"),
+            ("f5", "F5"),
+            ("\\", "BSLH"),
+            ("/", "FSLH"),
+        ] {
+            assert_eq!(from_typed(typed), Some(code), "{typed}");
+            assert!(keycodes().get(code).is_some(), "{code}");
+        }
+        for typed in ["", "ab", "f0", "f13", "left", "A"] {
+            assert_eq!(from_typed(typed), None, "{typed}");
+        }
+    }
 
     #[test]
     fn letters_numbers_and_aliases_resolve() {

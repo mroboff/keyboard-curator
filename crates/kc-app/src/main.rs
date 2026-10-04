@@ -15,7 +15,33 @@ use crate::state::AppState;
 
 actions!(
     keyboard_curator,
-    [Quit, OpenProject, CloseProject, Save, SaveAs, Undo, Redo]
+    [
+        Quit,
+        NewProject,
+        OpenProject,
+        CloseProject,
+        Save,
+        SaveAs,
+        Undo,
+        Redo,
+        Copy,
+        Paste,
+        NextLayer,
+        PreviousLayer,
+        Layer1,
+        Layer2,
+        Layer3,
+        Layer4,
+        Layer5,
+        Layer6,
+        Layer7,
+        Layer8,
+        Layer9,
+        ToggleAutoAdvance,
+        ToggleTypeToAssign,
+        OpenHelp,
+        OpenZmkDocs
+    ]
 );
 
 fn menus() -> Vec<Menu> {
@@ -26,6 +52,7 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Quit Keyboard Curator", Quit),
         ]),
         Menu::new("File").items([
+            MenuItem::action("New Project…", NewProject),
             MenuItem::action("Open…", OpenProject),
             MenuItem::separator(),
             MenuItem::action("Save", Save),
@@ -36,6 +63,20 @@ fn menus() -> Vec<Menu> {
         Menu::new("Edit").items([
             MenuItem::action("Undo", Undo),
             MenuItem::action("Redo", Redo),
+            MenuItem::separator(),
+            MenuItem::action("Copy", Copy),
+            MenuItem::action("Paste", Paste),
+        ]),
+        Menu::new("View").items([
+            MenuItem::action("Next Layer", NextLayer),
+            MenuItem::action("Previous Layer", PreviousLayer),
+            MenuItem::separator(),
+            MenuItem::action("Advance After Assigning", ToggleAutoAdvance),
+            MenuItem::action("Type to Assign", ToggleTypeToAssign),
+        ]),
+        Menu::new("Help").items([
+            MenuItem::action("Keyboard Curator Help", OpenHelp),
+            MenuItem::action("ZMK Documentation", OpenZmkDocs),
         ]),
     ]
 }
@@ -45,9 +86,27 @@ fn main() {
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
         cx.on_action(|_: &Quit, cx| cx.quit());
+        cx.on_action(|_: &OpenHelp, cx| {
+            cx.open_url("https://github.com/mroboff/keyboard-curator#readme");
+        });
+        cx.on_action(|_: &OpenZmkDocs, cx| cx.open_url("https://zmk.dev/docs"));
         cx.bind_keys([
             KeyBinding::new("cmd-q", Quit, None),
+            KeyBinding::new("cmd-n", NewProject, Some("Shell")),
             KeyBinding::new("cmd-o", OpenProject, Some("Shell")),
+            KeyBinding::new("cmd-c", Copy, Some("Workspace")),
+            KeyBinding::new("cmd-v", Paste, Some("Workspace")),
+            KeyBinding::new("cmd-]", NextLayer, Some("Workspace")),
+            KeyBinding::new("cmd-[", PreviousLayer, Some("Workspace")),
+            KeyBinding::new("cmd-1", Layer1, Some("Workspace")),
+            KeyBinding::new("cmd-2", Layer2, Some("Workspace")),
+            KeyBinding::new("cmd-3", Layer3, Some("Workspace")),
+            KeyBinding::new("cmd-4", Layer4, Some("Workspace")),
+            KeyBinding::new("cmd-5", Layer5, Some("Workspace")),
+            KeyBinding::new("cmd-6", Layer6, Some("Workspace")),
+            KeyBinding::new("cmd-7", Layer7, Some("Workspace")),
+            KeyBinding::new("cmd-8", Layer8, Some("Workspace")),
+            KeyBinding::new("cmd-9", Layer9, Some("Workspace")),
             KeyBinding::new("cmd-s", Save, Some("Shell")),
             KeyBinding::new("cmd-shift-s", SaveAs, Some("Shell")),
             KeyBinding::new("cmd-w", CloseProject, Some("Shell")),

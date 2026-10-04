@@ -59,12 +59,18 @@ name = "Left touchpad"
 kind = "touchpad"
 side = "left"
 listener = "cirque_lh_listener"
+x = 700
+y = 170
+size = 180
 
 [[pointing]]
 name = "Right touchpad"
 kind = "touchpad"
 side = "right"
 listener = "cirque_rh_listener"
+x = 1050
+y = 170
+size = 180
 
 [[firmware]]
 id = "moergo-zmk-26.09"
