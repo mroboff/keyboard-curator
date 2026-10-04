@@ -1,0 +1,139 @@
+# MoErgo Go60. Transcribed from https://github.com/moergo-sc/zmk at tag v26.09:
+# app/boards/arm/go60/go60-layouts.dtsi, go60.dtsi and go60_*_defconfig.
+# Earlier tags have the physical layout in the wrong order.
+
+id = "moergo-go60"
+name = "Go60"
+vendor = "MoErgo"
+# MoErgo voids the warranty above this (CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX).
+brightness_cap = 40
+default_layout = "physical_layout0"
+
+[flash]
+order = ["right", "left"]
+bootloader_entry = "Press the bootloader key on the Magic layer for that half, or hold the half's bootloader key combination while powering it on."
+
+# LED chains are the `pixel-lookup` tables from the community per-key lighting
+# branch (https://github.com/moergo-sc/zmk/pull/36), which runs on real Go60s.
+
+[[halves]]
+side = "left"
+central = true
+bootloader_volume = "GO60LHBOOT"
+
+[halves.leds]
+layout = "physical_layout0"
+verified = true
+chain = [
+  54, 55, 56, 5, 17, 29, 41, 4, 16, 28,
+  40, 50, 3, 15, 27, 39, 49, 2, 14, 26,
+  38, 48, 1, 13, 25, 37, 0, 12, 24, 36,
+]
+
+[[halves]]
+side = "right"
+central = false
+bootloader_volume = "GO60RHBOOT"
+
+[halves.leds]
+layout = "physical_layout0"
+verified = true
+chain = [
+  59, 58, 57, 6, 18, 30, 42, 7, 19, 31,
+  43, 51, 8, 20, 32, 44, 52, 9, 21, 33,
+  45, 53, 10, 22, 34, 46, 11, 23, 35, 47,
+]
+
+[[pointing]]
+name = "Left touchpad"
+kind = "touchpad"
+side = "left"
+listener = "cirque_lh_listener"
+
+[[pointing]]
+name = "Right touchpad"
+kind = "touchpad"
+side = "right"
+listener = "cirque_rh_listener"
+
+[[firmware]]
+id = "moergo-zmk-26.09"
+name = "MoErgo ZMK v26.09"
+zephyr = "3.5"
+zmk = { url = "https://github.com/moergo-sc/zmk", revision = "v26.09" }
+capabilities = ["studio", "rgb-underglow", "rgb-status", "pointing"]
+
+[[firmware.builds]]
+side = "left"
+board = "go60_lh"
+
+[[firmware.builds]]
+side = "right"
+board = "go60_rh"
+
+[[layouts]]
+id = "physical_layout0"
+name = "Go60"
+keys = [
+  [100, 100,    0,  50,     0,    0,    0],
+  [100, 100,  100,  50,     0,    0,    0],
+  [100, 100,  200,   0,     0,    0,    0],
+  [100, 100,  300,   0,     0,    0,    0],
+  [100, 100,  400,   0,     0,    0,    0],
+  [100, 100,  500,   0,     0,    0,    0],
+  [100, 100, 1150,   0,     0,    0,    0],
+  [100, 100, 1250,   0,     0,    0,    0],
+  [100, 100, 1350,   0,     0,    0,    0],
+  [100, 100, 1450,   0,     0,    0,    0],
+  [100, 100, 1550,  50,     0,    0,    0],
+  [100, 100, 1650,  50,     0,    0,    0],
+  [100, 100,    0, 150,     0,    0,    0],
+  [100, 100,  100, 150,     0,    0,    0],
+  [100, 100,  200, 100,     0,    0,    0],
+  [100, 100,  300, 100,     0,    0,    0],
+  [100, 100,  400, 100,     0,    0,    0],
+  [100, 100,  500, 100,     0,    0,    0],
+  [100, 100, 1150, 100,     0,    0,    0],
+  [100, 100, 1250, 100,     0,    0,    0],
+  [100, 100, 1350, 100,     0,    0,    0],
+  [100, 100, 1450, 100,     0,    0,    0],
+  [100, 100, 1550, 150,     0,    0,    0],
+  [100, 100, 1650, 150,     0,    0,    0],
+  [100, 100,    0, 250,     0,    0,    0],
+  [100, 100,  100, 250,     0,    0,    0],
+  [100, 100,  200, 200,     0,    0,    0],
+  [100, 100,  300, 200,     0,    0,    0],
+  [100, 100,  400, 200,     0,    0,    0],
+  [100, 100,  500, 200,     0,    0,    0],
+  [100, 100, 1150, 200,     0,    0,    0],
+  [100, 100, 1250, 200,     0,    0,    0],
+  [100, 100, 1350, 200,     0,    0,    0],
+  [100, 100, 1450, 200,     0,    0,    0],
+  [100, 100, 1550, 250,     0,    0,    0],
+  [100, 100, 1650, 250,     0,    0,    0],
+  [100, 100,    0, 350,     0,    0,    0],
+  [100, 100,  100, 350,     0,    0,    0],
+  [100, 100,  200, 300,     0,    0,    0],
+  [100, 100,  300, 300,     0,    0,    0],
+  [100, 100,  400, 300,     0,    0,    0],
+  [100, 100,  500, 300,     0,    0,    0],
+  [100, 100, 1150, 300,     0,    0,    0],
+  [100, 100, 1250, 300,     0,    0,    0],
+  [100, 100, 1350, 300,     0,    0,    0],
+  [100, 100, 1450, 300,     0,    0,    0],
+  [100, 100, 1550, 350,     0,    0,    0],
+  [100, 100, 1650, 350,     0,    0,    0],
+  [100, 100,  200, 400,     0,    0,    0],
+  [100, 100,  300, 400,     0,    0,    0],
+  [100, 100,  400, 400,     0,    0,    0],
+  [100, 100, 1250, 400,     0,    0,    0],
+  [100, 100, 1350, 400,     0,    0,    0],
+  [100, 100, 1450, 400,     0,    0,    0],
+  [100, 100,  520, 410,  1250,  520,  410],
+  [100, 100,  640, 440,  2500,  640,  440],
+  [100, 100,  750, 495,  3700,  750,  495],
+  [100, 100,  915, 550, -3700,  915,  550],
+  [100, 100, 1015, 480, -2500, 1015,  480],
+  [100, 100, 1130, 430, -1250, 1130,  430],
+]
+

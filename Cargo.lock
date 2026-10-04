@@ -3535,6 +3535,11 @@ dependencies = [
 [[package]]
 name = "kc-boards"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+ "toml 1.1.6+spec-1.1.0",
+]
 
 [[package]]
 name = "kc-build"
