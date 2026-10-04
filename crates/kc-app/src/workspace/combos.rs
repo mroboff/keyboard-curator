@@ -246,6 +246,7 @@ impl Workspace {
             band: None,
             palette,
             tint: None,
+            colors: Vec::new(),
             links: self
                 .project()
                 .combos

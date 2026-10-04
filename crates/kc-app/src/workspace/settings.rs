@@ -351,6 +351,37 @@ impl Workspace {
         let muted = cx.theme().muted_foreground;
         let features = self.features();
         let mut page = div().w(px(760.)).flex().flex_col().gap_3();
+        if self.board.firmware.len() > 1 {
+            let current = self.project().firmware.clone();
+            let choices = self
+                .board
+                .firmware
+                .iter()
+                .enumerate()
+                .map(|(index, profile)| {
+                    let id = profile.id.clone();
+                    chip(
+                        ("firmware", index),
+                        profile.name.clone(),
+                        profile.id == current,
+                        cx,
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        let id = id.clone();
+                        this.change("Change Firmware", window, cx, |p| {
+                            p.firmware = id;
+                            Ok(())
+                        });
+                    }))
+                })
+                .collect::<Vec<_>>();
+            page = page
+                .child(div().text_lg().child("Firmware"))
+                .child(div().text_xs().text_color(muted).child(
+                    "Which firmware your layout is built with. Features the chosen firmware lacks are hidden.",
+                ))
+                .child(div().flex().flex_col().items_start().gap_1().children(choices));
+        }
         let mut group = "";
         for setting in SETTINGS {
             if setting.requires.is_some_and(|f| !features.contains(&f)) {

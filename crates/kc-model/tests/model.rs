@@ -967,3 +967,46 @@ fn factory_templates_reproduce_the_vendor_layouts_without_raw_bindings() {
     assert_eq!(go60.binding(base, 0), Some(&kp("EQUAL")));
     assert_eq!(go60.pointing.len(), 2);
 }
+
+#[test]
+fn lights_resolve_through_layers_and_follow_key_types() {
+    use kc_model::features::LockKind;
+    use kc_model::lighting::{by_key_type, display_color, effective, LAYER_COLOR, MODIFIER_COLOR};
+
+    let go60 = board("moergo-go60");
+    let mut p = Project::from_template("Lit", &go60);
+    let (base, keypad, symbol) = (p.layers[0].id, p.layers[1].id, p.layers[2].id);
+    let red = KeyLight::Color(Rgb(255, 0, 0));
+    p.lighting_mut(base).unwrap().keys[5] = red;
+    p.lighting_mut(symbol).unwrap().keys[6] = KeyLight::Off;
+
+    // A key with no light of its own shows the nearest one below.
+    assert_eq!(effective(&p, base, 5), (red, false));
+    assert_eq!(effective(&p, keypad, 5), (red, true));
+    assert_eq!(effective(&p, symbol, 5), (red, true));
+    assert_eq!(effective(&p, symbol, 6), (KeyLight::Off, false));
+    assert_eq!(effective(&p, symbol, 7), (KeyLight::Inherit, false));
+    // Layers above do not shine down.
+    assert_eq!(effective(&p, keypad, 6), (KeyLight::Inherit, false));
+
+    let lock = KeyLight::Lock {
+        lock: LockKind::Caps,
+        off: Rgb(0, 0, 0),
+        on: Rgb(1, 2, 3),
+    };
+    assert_eq!(display_color(lock), Some(Rgb(1, 2, 3)));
+    assert_eq!(display_color(KeyLight::Off), None);
+
+    let scheme = by_key_type(&p, base);
+    assert_eq!(scheme.len(), 60);
+    // The Go60's base layer has Shift on the left thumb and the Magic key.
+    assert_eq!(scheme[55], KeyLight::Color(MODIFIER_COLOR));
+    assert!(
+        scheme.contains(&KeyLight::Color(LAYER_COLOR)) || scheme.iter().any(|l| *l != scheme[0])
+    );
+    let upper = by_key_type(&p, keypad);
+    assert!(
+        upper.contains(&KeyLight::Inherit),
+        "transparent keys inherit"
+    );
+}

@@ -490,6 +490,7 @@ impl Workspace {
             palette,
             tint: None,
             links: Vec::new(),
+            colors: Vec::new(),
         };
         let bounds = self.mini_bounds.clone();
         let hands =

@@ -3,6 +3,7 @@
 
 mod behaviors;
 mod combos;
+mod lighting;
 mod pointing;
 mod settings;
 
@@ -11,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::color_picker::ColorPickerState;
 use gpui_kit::component::input::{Input, InputEvent, InputState, TextareaState};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -65,6 +67,7 @@ fn tag_color(tag: Rgb) -> Hsla {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Keyboard,
+    Lighting,
     Behaviors,
     Combos,
     Pointing,
@@ -157,6 +160,12 @@ pub struct Workspace {
     raw_behaviors: Entity<TextareaState>,
     raw_devicetree: Entity<TextareaState>,
     raw_conf: Entity<TextareaState>,
+    /// What painting does in the Lighting mode, and with which colour.
+    brush: lighting::Brush,
+    paint_color: kc_model::features::Rgb,
+    /// True while the pointer is held down painting.
+    painting: bool,
+    color_picker: Entity<ColorPickerState>,
     /// Selected key positions; the last one is the key the inspector shows.
     selection: Vec<usize>,
     hovered: Option<usize>,
@@ -288,6 +297,8 @@ impl Workspace {
         );
         behaviors::subscribe(&behavior_name, &behavior_label, &macro_text, window, cx);
         combos::subscribe(&combo_name, window, cx);
+        let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
+        lighting::subscribe(&color_picker, cx);
         let repo_dir = AppState::load()
             .repos
             .get(&Self::repo_key(path.as_deref(), &board))
@@ -315,6 +326,10 @@ impl Workspace {
             raw_behaviors,
             raw_devicetree,
             raw_conf,
+            brush: lighting::Brush::Color,
+            paint_color: kc_model::features::Rgb(0x00, 0xC0, 0xFF),
+            painting: false,
+            color_picker,
             selection: Vec::new(),
             hovered: None,
             drag: None,
@@ -333,6 +348,7 @@ impl Workspace {
         workspace.sync_inputs(window, cx);
         // For checking a screen from the command line: KC_MODE=settings.
         let start = match std::env::var("KC_MODE").as_deref() {
+            Ok("lighting") => Some(Mode::Lighting),
             Ok("behaviors") => Some(Mode::Behaviors),
             Ok("combos") => Some(Mode::Combos),
             Ok("pointing") => Some(Mode::Pointing),
@@ -1164,6 +1180,7 @@ impl Workspace {
                 .and_then(|l| l.color)
                 .map(tag_color),
             links: Vec::new(),
+            colors: Vec::new(),
         };
         let bounds = self.canvas_bounds.clone();
 
@@ -1880,6 +1897,7 @@ impl Workspace {
             .border_b_1()
             .border_color(border)
             .child(tab("mode-keyboard", "Keyboard", Mode::Keyboard, cx))
+            .child(tab("mode-lighting", "Lighting", Mode::Lighting, cx))
             .child(tab("mode-behaviors", "Behaviors", Mode::Behaviors, cx))
             .child(tab("mode-combos", "Combos", Mode::Combos, cx))
             .child(tab("mode-pointing", "Pointing", Mode::Pointing, cx))
@@ -2132,6 +2150,7 @@ impl Render for Workspace {
                                 .child(self.render_picker(cx))
                                 .child(self.render_inspector(cx)),
                         ),
+                        Mode::Lighting => main.child(self.render_lighting(cx)),
                         Mode::Behaviors => main
                             .child(self.render_behaviors(cx))
                             .child(self.render_slot_picker(cx)),

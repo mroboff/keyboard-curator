@@ -132,6 +132,8 @@ pub struct Frame {
     /// Groups of keys to join with a line, such as combos, and whether
     /// each is the one being edited.
     pub links: Vec<(Vec<usize>, bool)>,
+    /// The colour each key is lit, for the lighting view. Empty elsewhere.
+    pub colors: Vec<Option<Hsla>>,
 }
 
 /// The outline of a key, inset by the key gap, with rounded corners.
@@ -248,6 +250,14 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             KeycapKind::Layer => palette.layer_key,
             _ if ghost => palette.key.opacity(0.35),
             _ => palette.key,
+        };
+        // In the lighting view a key is drawn in the colour it is lit, and
+        // unlit keys are drawn dark.
+        let lit = frame.colors.get(index).copied();
+        let fill = match lit {
+            Some(Some(color)) => color,
+            Some(None) => palette.key.opacity(0.25),
+            None => fill,
         };
         let fill = match frame.tint {
             Some(tint) if !ghost => fill.blend(tint.opacity(0.16)),

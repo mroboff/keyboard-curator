@@ -15,6 +15,7 @@ pub mod features;
 pub mod file;
 pub mod ids;
 pub mod keycap;
+pub mod lighting;
 pub mod picker;
 pub mod project;
 pub mod text;
