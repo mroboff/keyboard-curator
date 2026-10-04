@@ -4,6 +4,7 @@ pub mod behaviors;
 pub mod feature;
 pub mod keycodes;
 pub mod modifiers;
+pub mod settings;
 
 pub use feature::Feature;
 pub use modifiers::Modifier;

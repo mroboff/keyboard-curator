@@ -48,8 +48,33 @@ pub enum Location {
     Setting(String),
 }
 
+/// A binding that lives inside a behaviour or combo rather than on a key,
+/// so that editors can point the key picker at it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    /// One tap count of a tap-dance.
+    TapDance {
+        behavior: BehaviorId,
+        index: usize,
+    },
+    /// The normal or the morphed binding of a mod-morph.
+    ModMorph {
+        behavior: BehaviorId,
+        morphed: bool,
+    },
+    /// One binding within a tap, press or release step of a macro.
+    MacroStep {
+        behavior: BehaviorId,
+        step: usize,
+        index: usize,
+    },
+    Combo(ComboId),
+}
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ModelError {
+    #[error("that binding no longer exists")]
+    NoSuchSlot,
     #[error("no layer with id {0:?}")]
     NoSuchLayer(LayerId),
     #[error("no behaviour with id {0:?}")]
@@ -478,6 +503,67 @@ impl Project {
         if self.combos.len() == before {
             return Err(ModelError::NoSuchCombo(id));
         }
+        Ok(())
+    }
+
+    /// The binding in a slot.
+    pub fn slot(&self, slot: Slot) -> Option<&Binding> {
+        use crate::behavior::MacroStep;
+        match slot {
+            Slot::Combo(id) => self.combos.iter().find(|c| c.id == id).map(|c| &c.binding),
+            Slot::TapDance { behavior, index } => match &self.behavior(behavior)?.kind {
+                BehaviorKind::TapDance(t) => t.bindings.get(index),
+                _ => None,
+            },
+            Slot::ModMorph { behavior, morphed } => match &self.behavior(behavior)?.kind {
+                BehaviorKind::ModMorph(m) => Some(if morphed { &m.morphed } else { &m.normal }),
+                _ => None,
+            },
+            Slot::MacroStep {
+                behavior,
+                step,
+                index,
+            } => match &self.behavior(behavior)?.kind {
+                BehaviorKind::Macro(m) => match m.steps.get(step)? {
+                    MacroStep::Tap(b) | MacroStep::Press(b) | MacroStep::Release(b) => b.get(index),
+                    _ => None,
+                },
+                _ => None,
+            },
+        }
+    }
+
+    pub fn set_slot(&mut self, slot: Slot, binding: Binding) -> Result<(), ModelError> {
+        use crate::behavior::MacroStep;
+        let target = match slot {
+            Slot::Combo(id) => Some(&mut self.combo_mut(id)?.binding),
+            Slot::TapDance { behavior, index } => match &mut self.behavior_mut(behavior)?.kind {
+                BehaviorKind::TapDance(t) => t.bindings.get_mut(index),
+                _ => None,
+            },
+            Slot::ModMorph { behavior, morphed } => match &mut self.behavior_mut(behavior)?.kind {
+                BehaviorKind::ModMorph(m) => Some(if morphed {
+                    &mut m.morphed
+                } else {
+                    &mut m.normal
+                }),
+                _ => None,
+            },
+            Slot::MacroStep {
+                behavior,
+                step,
+                index,
+            } => match &mut self.behavior_mut(behavior)?.kind {
+                BehaviorKind::Macro(m) => match m.steps.get_mut(step) {
+                    Some(MacroStep::Tap(b) | MacroStep::Press(b) | MacroStep::Release(b)) => {
+                        b.get_mut(index)
+                    }
+                    _ => None,
+                },
+                _ => None,
+            },
+        };
+        *target.ok_or(ModelError::NoSuchSlot)? = binding;
         Ok(())
     }
 

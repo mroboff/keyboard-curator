@@ -365,16 +365,30 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         }
     }
 
-    if let Some(SettingValue::Int(value)) = project.settings.get(BRIGHTNESS_MAX_SETTING) {
-        if *value > i64::from(board.brightness_cap) {
-            c.error(
-                &Location::Setting(BRIGHTNESS_MAX_SETTING.into()),
-                format!(
-                    "brightness {value} is above this board's limit of {}",
-                    board.brightness_cap
-                ),
-            );
+    for key in kc_zmk::settings::BRIGHTNESS_SETTINGS {
+        if let Some(SettingValue::Int(value)) = project.settings.get(key) {
+            if *value > i64::from(board.brightness_cap) {
+                c.error(
+                    &Location::Setting(key.into()),
+                    format!(
+                        "brightness {value} is above this board's limit of {}",
+                        board.brightness_cap
+                    ),
+                );
+            }
         }
+    }
+
+    // Without a bootloader key, reflashing needs the hardware reset button.
+    let reaches_bootloader = project.bindings().iter().any(|(_, b)| {
+        matches!(b, Binding::Behavior { behavior: BehaviorRef::BuiltIn(label), .. } if label == "bootloader")
+            || matches!(b, Binding::Raw { raw } if raw.contains("&bootloader"))
+    });
+    if !reaches_bootloader {
+        c.warning(
+            &root,
+            "no key enters the bootloader, so flashing will need the reset button on each half",
+        );
     }
 
     c.problems

@@ -81,6 +81,101 @@ impl PointingConfig {
     }
 }
 
+/// What a pointing device does, in the terms the pointing editor offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PointingProfile {
+    /// Scroll instead of moving the pointer.
+    pub scroll: bool,
+    /// Speed as `multiplier / divisor`.
+    pub speed: (u32, u32),
+    pub invert_x: bool,
+    pub invert_y: bool,
+    pub swap_xy: bool,
+    /// A layer to activate while the device is in use, and for how long
+    /// after it stops.
+    pub auto_layer: Option<(LayerId, u32)>,
+}
+
+impl Default for PointingProfile {
+    fn default() -> Self {
+        Self {
+            scroll: false,
+            speed: (1, 1),
+            invert_x: false,
+            invert_y: false,
+            swap_xy: false,
+            auto_layer: None,
+        }
+    }
+}
+
+impl PointingProfile {
+    /// The input processors that give this behaviour.
+    pub fn to_processors(self) -> Vec<InputProcessor> {
+        let mut out = Vec::new();
+        if self.speed != (1, 1) {
+            out.push(InputProcessor::Scale {
+                multiplier: self.speed.0,
+                divisor: self.speed.1,
+            });
+        }
+        if self.scroll {
+            out.push(InputProcessor::ToScroll);
+        }
+        if self.invert_x || self.invert_y || self.swap_xy {
+            out.push(InputProcessor::Transform {
+                invert_x: self.invert_x,
+                invert_y: self.invert_y,
+                swap_xy: self.swap_xy,
+                scroll: self.scroll,
+            });
+        }
+        if let Some((layer, timeout_ms)) = self.auto_layer {
+            out.push(InputProcessor::TempLayer { layer, timeout_ms });
+        }
+        out
+    }
+
+    /// Reads a processor list back, when it is one the editor could have
+    /// produced. Anything else (raw processors, repeats) is left to the
+    /// raw view.
+    pub fn from_processors(processors: &[InputProcessor]) -> Option<Self> {
+        let mut profile = Self::default();
+        let (mut scaled, mut transformed) = (false, None);
+        for processor in processors {
+            match processor {
+                InputProcessor::Scale {
+                    multiplier,
+                    divisor,
+                } if !scaled => {
+                    profile.speed = (*multiplier, *divisor);
+                    scaled = true;
+                }
+                InputProcessor::ToScroll if !profile.scroll => profile.scroll = true,
+                InputProcessor::Transform {
+                    invert_x,
+                    invert_y,
+                    swap_xy,
+                    scroll,
+                } if transformed.is_none() => {
+                    (profile.invert_x, profile.invert_y, profile.swap_xy) =
+                        (*invert_x, *invert_y, *swap_xy);
+                    transformed = Some(*scroll);
+                }
+                InputProcessor::TempLayer { layer, timeout_ms } if profile.auto_layer.is_none() => {
+                    profile.auto_layer = Some((*layer, *timeout_ms));
+                }
+                _ => return None,
+            }
+        }
+        // A transform has to act on what the device produces.
+        match transformed {
+            Some(scroll) if scroll != profile.scroll => None,
+            _ => Some(profile),
+        }
+    }
+}
+
 /// A colour at full range, written `#RRGGBB`. Brightness limits are applied
 /// by firmware settings, never by altering stored colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -203,6 +298,59 @@ mod tests {
         for bad in ["ff8000", "#ff80", "#gg0000", "#ff800000"] {
             assert!(bad.parse::<Rgb>().is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn pointing_profiles_round_trip_through_processors() {
+        let scroller = PointingProfile {
+            scroll: true,
+            speed: (1, 3),
+            invert_y: true,
+            auto_layer: Some((LayerId(4), 500)),
+            ..PointingProfile::default()
+        };
+        let processors = scroller.to_processors();
+        assert_eq!(processors.len(), 4);
+        assert_eq!(
+            PointingProfile::from_processors(&processors),
+            Some(scroller)
+        );
+        assert_eq!(PointingProfile::default().to_processors(), []);
+        assert_eq!(
+            PointingProfile::from_processors(&[]),
+            Some(PointingProfile::default())
+        );
+        // The Imprint's factory scroller, in the vendor's own order.
+        let factory = [
+            InputProcessor::Scale {
+                multiplier: 1,
+                divisor: 3,
+            },
+            InputProcessor::ToScroll,
+            InputProcessor::Transform {
+                invert_x: false,
+                invert_y: true,
+                swap_xy: false,
+                scroll: true,
+            },
+        ];
+        assert!(PointingProfile::from_processors(&factory).is_some_and(|p| p.scroll && p.invert_y));
+        // Lists the editor could not have written are left alone.
+        assert_eq!(
+            PointingProfile::from_processors(&[InputProcessor::Raw("<&x>".into())]),
+            None
+        );
+        assert_eq!(
+            PointingProfile::from_processors(&[InputProcessor::ToScroll, InputProcessor::ToScroll]),
+            None
+        );
+        let mismatched = [InputProcessor::Transform {
+            invert_x: true,
+            invert_y: false,
+            swap_xy: false,
+            scroll: true,
+        }];
+        assert_eq!(PointingProfile::from_processors(&mismatched), None);
     }
 
     #[test]

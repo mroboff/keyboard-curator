@@ -137,7 +137,7 @@ fn new_projects_match_their_board() {
     // The base layer starts from the board's factory keys.
     assert_eq!(p.binding(p.layers[0].id, 25), Some(&kp("Q")));
     assert_eq!(p.binding(p.layers[0].id, 60), Some(&Binding::trans()));
-    assert!(validate(&p, &imprint).is_empty());
+    assert!(errors(&p, &imprint).is_empty());
 
     let go60 = board("moergo-go60");
     assert_eq!(Project::new("Mine", &go60).key_count, 60);
@@ -150,7 +150,7 @@ fn new_projects_match_their_board() {
 #[test]
 fn the_rich_project_is_valid() {
     let (p, go60) = rich_project();
-    assert_eq!(validate(&p, &go60), []);
+    assert_eq!(errors(&p, &go60), Vec::<String>::new());
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn reordering_layers_keeps_every_reference() {
     assert_eq!(p.layer_index(nav), Some(2));
     // The binding still names the same layer, now at a new index.
     assert_eq!(p.binding(base, 1), Some(&Binding::layer("mo", nav)));
-    assert_eq!(validate(&p, &go60), []);
+    assert!(errors(&p, &go60).is_empty());
     assert_eq!(
         p.move_layer(LayerId(999), 0),
         Err(ModelError::NoSuchLayer(LayerId(999)))
@@ -197,7 +197,10 @@ fn a_referenced_layer_cannot_be_removed_by_accident() {
     assert!(p.conditional_layers.is_empty());
     assert_eq!(p.combos[0].layers, [base]);
     assert!(p.pointing[0].overrides.is_empty());
-    assert_eq!(validate(&p, &go60), [], "no dangling references remain");
+    assert!(
+        errors(&p, &go60).is_empty(),
+        "no dangling references remain"
+    );
 }
 
 #[test]
@@ -728,7 +731,7 @@ fn the_picker_offers_what_the_firmware_supports() {
     for item in &items {
         all.set_binding(all.layers[0].id, 0, item.binding.clone())
             .unwrap();
-        assert_eq!(validate(&all, &go60), [], "{}", item.label);
+        assert!(errors(&all, &go60).is_empty(), "{}", item.label);
     }
 }
 
@@ -765,7 +768,7 @@ fn keys_and_layers_copy_and_paste_as_text() {
         p.layer(extra).unwrap().bindings,
         p.layer(base).unwrap().bindings
     );
-    assert_eq!(validate(&p, &go60), []);
+    assert!(errors(&p, &go60).is_empty());
 
     // Layers travel by name, so a paste into another project still resolves.
     let mut other = Project::new("Other", &go60);
@@ -790,4 +793,127 @@ fn keys_and_layers_copy_and_paste_as_text() {
     p.swap_bindings(base, 0, 1).unwrap();
     assert_eq!(p.binding(base, 0), Some(&Binding::layer("mo", nav)));
     assert!(p.swap_bindings(base, 0, 60).is_err());
+}
+
+#[test]
+fn slots_reach_bindings_inside_behaviours_and_combos() {
+    use kc_model::Slot;
+
+    let (mut p, go60) = rich_project();
+    let dance = p.behaviors[1].id;
+    let hello = p.behaviors[2].id;
+    let combo = p.combos[0].id;
+    let nav = p.layers[1].id;
+
+    assert_eq!(
+        p.slot(Slot::TapDance {
+            behavior: dance,
+            index: 1
+        }),
+        Some(&Binding::layer("to", nav))
+    );
+    assert_eq!(
+        p.slot(Slot::MacroStep {
+            behavior: hello,
+            step: 0,
+            index: 1
+        }),
+        Some(&kp("I"))
+    );
+    assert_eq!(p.slot(Slot::Combo(combo)), Some(&kp("ESC")));
+    assert_eq!(
+        p.slot(Slot::TapDance {
+            behavior: hello,
+            index: 0
+        }),
+        None,
+        "not a tap-dance"
+    );
+    assert_eq!(
+        p.slot(Slot::MacroStep {
+            behavior: hello,
+            step: 1,
+            index: 0
+        }),
+        None,
+        "a pause holds no binding"
+    );
+
+    p.set_slot(
+        Slot::TapDance {
+            behavior: dance,
+            index: 0,
+        },
+        kp("A"),
+    )
+    .unwrap();
+    p.set_slot(
+        Slot::MacroStep {
+            behavior: hello,
+            step: 0,
+            index: 0,
+        },
+        kp("Y"),
+    )
+    .unwrap();
+    p.set_slot(Slot::Combo(combo), kp("TAB")).unwrap();
+    assert_eq!(
+        p.slot(Slot::TapDance {
+            behavior: dance,
+            index: 0
+        }),
+        Some(&kp("A"))
+    );
+    assert_eq!(p.slot(Slot::Combo(combo)), Some(&kp("TAB")));
+    assert_eq!(
+        p.set_slot(
+            Slot::TapDance {
+                behavior: dance,
+                index: 9
+            },
+            kp("A")
+        ),
+        Err(ModelError::NoSuchSlot)
+    );
+    assert!(errors(&p, &go60).is_empty());
+}
+
+#[test]
+fn raw_behaviours_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
+    use kc_model::picker::{picker_items, raw_behaviors};
+
+    let (mut p, go60) = rich_project();
+    p.raw.behaviors = "
+        td_q: tap_dance_q {
+            compatible = \"zmk,behavior-tap-dance\";
+            #binding-cells = <0>;
+        };
+        my_ht: my_hold_tap { compatible = \"zmk,behavior-hold-tap\"; };
+        scaled: scaled {
+            #binding-cells = <2>;
+        };"
+    .into();
+    assert_eq!(
+        raw_behaviors(&p.raw.behaviors),
+        [("td_q".to_string(), 0), ("scaled".to_string(), 2)]
+    );
+    let items = picker_items(&p, &go60.firmware[0].capabilities);
+    let scaled = items.iter().find(|i| i.label == "scaled").unwrap();
+    assert_eq!(
+        scaled.binding,
+        Binding::Raw {
+            raw: "&scaled 0 0".into()
+        }
+    );
+
+    // The rich project has no bootloader key.
+    let warning = "no key enters the bootloader";
+    assert!(validate(&p, &go60)
+        .iter()
+        .any(|w| w.message.contains(warning)));
+    p.set_binding(p.layers[2].id, 0, Binding::new("bootloader", vec![]))
+        .unwrap();
+    assert!(!validate(&p, &go60)
+        .iter()
+        .any(|w| w.message.contains(warning)));
 }

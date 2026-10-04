@@ -23,5 +23,5 @@ pub mod validate;
 pub use binding::{BehaviorRef, Binding, KeyExpr, Param};
 pub use editor::Editor;
 pub use ids::{BehaviorId, ComboId, LayerId};
-pub use project::{Layer, Location, ModelError, Project};
+pub use project::{Layer, Location, ModelError, Project, Slot};
 pub use validate::{validate, Problem, Severity};

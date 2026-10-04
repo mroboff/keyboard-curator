@@ -370,9 +370,76 @@ pub fn from_typed(key: &str) -> Option<&'static str> {
         .map(|(_, code)| *code)
 }
 
+/// The key expression that types `c` on a US layout, such as `LS(A)` for
+/// `A` or `EXCL` for `!`. Used to turn text into macro steps.
+pub fn for_char(c: char) -> Option<String> {
+    const SYMBOLS: &[(char, &str)] = &[
+        (' ', "SPACE"),
+        ('\n', "RET"),
+        ('\t', "TAB"),
+        ('-', "MINUS"),
+        ('=', "EQUAL"),
+        ('[', "LBKT"),
+        (']', "RBKT"),
+        ('\\', "BSLH"),
+        (';', "SEMI"),
+        ('\'', "SQT"),
+        ('`', "GRAVE"),
+        (',', "COMMA"),
+        ('.', "DOT"),
+        ('/', "FSLH"),
+        ('!', "EXCL"),
+        ('@', "AT"),
+        ('#', "HASH"),
+        ('$', "DLLR"),
+        ('%', "PRCNT"),
+        ('^', "CARET"),
+        ('&', "AMPS"),
+        ('*', "STAR"),
+        ('(', "LPAR"),
+        (')', "RPAR"),
+        ('_', "UNDER"),
+        ('+', "PLUS"),
+        ('{', "LBRC"),
+        ('}', "RBRC"),
+        ('|', "PIPE"),
+        (':', "COLON"),
+        ('"', "DQT"),
+        ('~', "TILDE"),
+        ('<', "LT"),
+        ('>', "GT"),
+        ('?', "QMARK"),
+    ];
+    if c.is_ascii_lowercase() {
+        return Some(c.to_ascii_uppercase().to_string());
+    }
+    if c.is_ascii_uppercase() {
+        return Some(format!("LS({c})"));
+    }
+    if c.is_ascii_digit() {
+        return Some(format!("N{c}"));
+    }
+    SYMBOLS
+        .iter()
+        .find(|(symbol, _)| *symbol == c)
+        .map(|(_, name)| name.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn characters_map_to_key_expressions() {
+        let text: Vec<String> = "Hi 5!".chars().filter_map(for_char).collect();
+        assert_eq!(text, ["LS(H)", "I", "SPACE", "N5", "EXCL"]);
+        assert_eq!(for_char('é'), None);
+        // Every name used is a real keycode.
+        for c in " \n\t-=[]\\;'`,./!@#$%^&*()_+{}|:\"~<>?".chars() {
+            let name = for_char(c).unwrap();
+            assert!(keycodes().get(&name).is_some(), "{c:?} -> {name}");
+        }
+    }
 
     #[test]
     fn typed_keys_map_to_real_keycodes() {

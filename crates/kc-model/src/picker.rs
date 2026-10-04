@@ -216,6 +216,31 @@ fn behavior_items(
     }
 }
 
+/// Behaviours declared in the project's raw devicetree, as label and
+/// parameter count. Found by their `label: name {` header and
+/// `#binding-cells`, which every behaviour node has.
+pub fn raw_behaviors(devicetree: &str) -> Vec<(String, usize)> {
+    let mut found: Vec<(String, usize)> = Vec::new();
+    let mut open: Option<String> = None;
+    for line in devicetree.lines() {
+        let line = line.trim();
+        if let Some((label, rest)) = line.split_once(':') {
+            let is_label =
+                !label.is_empty() && label.chars().all(|c| c.is_alphanumeric() || c == '_');
+            if is_label && rest.trim_end().ends_with('{') {
+                open = Some(label.to_string());
+            }
+        }
+        if let Some(cells) = line.strip_prefix("#binding-cells") {
+            let digits: String = cells.chars().filter(char::is_ascii_digit).collect();
+            if let (Some(label), Ok(count)) = (open.take(), digits.parse()) {
+                found.push((label, count));
+            }
+        }
+    }
+    found
+}
+
 /// Starting parameters for a binding to a user-defined behaviour, chosen
 /// from what the behaviours it wraps expect. They are adjusted afterwards
 /// in the inspector.
@@ -272,6 +297,17 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
             format!("{what}: {}", def.name),
             Binding::user(def.id, default_params(project, &def.kind)),
             &def.label,
+        ));
+    }
+    for (label, cells) in raw_behaviors(&project.raw.behaviors) {
+        items.push(PickerItem::new(
+            PickerGroup::Custom,
+            label.clone(),
+            format!("Custom behaviour &{label}"),
+            Binding::Raw {
+                raw: format!("&{label}{}", " 0".repeat(cells)),
+            },
+            "custom raw",
         ));
     }
     items
