@@ -193,19 +193,33 @@ pub fn parse_binding(project: &Project, text: &str) -> Binding {
         return raw();
     }
     // A user behaviour's parameters take their meaning from the behaviours
-    // it wraps, so read each one as the most specific thing it could be.
+    // it wraps: a hold-tap's first parameter goes to its hold behaviour, and
+    // so on. Where that says nothing, read each as the most specific thing
+    // it could be.
+    let wrapped: Vec<&BehaviorRef> = match &def.kind {
+        crate::behavior::BehaviorKind::HoldTap(h) => vec![&h.hold, &h.tap],
+        crate::behavior::BehaviorKind::StickyKey(s) => vec![&s.behavior],
+        _ => Vec::new(),
+    };
+    let expected = |index: usize| match wrapped.get(index) {
+        Some(BehaviorRef::BuiltIn(label)) => behaviors::built_in(label)
+            .and_then(|def| def.params.first())
+            .map(|p| p.kind),
+        _ => None,
+    };
     let params = args
         .iter()
-        .map(|token| {
-            if let Ok(n) = token.parse::<i64>() {
-                Param::Number(n)
-            } else if let Some(layer) = parse_layer(project, token) {
-                Param::Layer(layer)
-            } else if let Ok(expr) = token.parse::<KeyExpr>() {
-                Param::Key(expr)
-            } else {
-                Param::Constant(token.clone())
-            }
+        .enumerate()
+        .map(|(index, token)| {
+            let layer = || parse_layer(project, token).map(Param::Layer);
+            let key = || token.parse::<KeyExpr>().ok().map(Param::Key);
+            let number = || token.parse::<i64>().ok().map(Param::Number);
+            let read = match expected(index) {
+                Some(ParamKind::Layer) => layer().or_else(number),
+                Some(ParamKind::Keycode) => key().or_else(number),
+                _ => number().or_else(layer).or_else(key),
+            };
+            read.unwrap_or_else(|| Param::Constant(token.clone()))
         })
         .collect();
     Binding::user(def.id, params)
