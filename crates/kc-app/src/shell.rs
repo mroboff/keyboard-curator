@@ -77,7 +77,7 @@ impl Shell {
     }
 
     fn new_project(&mut self, board: &Board, window: &mut Window, cx: &mut Context<Self>) {
-        let project = Project::new(format!("My {}", board.name), board);
+        let project = Project::from_template(format!("My {}", board.name), board);
         self.show(project, board.clone(), None, window, cx);
     }
 

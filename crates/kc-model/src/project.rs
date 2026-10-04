@@ -126,7 +126,38 @@ pub struct Project {
     next_id: u32,
 }
 
+/// The vendors' factory layouts, as projects. Regenerate one with the
+/// `make_template` example when a vendor changes theirs.
+const TEMPLATES: &[(&str, &str)] = &[
+    (
+        "cyboard-imprint",
+        include_str!("../templates/cyboard-imprint.kcproj"),
+    ),
+    (
+        "moergo-go60",
+        include_str!("../templates/moergo-go60.kcproj"),
+    ),
+];
+
 impl Project {
+    /// A new project that starts as the board's factory layout: every
+    /// layer, behaviour and pointing setting the keyboard ships with.
+    /// Boards without a template start from [`Project::new`].
+    pub fn from_template(name: impl Into<String>, board: &Board) -> Self {
+        let template = TEMPLATES
+            .iter()
+            .find(|(id, _)| *id == board.id)
+            .and_then(|(_, text)| crate::file::from_json(text).ok())
+            .filter(|p| p.layout == board.default_layout);
+        match template {
+            Some(mut project) => {
+                project.name = name.into();
+                project
+            }
+            None => Self::new(name, board),
+        }
+    }
+
     /// A new project for `board`, with a base layer of the board's starter
     /// keys.
     pub fn new(name: impl Into<String>, board: &Board) -> Self {

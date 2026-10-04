@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .find(|b| b.id == board_id)
         .ok_or_else(|| format!("unknown board `{board_id}`"))?;
-    let project = Project::new(format!("My {}", board.name), board);
+    let project = Project::from_template(format!("My {}", board.name), board);
     file::save(&project, path.as_ref())?;
     Ok(())
 }

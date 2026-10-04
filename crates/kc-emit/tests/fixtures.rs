@@ -314,21 +314,31 @@ fn fixtures_match_the_emitter() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let update = std::env::var_os("UPDATE_FIXTURES").is_some();
     let mut stale = Vec::new();
-    for board in kc_boards::built_in().unwrap() {
-        let project = fixture(&board);
-        assert_eq!(kc_model::validate(&project, &board), [], "{}", board.id);
-        let mut files = kc_emit::generate(&project, &board).unwrap();
+    let boards = kc_boards::built_in().unwrap();
+    let projects = boards.iter().flat_map(|board| {
+        [
+            (board, board.id.clone(), fixture(board)),
+            (
+                board,
+                format!("{}-factory", board.id),
+                Project::from_template(format!("{} factory layout", board.name), board),
+            ),
+        ]
+    });
+    for (board, directory, project) in projects {
+        assert_eq!(kc_model::validate(&project, board), [], "{directory}");
+        let mut files = kc_emit::generate(&project, board).unwrap();
         files.push(kc_emit::GeneratedFile {
             path: format!("project.{}", file::EXTENSION),
             contents: file::to_json(&project),
         });
         for generated in files {
-            let path = root.join(&board.id).join(&generated.path);
+            let path = root.join(&directory).join(&generated.path);
             if update {
                 std::fs::create_dir_all(path.parent().unwrap()).unwrap();
                 std::fs::write(&path, &generated.contents).unwrap();
             } else if std::fs::read_to_string(&path).ok().as_deref() != Some(&generated.contents) {
-                stale.push(format!("{}/{}", board.id, generated.path));
+                stale.push(format!("{directory}/{}", generated.path));
             }
         }
     }

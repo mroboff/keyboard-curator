@@ -917,3 +917,53 @@ fn raw_behaviours_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
         .iter()
         .any(|w| w.message.contains(warning)));
 }
+
+#[test]
+fn factory_templates_reproduce_the_vendor_layouts_without_raw_bindings() {
+    use kc_model::keycap::keycap;
+
+    for (id, layers, behaviours, reserved) in
+        [("cyboard-imprint", 5, 0, 27), ("moergo-go60", 5, 12, 0)]
+    {
+        let board = board(id);
+        let p = Project::from_template("Mine", &board);
+        assert_eq!(p.name, "Mine");
+        assert_eq!(
+            (p.layers.len(), p.behaviors.len(), p.reserved_layers),
+            (layers, behaviours, reserved),
+            "{id}"
+        );
+        // Everything the vendor ships is expressed in the model itself.
+        assert!(
+            p.bindings()
+                .iter()
+                .all(|(_, b)| !matches!(b, Binding::Raw { .. })),
+            "{id}"
+        );
+        assert_eq!(validate(&p, &board), [], "{id}");
+        assert_eq!(file::from_json(&file::to_json(&p)).unwrap(), p);
+    }
+
+    let imprint = Project::from_template("Mine", &board("cyboard-imprint"));
+    let names: Vec<&str> = imprint.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Base",
+            "Numpad and Nav",
+            "Keyboard Control",
+            "Auto Mouse",
+            "Factory Test"
+        ]
+    );
+    // The left trackball scrolls, as it does out of the box.
+    assert_eq!(imprint.pointing[0].listener, "trackball_central_listener");
+
+    let go60 = Project::from_template("Mine", &board("moergo-go60"));
+    let base = go60.layers[0].id;
+    // The Magic key: hold for the Magic layer, tap for the status lights.
+    let magic = keycap(&go60, base, 36).unwrap();
+    assert_eq!(magic.hold.as_deref(), Some("Magic"));
+    assert_eq!(go60.binding(base, 0), Some(&kp("EQUAL")));
+    assert_eq!(go60.pointing.len(), 2);
+}
