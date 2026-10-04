@@ -61,7 +61,7 @@ id = "moergo-zmk-26.09"
 name = "MoErgo ZMK v26.09"
 zephyr = "3.5"
 zmk = { url = "https://github.com/moergo-sc/zmk", revision = "v26.09" }
-capabilities = ["studio", "rgb-underglow", "rgb-status", "pointing"]
+capabilities = ["studio", "rgb-underglow", "rgb-status", "ext-power", "pointing"]
 
 [[firmware.builds]]
 side = "left"

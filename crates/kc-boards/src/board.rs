@@ -96,22 +96,8 @@ pub struct FlashInfo {
     pub bootloader_entry: String,
 }
 
-/// A feature a firmware profile provides. The UI offers only what the
-/// selected profile supports, and the emitter refuses anything else.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Capability {
-    /// ZMK Studio can be enabled.
-    Studio,
-    /// Stock `&rgb_ug` underglow.
-    RgbUnderglow,
-    /// MoErgo's `RGB_STATUS` command and `zmk,underglow-indicators` node.
-    RgbStatus,
-    /// Per-key, per-layer colours through `zmk,underglow-layer`.
-    PerKeyLighting,
-    /// Pointing devices and input processors.
-    Pointing,
-}
+/// A feature a firmware profile provides.
+pub use kc_zmk::Feature as Capability;
 
 /// A git repository pinned to a revision.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

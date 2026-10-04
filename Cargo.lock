@@ -3536,6 +3536,7 @@ dependencies = [
 name = "kc-boards"
 version = "0.1.0"
 dependencies = [
+ "kc-zmk",
  "serde",
  "thiserror 2.0.21",
  "toml 1.1.6+spec-1.1.0",
@@ -3568,6 +3569,9 @@ version = "0.1.0"
 [[package]]
 name = "kc-zmk"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "khronos-egl"

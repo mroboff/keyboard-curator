@@ -69,7 +69,7 @@ id = "cyboard-zmk-0.3"
 name = "ZMK v0.3.0 with Cyboard's module"
 zephyr = "3.5"
 zmk = { url = "https://github.com/zmkfirmware/zmk", revision = "v0.3.0" }
-capabilities = ["studio", "rgb-underglow", "pointing"]
+capabilities = ["studio", "rgb-underglow", "ext-power", "pointing"]
 
 # The module's own manifest pulls in Cyboard's PMW3610 trackball driver.
 [[firmware.modules]]
