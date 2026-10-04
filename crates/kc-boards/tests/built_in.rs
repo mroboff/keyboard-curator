@@ -114,6 +114,17 @@ fn go60_halves_and_firmware() {
     let profile = go60.profile("moergo-zmk-26.09").unwrap();
     assert!(profile.capabilities.contains(&Capability::RgbStatus));
     assert_eq!(profile.builds.len(), 2);
+    assert!(profile.lighting.is_none());
+
+    // The community lighting firmware is a second, opt-in profile.
+    let lit = go60.profile("moergo-zmk-perkey").unwrap();
+    assert!(lit.capabilities.contains(&Capability::PerKeyLighting));
+    assert!(!lit.capabilities.contains(&Capability::Studio));
+    assert_eq!(lit.zmk.revision.len(), 40, "pinned to a commit");
+    assert!(lit
+        .lighting
+        .as_ref()
+        .is_some_and(|l| l.transparent && l.effect == 4));
 }
 
 #[test]
@@ -144,6 +155,12 @@ fn validation_rejects_broken_definitions() {
         Board::from_toml(&bad_led),
         Err(BoardError::LedOutOfRange { position: 60, .. })
     ));
+
+    let unbacked = src.replace("lighting = { transparent = true, effect = 4 }\n", "");
+    assert_eq!(
+        Board::from_toml(&unbacked),
+        Err(BoardError::LightingMismatch("moergo-zmk-perkey".into()))
+    );
 
     let too_bright = src.replace("brightness_cap = 40", "brightness_cap = 140");
     assert_eq!(

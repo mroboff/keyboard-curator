@@ -161,7 +161,23 @@ pub struct FirmwareProfile {
     #[serde(default)]
     pub modules: Vec<Module>,
     pub capabilities: Vec<Capability>,
+    /// How per-key lighting is written for this firmware, when it has it.
+    pub lighting: Option<LightingBackend>,
     pub builds: Vec<BuildTarget>,
+}
+
+/// The `zmk,underglow-layer` implementation a firmware carries. Versions
+/// of it differ, and upstream ZMK intends to replace it, so what varies is
+/// described here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LightingBackend {
+    /// Whether `&trans` shows the colour from the layer below. Without
+    /// it, a key that inherits is written as unlit.
+    pub transparent: bool,
+    /// The number of the per-key effect in the firmware's effect cycle,
+    /// used to make it the effect the keyboard starts in.
+    pub effect: u8,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -195,6 +211,8 @@ pub enum BoardError {
     DuplicateProfile(String),
     #[error("a board needs at least one firmware profile")]
     NoProfiles,
+    #[error("firmware profile `{0}` must have both the per-key-lighting capability and a lighting section, or neither")]
+    LightingMismatch(String),
     #[error("starter_keys has {found} entries, but the default layout has {keys} keys")]
     StarterKeyCount { found: usize, keys: usize },
     #[error("starter key `{0}` is not a ZMK keycode")]
@@ -317,6 +335,10 @@ impl Board {
         for profile in &self.firmware {
             if !profile_ids.insert(profile.id.as_str()) {
                 return Err(BoardError::DuplicateProfile(profile.id.clone()));
+            }
+            let capable = profile.capabilities.contains(&Capability::PerKeyLighting);
+            if capable != profile.lighting.is_some() {
+                return Err(BoardError::LightingMismatch(profile.id.clone()));
             }
             for build in &profile.builds {
                 if !has(build.side) {

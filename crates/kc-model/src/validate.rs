@@ -353,6 +353,11 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         if lighting.keys.iter().any(|k| *k != KeyLight::Inherit) {
             c.feature(&location, "per-key lighting", Some(Feature::PerKeyLighting));
         }
+        if lighting.keys.iter().any(
+            |k| matches!(k, KeyLight::Battery { percent, .. } if ![20, 40, 60, 80].contains(percent)),
+        ) {
+            c.error(&location, "battery lights can switch at 20, 40, 60 or 80 percent");
+        }
         if lighting.keys.len() != project.key_count {
             c.error(
                 &location,

@@ -309,12 +309,75 @@ fn fixture(board: &Board) -> Project {
     p
 }
 
+/// The factory layout on the board's per-key lighting firmware, with every
+/// kind of key light across several layers.
+fn lighting_fixture(board: &Board) -> Project {
+    use kc_model::features::{KeyLight, LockKind, Rgb};
+
+    let mut p = Project::from_template(format!("{} lighting fixture", board.name), board);
+    p.firmware = board
+        .firmware
+        .iter()
+        .find(|f| f.lighting.is_some())
+        .expect("a lighting profile")
+        .id
+        .clone();
+    let (base, second, third) = (p.layers[0].id, p.layers[1].id, p.layers[2].id);
+    let keys = p.key_count;
+    {
+        let lights = &mut p.lighting_mut(base).unwrap().keys;
+        for (position, light) in lights.iter_mut().enumerate() {
+            *light = KeyLight::Color(Rgb((position * 4) as u8, 64, 200 - (position * 3) as u8));
+        }
+        lights[0] = KeyLight::Off;
+        lights[1] = KeyLight::Lock {
+            lock: LockKind::Caps,
+            off: Rgb(0, 0, 0),
+            on: Rgb(255, 0, 0),
+        };
+        lights[2] = KeyLight::Lock {
+            lock: LockKind::Num,
+            off: Rgb(0, 0, 32),
+            on: Rgb(0, 0, 255),
+        };
+        lights[3] = KeyLight::Lock {
+            lock: LockKind::Scroll,
+            off: Rgb(0, 32, 0),
+            on: Rgb(0, 255, 0),
+        };
+        for (index, percent) in [20u8, 40, 60, 80].into_iter().enumerate() {
+            lights[4 + index] = KeyLight::Battery {
+                percent,
+                below: Rgb(255, 0, 0),
+                above: Rgb(0, 255, 0),
+            };
+        }
+    }
+    let lighting = p.lighting_mut(second).unwrap();
+    lighting.fade_delay = Some(15);
+    for position in (0..keys).step_by(3) {
+        lighting.keys[position] = KeyLight::Color(Rgb(255, 160, 0));
+    }
+    p.lighting_mut(third).unwrap().keys[keys - 1] = KeyLight::Color(Rgb(128, 0, 128));
+    p
+}
+
 #[test]
 fn fixtures_match_the_emitter() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let update = std::env::var_os("UPDATE_FIXTURES").is_some();
     let mut stale = Vec::new();
     let boards = kc_boards::built_in().unwrap();
+    let lit = boards
+        .iter()
+        .filter(|board| board.firmware.iter().any(|f| f.lighting.is_some()))
+        .map(|board| {
+            (
+                board,
+                format!("{}-lighting", board.id),
+                lighting_fixture(board),
+            )
+        });
     let projects = boards.iter().flat_map(|board| {
         [
             (board, board.id.clone(), fixture(board)),
@@ -325,7 +388,7 @@ fn fixtures_match_the_emitter() {
             ),
         ]
     });
-    for (board, directory, project) in projects {
+    for (board, directory, project) in projects.chain(lit) {
         assert_eq!(kc_model::validate(&project, board), [], "{directory}");
         let mut files = kc_emit::generate(&project, board).unwrap();
         files.push(kc_emit::GeneratedFile {

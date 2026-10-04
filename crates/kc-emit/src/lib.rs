@@ -55,7 +55,10 @@ pub fn generate(project: &Project, board: &Board) -> Result<Vec<GeneratedFile>, 
     let file = |path: String, contents: String| GeneratedFile { path, contents };
     Ok(vec![
         file(format!("config/{name}.keymap"), keymap(project, board)?),
-        file(format!("config/{name}.conf"), config::conf(project)),
+        file(
+            format!("config/{name}.conf"),
+            config::conf(project, profile),
+        ),
         file("config/west.yml".into(), config::west(profile)),
         file("build.yaml".into(), config::build(profile)),
         file(

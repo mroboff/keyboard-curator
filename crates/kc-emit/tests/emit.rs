@@ -327,3 +327,76 @@ fn invalid_projects_are_refused() {
         .unwrap();
     assert!(generate(&project, &imprint).is_ok());
 }
+
+#[test]
+fn per_key_lighting_is_written_for_firmware_that_has_it() {
+    use kc_model::features::{KeyLight, LockKind, Rgb};
+
+    let go60 = board("moergo-go60");
+    let mut project = Project::new("Lit", &go60);
+    let base = project.layers[0].id;
+    let nav = project.add_layer("Nav").unwrap();
+    project.add_layer("Unlit").unwrap();
+    {
+        let keys = &mut project.lighting_mut(base).unwrap().keys;
+        keys[0] = KeyLight::Color(Rgb(255, 128, 0));
+        keys[1] = KeyLight::Off;
+        keys[2] = KeyLight::Lock {
+            lock: LockKind::Caps,
+            off: Rgb(0, 0, 0),
+            on: Rgb(255, 0, 0),
+        };
+        keys[3] = KeyLight::Battery {
+            percent: 20,
+            below: Rgb(255, 0, 0),
+            above: Rgb(0, 255, 0),
+        };
+    }
+    project.lighting_mut(nav).unwrap().keys[12] = KeyLight::Color(Rgb(0, 0, 255));
+    project.lighting_mut(nav).unwrap().fade_delay = Some(15);
+
+    // The stock firmware has no per-key lighting, so the project is refused.
+    assert!(matches!(
+        generate(&project, &go60),
+        Err(EmitError::Invalid(_))
+    ));
+
+    project.firmware = "moergo-zmk-perkey".into();
+    let files = generate(&project, &go60).unwrap();
+    let keymap = file(&files, "config/go60.keymap");
+    let has = |text: &str| assert!(keymap.contains(text), "missing:\n{text}\n\nin:\n{keymap}");
+    has("    underglow-layer {\n        compatible = \"zmk,underglow-layer\";\n\n        lighting_0_Base {\n            layer-id = <LAYER_Base>;\n            bindings = <\n                &ug 0xFF8000  &ug 0x000000  &ug_cl 0x000000 0xFF0000  &ug_b2 0xFF0000 0x00FF00  &trans");
+    has("        lighting_1_Nav {\n            layer-id = <LAYER_Nav>;\n            fade-delay = <15>;");
+    has("&ug 0x0000FF");
+    // A layer with nothing of its own gets no node.
+    assert!(!keymap.contains("lighting_2_Unlit"));
+    // 60 lighting bindings per lit layer: two lit layers, so 120 in all.
+    let section =
+        &keymap[keymap.find("underglow-layer {").unwrap()..keymap.find("    keymap {").unwrap()];
+    assert_eq!(section.matches('&').count(), 120);
+
+    let conf = file(&files, "config/go60.conf");
+    assert!(conf.contains("CONFIG_EXPERIMENTAL_RGB_LAYER=y\n"));
+    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_EFF_START=4\n"));
+    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_ON_START=y\n"));
+    assert!(file(&files, "config/west.yml").contains("url: https://github.com/darknao/zmk"));
+
+    // A choice the user made is not overridden.
+    project.settings.insert(
+        "CONFIG_ZMK_RGB_UNDERGLOW_ON_START".into(),
+        SettingValue::Bool(false),
+    );
+    let conf = file(&generate(&project, &go60).unwrap(), "config/go60.conf");
+    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_ON_START=n\n"));
+
+    // An unsupported battery threshold is refused.
+    project.lighting_mut(base).unwrap().keys[3] = KeyLight::Battery {
+        percent: 50,
+        below: Rgb(255, 0, 0),
+        above: Rgb(0, 255, 0),
+    };
+    assert!(matches!(
+        generate(&project, &go60),
+        Err(EmitError::Invalid(_))
+    ));
+}

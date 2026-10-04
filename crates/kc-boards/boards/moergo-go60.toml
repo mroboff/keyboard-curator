@@ -92,6 +92,27 @@ board = "go60_lh"
 side = "right"
 board = "go60_rh"
 
+# The community per-key lighting firmware (https://github.com/moergo-sc/zmk/pull/36),
+# pinned to a commit. It is based on MoErgo's v25.11, whose physical layout
+# is in the wrong order for ZMK Studio, so Studio is not offered with it.
+[[firmware]]
+id = "moergo-zmk-perkey"
+name = "MoErgo ZMK with per-key lighting (community, experimental)"
+zephyr = "3.5"
+config_name = "go60"
+workflow = "zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3.0"
+zmk = { url = "https://github.com/darknao/zmk", revision = "db2ba9fcd3dec4c7afcf171f123585a9f8292595" }
+capabilities = ["rgb-underglow", "rgb-status", "ext-power", "pointing", "per-key-lighting"]
+lighting = { transparent = true, effect = 4 }
+
+[[firmware.builds]]
+side = "left"
+board = "go60_lh"
+
+[[firmware.builds]]
+side = "right"
+board = "go60_rh"
+
 [[layouts]]
 id = "physical_layout0"
 name = "Go60"

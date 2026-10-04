@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use kc_boards::geometry::Key;
 use kc_boards::Board;
 use kc_model::behavior::{BehaviorDef, BehaviorKind, Flavor, MacroStep};
-use kc_model::features::InputProcessor;
+use kc_model::features::{InputProcessor, KeyLight, LockKind, Rgb};
 use kc_model::text::{format_binding, layer_constant, LayerStyle};
 use kc_model::{BehaviorRef, Binding, LayerId, Project};
 use kc_zmk::Feature;
@@ -290,6 +290,40 @@ fn processor(w: &Writer, processor: &InputProcessor) -> String {
     }
 }
 
+fn hex(color: Rgb) -> String {
+    format!("0x{:02X}{:02X}{:02X}", color.0, color.1, color.2)
+}
+
+/// One key's lighting as an `underglow-layer` binding.
+fn light(key: &KeyLight, transparent: bool) -> String {
+    match key {
+        KeyLight::Inherit if transparent => "&trans".to_string(),
+        KeyLight::Inherit | KeyLight::Off => "&ug 0x000000".to_string(),
+        KeyLight::Color(color) => format!("&ug {}", hex(*color)),
+        KeyLight::Lock { lock, off, on } => {
+            let behavior = match lock {
+                LockKind::Caps => "ug_cl",
+                LockKind::Num => "ug_nl",
+                LockKind::Scroll => "ug_sl",
+            };
+            format!("&{behavior} {} {}", hex(*off), hex(*on))
+        }
+        KeyLight::Battery {
+            percent,
+            below,
+            above,
+        } => format!("&ug_b{} {} {}", percent / 10, hex(*below), hex(*above)),
+    }
+}
+
+/// Whether any key of the project has lighting of its own.
+pub(crate) fn uses_lighting(project: &Project) -> bool {
+    project
+        .lighting
+        .iter()
+        .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit))
+}
+
 /// The `.keymap` file for `project`.
 pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
     let features = &profile(project, board)?.capabilities;
@@ -351,6 +385,45 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
     if board.layouts.len() > 1 {
         w.line(1, "chosen {");
         w.line(2, &format!("zmk,physical-layout = &{};", layout.id));
+        w.line(1, "};");
+        w.line(0, "");
+    }
+
+    if let (Some(backend), true) = (&profile(project, board)?.lighting, uses_lighting(project)) {
+        w.line(1, "underglow-layer {");
+        w.line(2, "compatible = \"zmk,underglow-layer\";");
+        for lighting in &project.lighting {
+            let (Some(index), Some(layer)) = (
+                project.layer_index(lighting.layer),
+                project.layer(lighting.layer),
+            ) else {
+                continue;
+            };
+            if lighting.keys.iter().all(|k| *k == KeyLight::Inherit) {
+                continue;
+            }
+            w.line(0, "");
+            w.line(
+                2,
+                &format!("lighting_{index}_{} {{", node_name(&layer.name)),
+            );
+            let id = w.layer(lighting.layer);
+            w.line(3, &format!("layer-id = <{id}>;"));
+            if let Some(delay) = lighting.fade_delay {
+                w.line(3, &format!("fade-delay = <{delay}>;"));
+            }
+            w.line(3, "bindings = <");
+            let cells: Vec<String> = lighting
+                .keys
+                .iter()
+                .map(|k| light(k, backend.transparent))
+                .collect();
+            for row in grid(&layout.keys, &cells) {
+                w.line(4, &row);
+            }
+            w.line(3, ">;");
+            w.line(2, "};");
+        }
         w.line(1, "};");
         w.line(0, "");
     }

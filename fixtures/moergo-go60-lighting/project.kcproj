@@ -1,0 +1,766 @@
+{
+  "format": 1,
+  "name": "Go60 lighting fixture",
+  "board": "moergo-go60",
+  "layout": "physical_layout0",
+  "firmware": "moergo-zmk-perkey",
+  "key_count": 60,
+  "layers": [
+    {
+      "id": 1,
+      "name": "Base",
+      "color": null,
+      "bindings": [
+        {"behavior": "kp", "params": [{"key": "EQUAL"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "MINUS"}]},
+        {"behavior": "kp", "params": [{"key": "TAB"}]},
+        {"behavior": "kp", "params": [{"key": "Q"}]},
+        {"behavior": "kp", "params": [{"key": "W"}]},
+        {"behavior": "kp", "params": [{"key": "E"}]},
+        {"behavior": "kp", "params": [{"key": "R"}]},
+        {"behavior": "kp", "params": [{"key": "T"}]},
+        {"behavior": "kp", "params": [{"key": "Y"}]},
+        {"behavior": "kp", "params": [{"key": "U"}]},
+        {"behavior": "kp", "params": [{"key": "I"}]},
+        {"behavior": "kp", "params": [{"key": "O"}]},
+        {"behavior": "kp", "params": [{"key": "P"}]},
+        {"behavior": "kp", "params": [{"key": "BSLH"}]},
+        {"behavior": "kp", "params": [{"key": "ESC"}]},
+        {"behavior": "kp", "params": [{"key": "A"}]},
+        {"behavior": "kp", "params": [{"key": "S"}]},
+        {"behavior": "kp", "params": [{"key": "D"}]},
+        {"behavior": "kp", "params": [{"key": "F"}]},
+        {"behavior": "kp", "params": [{"key": "G"}]},
+        {"behavior": "kp", "params": [{"key": "H"}]},
+        {"behavior": "kp", "params": [{"key": "J"}]},
+        {"behavior": "kp", "params": [{"key": "K"}]},
+        {"behavior": "kp", "params": [{"key": "L"}]},
+        {"behavior": "kp", "params": [{"key": "SEMI"}]},
+        {"behavior": "kp", "params": [{"key": "SQT"}]},
+        {"behavior": {"user": 7}, "params": [{"layer": 4}, {"number": 0}]},
+        {"behavior": "kp", "params": [{"key": "Z"}]},
+        {"behavior": "kp", "params": [{"key": "X"}]},
+        {"behavior": "kp", "params": [{"key": "C"}]},
+        {"behavior": "kp", "params": [{"key": "V"}]},
+        {"behavior": "kp", "params": [{"key": "B"}]},
+        {"behavior": "kp", "params": [{"key": "N"}]},
+        {"behavior": "kp", "params": [{"key": "M"}]},
+        {"behavior": "kp", "params": [{"key": "COMMA"}]},
+        {"behavior": "kp", "params": [{"key": "DOT"}]},
+        {"behavior": "kp", "params": [{"key": "FSLH"}]},
+        {"behavior": {"user": 8}},
+        {"behavior": "kp", "params": [{"key": "GRAVE"}]},
+        {"behavior": "kp", "params": [{"key": "DEL"}]},
+        {"behavior": "kp", "params": [{"key": "BSPC"}]},
+        {"behavior": "kp", "params": [{"key": "LGUI"}]},
+        {"behavior": "kp", "params": [{"key": "LBKT"}]},
+        {"behavior": "kp", "params": [{"key": "RBKT"}]},
+        {"behavior": {"user": 9}},
+        {"behavior": "kp", "params": [{"key": "LSHFT"}]},
+        {"behavior": "kp", "params": [{"key": "LCTRL"}]},
+        {"behavior": "kp", "params": [{"key": "LALT"}]},
+        {"behavior": "kp", "params": [{"key": "SPACE"}]},
+        {"behavior": "mt", "params": [{"key": "RALT"}, {"key": "RET"}]}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Keypad",
+      "color": null,
+      "bindings": [
+        {"behavior": "none"},
+        {"behavior": "kp", "params": [{"key": "F1"}]},
+        {"behavior": "kp", "params": [{"key": "F2"}]},
+        {"behavior": "kp", "params": [{"key": "F3"}]},
+        {"behavior": "kp", "params": [{"key": "F4"}]},
+        {"behavior": "kp", "params": [{"key": "F5"}]},
+        {"behavior": "kp", "params": [{"key": "F6"}]},
+        {"behavior": "kp", "params": [{"key": "F7"}]},
+        {"behavior": "kp", "params": [{"key": "F8"}]},
+        {"behavior": "kp", "params": [{"key": "F9"}]},
+        {"behavior": "kp", "params": [{"key": "F10"}]},
+        {"behavior": "kp", "params": [{"key": "F11"}]},
+        {"behavior": "trans"},
+        {"behavior": "none"},
+        {"behavior": "kp", "params": [{"key": "HOME"}]},
+        {"behavior": "kp", "params": [{"key": "UP"}]},
+        {"behavior": "kp", "params": [{"key": "END"}]},
+        {"behavior": "kp", "params": [{"key": "PG_UP"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N7"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N8"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N9"}]},
+        {"behavior": "kp", "params": [{"key": "KP_MINUS"}]},
+        {"behavior": "kp", "params": [{"key": "KP_SLASH"}]},
+        {"behavior": "kp", "params": [{"key": "F12"}]},
+        {"behavior": "trans"},
+        {"behavior": "kp", "params": [{"key": "LC(Y)"}]},
+        {"behavior": "kp", "params": [{"key": "LEFT"}]},
+        {"behavior": "kp", "params": [{"key": "DOWN"}]},
+        {"behavior": "kp", "params": [{"key": "RIGHT"}]},
+        {"behavior": "kp", "params": [{"key": "PG_DN"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N4"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N5"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N6"}]},
+        {"behavior": "kp", "params": [{"key": "KP_PLUS"}]},
+        {"behavior": "kp", "params": [{"key": "KP_MULTIPLY"}]},
+        {"behavior": "kp", "params": [{"key": "KP_NUM"}]},
+        {"behavior": {"user": 7}, "params": [{"layer": 4}, {"number": 0}]},
+        {"behavior": "kp", "params": [{"key": "LC(Z)"}]},
+        {"behavior": "kp", "params": [{"key": "LC(X)"}]},
+        {"behavior": "kp", "params": [{"key": "LC(C)"}]},
+        {"behavior": "kp", "params": [{"key": "LC(V)"}]},
+        {"behavior": "kp", "params": [{"key": "LS(LC(V))"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N1"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N2"}]},
+        {"behavior": "kp", "params": [{"key": "KP_N3"}]},
+        {"behavior": "kp", "params": [{"key": "KP_ENTER"}]},
+        {"behavior": "kp", "params": [{"key": "EQUAL"}]},
+        {"behavior": "to", "params": [{"layer": 1}]},
+        {"behavior": "none"},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "kp", "params": [{"key": "KP_N0"}]},
+        {"behavior": "kp", "params": [{"key": "KP_DOT"}]},
+        {"behavior": "kp", "params": [{"key": "BSPC"}]},
+        {"behavior": "mo", "params": [{"layer": 3}]},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "kp", "params": [{"key": "KP_N0"}]}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "SymbolNav",
+      "color": null,
+      "bindings": [
+        {"behavior": "kp", "params": [{"key": "INS"}]},
+        {"behavior": "kp", "params": [{"key": "F1"}]},
+        {"behavior": "kp", "params": [{"key": "F2"}]},
+        {"behavior": "kp", "params": [{"key": "F3"}]},
+        {"behavior": "kp", "params": [{"key": "F4"}]},
+        {"behavior": "kp", "params": [{"key": "F5"}]},
+        {"behavior": "kp", "params": [{"key": "F6"}]},
+        {"behavior": "kp", "params": [{"key": "F7"}]},
+        {"behavior": "kp", "params": [{"key": "F8"}]},
+        {"behavior": "kp", "params": [{"key": "F9"}]},
+        {"behavior": "kp", "params": [{"key": "F10"}]},
+        {"behavior": "kp", "params": [{"key": "F11"}]},
+        {"behavior": "kp", "params": [{"key": "SLCK"}]},
+        {"behavior": "kp", "params": [{"key": "EXCL"}]},
+        {"behavior": "kp", "params": [{"key": "HOME"}]},
+        {"behavior": "kp", "params": [{"key": "UP"}]},
+        {"behavior": "kp", "params": [{"key": "END"}]},
+        {"behavior": "kp", "params": [{"key": "PG_UP"}]},
+        {"behavior": "kp", "params": [{"key": "LPAR"}]},
+        {"behavior": "kp", "params": [{"key": "RPAR"}]},
+        {"behavior": "kp", "params": [{"key": "UP"}]},
+        {"behavior": "kp", "params": [{"key": "PRCNT"}]},
+        {"behavior": "kp", "params": [{"key": "K_APP"}]},
+        {"behavior": "kp", "params": [{"key": "F12"}]},
+        {"behavior": "kp", "params": [{"key": "CAPS"}]},
+        {"behavior": "kp", "params": [{"key": "AT"}]},
+        {"behavior": "kp", "params": [{"key": "LEFT"}]},
+        {"behavior": "kp", "params": [{"key": "DOWN"}]},
+        {"behavior": "kp", "params": [{"key": "RIGHT"}]},
+        {"behavior": "kp", "params": [{"key": "PG_DN"}]},
+        {"behavior": "kp", "params": [{"key": "DLLR"}]},
+        {"behavior": "kp", "params": [{"key": "LEFT"}]},
+        {"behavior": "kp", "params": [{"key": "DOWN"}]},
+        {"behavior": "kp", "params": [{"key": "RIGHT"}]},
+        {"behavior": "kp", "params": [{"key": "PAUSE_BREAK"}]},
+        {"behavior": "kp", "params": [{"key": "PSCRN"}]},
+        {"behavior": {"user": 7}, "params": [{"layer": 4}, {"number": 0}]},
+        {"behavior": "kp", "params": [{"key": "HASH"}]},
+        {"behavior": "kp", "params": [{"key": "LBKT"}]},
+        {"behavior": "kp", "params": [{"key": "RBKT"}]},
+        {"behavior": "kp", "params": [{"key": "LBRC"}]},
+        {"behavior": "kp", "params": [{"key": "RBRC"}]},
+        {"behavior": "kp", "params": [{"key": "AMPS"}]},
+        {"behavior": "kp", "params": [{"key": "STAR"}]},
+        {"behavior": "kp", "params": [{"key": "UNDER"}]},
+        {"behavior": "kp", "params": [{"key": "PLUS"}]},
+        {"behavior": "kp", "params": [{"key": "LSHFT"}]},
+        {"behavior": "kp", "params": [{"key": "LCTRL"}]},
+        {"behavior": "kp", "params": [{"key": "CARET"}]},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "kp", "params": [{"key": "LC(LS(TAB))"}]},
+        {"behavior": "kp", "params": [{"key": "LC(TAB)"}]},
+        {"behavior": "to", "params": [{"layer": 1}]},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "trans"},
+        {"behavior": "trans"}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Magic",
+      "color": null,
+      "bindings": [
+        {"behavior": "bt", "params": [{"command": {"name": "BT_CLR", "args": []}}]},
+        {"behavior": "kp", "params": [{"key": "C_BRI_DN"}]},
+        {"behavior": "kp", "params": [{"key": "C_BRI_UP"}]},
+        {"behavior": "kp", "params": [{"key": "C_PREV"}]},
+        {"behavior": "kp", "params": [{"key": "C_NEXT"}]},
+        {"behavior": "kp", "params": [{"key": "C_PP"}]},
+        {"behavior": "kp", "params": [{"key": "C_MUTE"}]},
+        {"behavior": "kp", "params": [{"key": "C_VOL_DN"}]},
+        {"behavior": "kp", "params": [{"key": "C_VOL_UP"}]},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "bt", "params": [{"command": {"name": "BT_CLR_ALL", "args": []}}]},
+        {"behavior": "bootloader"},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_SPI", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_SAI", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_HUI", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_BRI", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_TOG", "args": []}}]},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "bootloader"},
+        {"behavior": "sys_reset"},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_SPD", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_SAD", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_HUD", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_BRD", "args": []}}]},
+        {"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_EFF", "args": []}}]},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "sys_reset"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": {"user": 11}},
+        {"behavior": {"user": 13}},
+        {"behavior": {"user": 15}},
+        {"behavior": {"user": 17}},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "to", "params": [{"layer": 5}]},
+        {"behavior": "out", "params": [{"command": {"name": "OUT_USB", "args": []}}]},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"},
+        {"behavior": "none"}
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Factory",
+      "color": null,
+      "bindings": [
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N4"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "N5"}]},
+        {"behavior": "kp", "params": [{"key": "N0"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N6"}]},
+        {"behavior": "kp", "params": [{"key": "N1"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]},
+        {"behavior": "kp", "params": [{"key": "N3"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]},
+        {"behavior": "kp", "params": [{"key": "N2"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N9"}]},
+        {"behavior": "kp", "params": [{"key": "N8"}]},
+        {"behavior": "kp", "params": [{"key": "N7"}]}
+      ]
+    }
+  ],
+  "reserved_layers": 0,
+  "behaviors": [
+    {
+      "id": 6,
+      "label": "rgb_ug_status_macro",
+      "name": "Show status lights",
+      "kind": {
+        "macro": {
+          "wait_ms": null,
+          "tap_ms": null,
+          "params": 0,
+          "steps": [{"tap": [{"behavior": "rgb_ug", "params": [{"command": {"name": "RGB_STATUS", "args": []}}]}]}]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "label": "magic",
+      "name": "Magic",
+      "kind": {
+        "hold_tap": {
+          "hold": "mo",
+          "tap": {"user": 6},
+          "flavor": "tap-preferred",
+          "tapping_term_ms": 200,
+          "quick_tap_ms": null,
+          "require_prior_idle_ms": null,
+          "retro_tap": false,
+          "hold_while_undecided": false,
+          "hold_trigger_key_positions": [],
+          "hold_trigger_on_release": false
+        }
+      }
+    },
+    {
+      "id": 8,
+      "label": "keypad_td",
+      "name": "Keypad layer",
+      "kind": {
+        "tap_dance": {
+          "tapping_term_ms": 200,
+          "bindings": [{"behavior": "mo", "params": [{"layer": 2}]}, {"behavior": "to", "params": [{"layer": 2}]}]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "label": "symbol_nav_td",
+      "name": "Symbol and Nav layer",
+      "kind": {
+        "tap_dance": {
+          "tapping_term_ms": 200,
+          "bindings": [{"behavior": "mo", "params": [{"layer": 3}]}, {"behavior": "to", "params": [{"layer": 3}]}]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "label": "bt_select_0",
+      "name": "Select Bluetooth 1",
+      "kind": {
+        "macro": {
+          "wait_ms": null,
+          "tap_ms": null,
+          "params": 0,
+          "steps": [
+            {
+              "tap": [
+                {"behavior": "out", "params": [{"command": {"name": "OUT_BLE", "args": []}}]},
+                {"behavior": "bt", "params": [{"command": {"name": "BT_SEL", "args": [0]}}]}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "label": "bt_0",
+      "name": "Bluetooth 1",
+      "kind": {
+        "tap_dance": {
+          "tapping_term_ms": 200,
+          "bindings": [
+            {"behavior": {"user": 10}},
+            {"behavior": "bt", "params": [{"command": {"name": "BT_DISC", "args": [0]}}]}
+          ]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "label": "bt_select_1",
+      "name": "Select Bluetooth 2",
+      "kind": {
+        "macro": {
+          "wait_ms": null,
+          "tap_ms": null,
+          "params": 0,
+          "steps": [
+            {
+              "tap": [
+                {"behavior": "out", "params": [{"command": {"name": "OUT_BLE", "args": []}}]},
+                {"behavior": "bt", "params": [{"command": {"name": "BT_SEL", "args": [1]}}]}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 13,
+      "label": "bt_1",
+      "name": "Bluetooth 2",
+      "kind": {
+        "tap_dance": {
+          "tapping_term_ms": 200,
+          "bindings": [
+            {"behavior": {"user": 12}},
+            {"behavior": "bt", "params": [{"command": {"name": "BT_DISC", "args": [1]}}]}
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "label": "bt_select_2",
+      "name": "Select Bluetooth 3",
+      "kind": {
+        "macro": {
+          "wait_ms": null,
+          "tap_ms": null,
+          "params": 0,
+          "steps": [
+            {
+              "tap": [
+                {"behavior": "out", "params": [{"command": {"name": "OUT_BLE", "args": []}}]},
+                {"behavior": "bt", "params": [{"command": {"name": "BT_SEL", "args": [2]}}]}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "label": "bt_2",
+      "name": "Bluetooth 3",
+      "kind": {
+        "tap_dance": {
+          "tapping_term_ms": 200,
+          "bindings": [
+            {"behavior": {"user": 14}},
+            {"behavior": "bt", "params": [{"command": {"name": "BT_DISC", "args": [2]}}]}
+          ]
+        }
+      }
+    },
+    {
+      "id": 16,
+      "label": "bt_select_3",
+      "name": "Select Bluetooth 4",
+      "kind": {
+        "macro": {
+          "wait_ms": null,
+          "tap_ms": null,
+          "params": 0,
+          "steps": [
+            {
+              "tap": [
+                {"behavior": "out", "params": [{"command": {"name": "OUT_BLE", "args": []}}]},
+                {"behavior": "bt", "params": [{"command": {"name": "BT_SEL", "args": [3]}}]}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "label": "bt_3",
+      "name": "Bluetooth 4",
+      "kind": {
+        "tap_dance": {
+          "tapping_term_ms": 200,
+          "bindings": [
+            {"behavior": {"user": 16}},
+            {"behavior": "bt", "params": [{"command": {"name": "BT_DISC", "args": [3]}}]}
+          ]
+        }
+      }
+    }
+  ],
+  "combos": [],
+  "conditional_layers": [],
+  "pointing": [
+    {
+      "listener": "cirque_rh_listener",
+      "processors": [{"scale": {"multiplier": 3, "divisor": 1}}],
+      "overrides": [{"layers": [3], "processors": [{"scale": {"multiplier": 9, "divisor": 1}}]}]
+    },
+    {
+      "listener": "cirque_lh_listener",
+      "processors": [
+        "to_scroll",
+        {"scale": {"multiplier": 1, "divisor": 8}},
+        {"raw": "<&zip_click_to_right_click_mapper>"}
+      ],
+      "overrides": [{"layers": [5], "processors": [{"scale": {"multiplier": 3, "divisor": 1}}]}]
+    }
+  ],
+  "lighting": [
+    {
+      "layer": 1,
+      "fade_delay": null,
+      "keys": [
+        "off",
+        {"lock": {"lock": "caps", "off": "#000000", "on": "#FF0000"}},
+        {"lock": {"lock": "num", "off": "#000020", "on": "#0000FF"}},
+        {"lock": {"lock": "scroll", "off": "#002000", "on": "#00FF00"}},
+        {"battery": {"percent": 20, "below": "#FF0000", "above": "#00FF00"}},
+        {"battery": {"percent": 40, "below": "#FF0000", "above": "#00FF00"}},
+        {"battery": {"percent": 60, "below": "#FF0000", "above": "#00FF00"}},
+        {"battery": {"percent": 80, "below": "#FF0000", "above": "#00FF00"}},
+        {"color": "#2040B0"},
+        {"color": "#2440AD"},
+        {"color": "#2840AA"},
+        {"color": "#2C40A7"},
+        {"color": "#3040A4"},
+        {"color": "#3440A1"},
+        {"color": "#38409E"},
+        {"color": "#3C409B"},
+        {"color": "#404098"},
+        {"color": "#444095"},
+        {"color": "#484092"},
+        {"color": "#4C408F"},
+        {"color": "#50408C"},
+        {"color": "#544089"},
+        {"color": "#584086"},
+        {"color": "#5C4083"},
+        {"color": "#604080"},
+        {"color": "#64407D"},
+        {"color": "#68407A"},
+        {"color": "#6C4077"},
+        {"color": "#704074"},
+        {"color": "#744071"},
+        {"color": "#78406E"},
+        {"color": "#7C406B"},
+        {"color": "#804068"},
+        {"color": "#844065"},
+        {"color": "#884062"},
+        {"color": "#8C405F"},
+        {"color": "#90405C"},
+        {"color": "#944059"},
+        {"color": "#984056"},
+        {"color": "#9C4053"},
+        {"color": "#A04050"},
+        {"color": "#A4404D"},
+        {"color": "#A8404A"},
+        {"color": "#AC4047"},
+        {"color": "#B04044"},
+        {"color": "#B44041"},
+        {"color": "#B8403E"},
+        {"color": "#BC403B"},
+        {"color": "#C04038"},
+        {"color": "#C44035"},
+        {"color": "#C84032"},
+        {"color": "#CC402F"},
+        {"color": "#D0402C"},
+        {"color": "#D44029"},
+        {"color": "#D84026"},
+        {"color": "#DC4023"},
+        {"color": "#E04020"},
+        {"color": "#E4401D"},
+        {"color": "#E8401A"},
+        {"color": "#EC4017"}
+      ],
+      "palette": []
+    },
+    {
+      "layer": 2,
+      "fade_delay": 15,
+      "keys": [
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit",
+        {"color": "#FFA000"},
+        "inherit",
+        "inherit"
+      ],
+      "palette": []
+    },
+    {
+      "layer": 3,
+      "fade_delay": null,
+      "keys": [
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        "inherit",
+        {"color": "#800080"}
+      ],
+      "palette": []
+    }
+  ],
+  "settings": {},
+  "raw": {
+    "behaviors": "",
+    "devicetree": "#include <zephyr/dt-bindings/input/input-event-codes.h>\n\n/ {\n    input_processors {\n        zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {\n            compatible = \"zmk,input-processor-code-mapper\";\n            #input-processor-cells = <0>;\n            type = <INPUT_EV_KEY>;\n            map = <INPUT_BTN_0 INPUT_BTN_1>;\n        };\n    };\n};",
+    "conf": ""
+  },
+  "next_id": 18
+}
