@@ -77,7 +77,7 @@ fn menus() -> Vec<Menu> {
         Menu::new("View").items([
             MenuItem::action("Keyboard", ShowKeyboard),
             MenuItem::action("Generated Files", ShowFiles),
-            MenuItem::action("Flash Firmware", ShowFlash),
+            MenuItem::action("Build & Flash", ShowFlash),
             MenuItem::separator(),
             MenuItem::action("Next Layer", NextLayer),
             MenuItem::action("Previous Layer", PreviousLayer),

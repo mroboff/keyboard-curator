@@ -61,6 +61,20 @@ enum Mode {
     Flash,
 }
 
+/// Where a firmware build has got to.
+#[derive(Debug, Clone, PartialEq)]
+enum BuildStatus {
+    Idle,
+    /// A step is under way; the text says which.
+    Working(String),
+    Succeeded(String),
+    Failed {
+        message: String,
+        /// The run's page on GitHub, when the failure was in the build.
+        url: Option<String>,
+    },
+}
+
 /// A key being dragged on the canvas.
 #[derive(Debug, Clone, Copy)]
 struct KeyDrag {
@@ -101,6 +115,9 @@ pub struct Workspace {
     /// Which generated file the files view shows.
     file_index: usize,
     flash: Entity<FlashView>,
+    /// The local clone of the firmware repository for this project.
+    repo_dir: Option<PathBuf>,
+    build: BuildStatus,
     /// Selected key positions; the last one is the key the inspector shows.
     selection: Vec<usize>,
     hovered: Option<usize>,
@@ -212,6 +229,10 @@ impl Workspace {
         .detach();
 
         let flash = cx.new(|cx| FlashView::new(board.clone(), cx));
+        let repo_dir = AppState::load()
+            .repos
+            .get(&Self::repo_key(path.as_deref(), &board))
+            .cloned();
         let mut workspace = Self {
             editor,
             board,
@@ -220,6 +241,8 @@ impl Workspace {
             mode: Mode::Keyboard,
             file_index: 0,
             flash,
+            repo_dir,
+            build: BuildStatus::Idle,
             selection: Vec::new(),
             hovered: None,
             drag: None,
@@ -1273,6 +1296,295 @@ impl Workspace {
         .detach();
     }
 
+    /// The key the firmware repository folder is remembered under.
+    fn repo_key(path: Option<&Path>, board: &Board) -> String {
+        path.map_or_else(
+            || format!("board:{}", board.id),
+            |p| p.display().to_string(),
+        )
+    }
+
+    fn choose_repo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Use This Folder".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = chosen.await else {
+                return;
+            };
+            let Some(dir) = paths.into_iter().next() else {
+                return;
+            };
+            let _ = this.update(cx, |this, cx| {
+                let mut state = AppState::load();
+                state.repos.insert(
+                    Self::repo_key(this.path.as_deref(), &this.board),
+                    dir.clone(),
+                );
+                state.save();
+                this.repo_dir = Some(dir);
+                this.build = BuildStatus::Idle;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Generates the config, pushes it to the firmware repository, follows
+    /// the GitHub build and hands the firmware to the flash view.
+    fn build_firmware(&mut self, cx: &mut Context<Self>) {
+        let fail = |message: String| BuildStatus::Failed { message, url: None };
+        let Some(dir) = self.repo_dir.clone() else {
+            self.build = fail("Choose the folder of your firmware repository first.".into());
+            cx.notify();
+            return;
+        };
+        let mut files: Vec<(String, String)> = match kc_emit::generate(self.project(), &self.board)
+        {
+            Ok(files) => files.into_iter().map(|f| (f.path, f.contents)).collect(),
+            Err(error) => {
+                self.build = fail(format!("{error}. See Generated Files for the list."));
+                cx.notify();
+                return;
+            }
+        };
+        files.push((
+            format!("keyboard-curator.{}", file::EXTENSION),
+            file::to_json(self.project()),
+        ));
+        let Some(token) = kc_build::github::find_token() else {
+            self.build = fail(
+                "Not signed in to GitHub. Run `gh auth login` in a terminal, then try again."
+                    .into(),
+            );
+            cx.notify();
+            return;
+        };
+        let message = format!("Update {} from Keyboard Curator", self.project().name);
+        let repo_name = dir.file_name().map_or_else(
+            || "zmk-config".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        self.build = BuildStatus::Working("Pushing the config to GitHub…".into());
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let status = |this: &WeakEntity<Self>, cx: &mut AsyncApp, status: BuildStatus| {
+                let _ = this.update(cx, |this, cx| {
+                    this.build = status;
+                    cx.notify();
+                });
+            };
+            let background = cx.background_executor().clone();
+
+            // Commit and push, creating the repository on first use.
+            let push_token = token.clone();
+            let pushed = background
+                .spawn(async move {
+                    let github = kc_build::GitHub::new(push_token.clone());
+                    let repo = match kc_build::Repo::open(&dir) {
+                        Ok(repo) => repo,
+                        Err(kc_build::BuildError::NotARepository(_)) => kc_build::Repo::init(&dir)?,
+                        Err(other) => return Err(other),
+                    };
+                    if repo.github().is_err() {
+                        let url = github.create_repo(&repo_name)?;
+                        repo.set_origin(&url)?;
+                    }
+                    repo.write(&files)?;
+                    repo.commit(&message)?;
+                    let sha = repo.push(&push_token)?;
+                    let (owner, name) = repo.github()?;
+                    Ok::<_, kc_build::BuildError>((owner, name, sha))
+                })
+                .await;
+            let (owner, name, sha) = match pushed {
+                Ok(pushed) => pushed,
+                Err(error) => {
+                    status(&this, cx, BuildStatus::Failed { message: error.to_string(), url: None });
+                    return;
+                }
+            };
+
+            // Follow the run that the push started.
+            let started = std::time::Instant::now();
+            let run = loop {
+                let actions_url = format!("https://github.com/{owner}/{name}/actions");
+                let (token, owner, name, sha) = (token.clone(), owner.clone(), name.clone(), sha.clone());
+                let found = background
+                    .spawn(async move {
+                        kc_build::GitHub::new(token).run_for_commit(&owner, &name, &sha)
+                    })
+                    .await;
+                let elapsed = started.elapsed().as_secs();
+                match found {
+                    Ok(Some(run)) if run.state != kc_build::RunState::InProgress => break run,
+                    Ok(Some(_)) => status(
+                        &this,
+                        cx,
+                        BuildStatus::Working(format!(
+                            "GitHub is building the firmware… {}:{:02}",
+                            elapsed / 60,
+                            elapsed % 60
+                        )),
+                    ),
+                    Ok(None) if elapsed > 90 => {
+                        status(&this, cx, BuildStatus::Failed {
+                            message: "GitHub did not start a build. Check that Actions are enabled for the repository.".into(),
+                            url: Some(actions_url),
+                        });
+                        return;
+                    }
+                    Ok(None) => status(
+                        &this,
+                        cx,
+                        BuildStatus::Working("Waiting for GitHub to start the build…".into()),
+                    ),
+                    Err(error) => {
+                        status(&this, cx, BuildStatus::Failed { message: error.to_string(), url: None });
+                        return;
+                    }
+                }
+                background.timer(std::time::Duration::from_secs(5)).await;
+            };
+
+            let (run_id, run_url) = (run.id, run.url.clone());
+            if run.state == kc_build::RunState::Failed {
+                let log = background
+                    .spawn(async move { kc_build::GitHub::new(token).failure(&owner, &name, run_id) })
+                    .await
+                    .unwrap_or_default();
+                status(&this, cx, BuildStatus::Failed {
+                    message: format!("The firmware did not build.\n{log}"),
+                    url: Some(run_url),
+                });
+                return;
+            }
+
+            status(&this, cx, BuildStatus::Working("Downloading the firmware…".into()));
+            let downloaded = background
+                .spawn(async move {
+                    let archives = kc_build::GitHub::new(token).artifacts(&owner, &name, run_id)?;
+                    let mut firmware = Vec::new();
+                    for archive in archives {
+                        firmware.extend(kc_build::extract_uf2(&archive)?);
+                    }
+                    Ok::<_, kc_build::BuildError>(firmware)
+                })
+                .await;
+            match downloaded {
+                Ok(firmware) if firmware.is_empty() => status(&this, cx, BuildStatus::Failed {
+                    message: "The build finished but produced no firmware files.".into(),
+                    url: Some(run_url),
+                }),
+                Ok(firmware) => {
+                    let count = firmware.len();
+                    let _ = this.update(cx, |this, cx| {
+                        let files = firmware.into_iter().map(|f| (f.name, f.bytes)).collect();
+                        this.flash.update(cx, |flash, cx| flash.set_firmware(files, cx));
+                        this.build = BuildStatus::Succeeded(format!(
+                            "Built {count} firmware file(s). Flash each half below."
+                        ));
+                        cx.notify();
+                    });
+                }
+                Err(error) => {
+                    status(&this, cx, BuildStatus::Failed { message: error.to_string(), url: Some(run_url) });
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn render_build(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (border, muted, danger, success) = (
+            theme.border,
+            theme.muted_foreground,
+            theme.danger,
+            theme.success,
+        );
+        let working = matches!(self.build, BuildStatus::Working(_));
+        let repo = match &self.repo_dir {
+            Some(dir) => dir.display().to_string(),
+            None => "No folder chosen".to_string(),
+        };
+        let panel = div()
+            .w(px(640.))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .rounded_lg()
+            .border_1()
+            .border_color(border)
+            .child(div().text_lg().child("Build the firmware"))
+            .child(div().text_sm().text_color(muted).child(
+                "Your layout is pushed to a firmware repository on GitHub, which builds it. Choose the folder of that repository, or an empty folder to have a private one created.",
+            ))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().flex_1().text_sm().child(repo))
+                    .child(
+                        Button::new("choose-repo")
+                            .label("Choose Folder…")
+                            .on_click(cx.listener(|this, _, window, cx| this.choose_repo(window, cx))),
+                    )
+                    .when(!working, |row| {
+                        row.child(
+                            Button::new("build-firmware")
+                                .primary()
+                                .label("Build Firmware")
+                                .on_click(cx.listener(|this, _, _, cx| this.build_firmware(cx))),
+                        )
+                    }),
+            );
+        let panel = match &self.build {
+            BuildStatus::Idle => panel,
+            BuildStatus::Working(text) => panel.child(div().text_sm().child(text.clone())),
+            BuildStatus::Succeeded(text) => {
+                panel.child(div().text_sm().text_color(success).child(text.clone()))
+            }
+            BuildStatus::Failed { message, url } => {
+                let lines = message
+                    .lines()
+                    .map(|l| div().child(l.to_string()))
+                    .collect::<Vec<_>>();
+                panel
+                    .child(
+                        div()
+                            .id("build-failure")
+                            .max_h_48()
+                            .overflow_y_scroll()
+                            .text_xs()
+                            .text_color(danger)
+                            .children(lines),
+                    )
+                    .when_some(url.clone(), |panel, url| {
+                        panel.child(
+                            Button::new("open-run")
+                                .ghost()
+                                .label("Open on GitHub")
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                        )
+                    })
+            }
+        };
+        div()
+            .w_full()
+            .flex()
+            .justify_center()
+            .pt_6()
+            .pb_4()
+            .child(panel)
+    }
+
     fn render_mode_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let muted = cx.theme().muted_foreground;
@@ -1292,7 +1604,7 @@ impl Workspace {
             .border_color(border)
             .child(tab("mode-keyboard", "Keyboard", Mode::Keyboard, cx))
             .child(tab("mode-files", "Generated Files", Mode::Files, cx))
-            .child(tab("mode-flash", "Flash", Mode::Flash, cx))
+            .child(tab("mode-flash", "Build & Flash", Mode::Flash, cx))
             .child(
                 div()
                     .flex_1()
@@ -1540,9 +1852,15 @@ impl Render for Workspace {
                                 .child(self.render_inspector(cx)),
                         ),
                         Mode::Files => main.child(self.render_files(cx)),
-                        Mode::Flash => {
-                            main.child(div().flex_1().min_h_0().child(self.flash.clone()))
-                        }
+                        Mode::Flash => main.child(
+                            div()
+                                .id("build-and-flash")
+                                .flex_1()
+                                .min_h_0()
+                                .overflow_y_scroll()
+                                .child(self.render_build(cx))
+                                .child(self.flash.clone()),
+                        ),
                     })
                     .child(self.render_status(cx)),
             )

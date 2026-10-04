@@ -2,7 +2,7 @@
 
 A native, open-source keymap, feature and per-key lighting editor for ZMK keyboards.
 
-**Status: early development.** Nothing is usable yet.
+**Status: early development.** Keymap editing, config generation, GitHub builds and guided flashing work; behaviour editors (hold-taps, macros, combos), per-key lighting and import are still to come.
 
 The first release targets macOS and two boards: the Cyboard Imprint (82-key, wireless) and the MoErgo Go60. More ZMK boards, Windows and Linux are planned afterwards.
 
@@ -15,6 +15,19 @@ cargo build --workspace
 cargo test --workspace
 cargo run -p kc-app
 ```
+
+## Using it
+
+```sh
+cargo run -p kc-app                      # welcome screen
+cargo run -p kc-app -- my-layout.kcproj  # open a project
+```
+
+- **Keyboard**: select keys, pick bindings, edit layers.
+- **Generated Files**: the zmk-config files the project produces, and any problems.
+- **Build & Flash**: pushes the config to a firmware repository on GitHub, waits for the build and flashes each half. Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
+
+`fixtures/` holds a generated config for each board. CI builds them with the real ZMK toolchain; after an intended change to the emitter, refresh them with `UPDATE_FIXTURES=1 cargo test -p kc-emit --test fixtures`.
 
 ## Layout
 

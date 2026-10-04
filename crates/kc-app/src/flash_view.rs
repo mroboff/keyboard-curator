@@ -78,23 +78,49 @@ impl FlashView {
         }
     }
 
-    /// Assigns chosen files to halves: by UF2 family where the board has
-    /// them, otherwise by `left` or `right` in the file name.
+    /// Takes firmware from a build, replacing anything chosen before.
+    pub fn set_firmware(&mut self, firmware: Vec<(String, Vec<u8>)>, cx: &mut Context<Self>) {
+        for step in &mut self.steps {
+            step.firmware = None;
+            step.progress = Progress::Waiting;
+        }
+        self.assign(
+            firmware
+                .into_iter()
+                .map(|(name, bytes)| (PathBuf::from(name), bytes)),
+            cx,
+        );
+    }
+
     fn add_files(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let mut unreadable = Vec::new();
+        let files: Vec<(PathBuf, Vec<u8>)> = paths
+            .into_iter()
+            .filter_map(|path| match std::fs::read(&path) {
+                Ok(bytes) => Some((path, bytes)),
+                Err(error) => {
+                    unreadable.push(format!("{}: {error}", path.display()));
+                    None
+                }
+            })
+            .collect();
+        self.assign(files.into_iter(), cx);
+        if !unreadable.is_empty() {
+            self.message = Some(unreadable.join(" "));
+        }
+    }
+
+    /// Assigns firmware to halves: by UF2 family where the board has them,
+    /// otherwise by `left` or `right` in the file name.
+    fn assign(&mut self, files: impl Iterator<Item = (PathBuf, Vec<u8>)>, cx: &mut Context<Self>) {
         let mut problems = Vec::new();
-        for path in paths {
+        for (path, bytes) in files {
             let name = path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_lowercase())
                 .unwrap_or_default();
-            let bytes = match std::fs::read(&path) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    problems.push(format!("{name}: {error}"));
-                    continue;
-                }
-            };
             let mut used = false;
+            let mut rejected = false;
             for step in &mut self.steps {
                 let has_family = self
                     .board
@@ -106,6 +132,7 @@ impl FlashView {
                     Err(kc_flash::FlashError::WrongHalf) => false,
                     Err(error) => {
                         problems.push(format!("{name}: {error}"));
+                        rejected = true;
                         break;
                     }
                 };
@@ -115,7 +142,7 @@ impl FlashView {
                     used = true;
                 }
             }
-            if !used && problems.is_empty() {
+            if !used && !rejected {
                 problems.push(format!(
                     "{name}: could not tell which half this is for. Name the file with “left” or “right”."
                 ));
@@ -258,11 +285,12 @@ impl Render for FlashView {
 
         let finished = current.is_none();
         div()
-            .size_full()
+            .w_full()
             .flex()
             .flex_col()
             .items_center()
-            .p_6()
+            .px_6()
+            .pb_6()
             .gap_4()
             .child(
                 div()
@@ -275,7 +303,7 @@ impl Render for FlashView {
                         self.board.vendor, self.board.name
                     )))
                     .child(div().text_sm().text_color(muted).child(
-                        "Choose the .uf2 files from your firmware build, one for each half. Each half is flashed separately, in the order shown.",
+                        "Firmware from a build appears here on its own. You can also choose .uf2 files yourself, one for each half. Each half is flashed separately, in the order shown.",
                     ))
                     .child(
                         div()

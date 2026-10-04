@@ -21,6 +21,9 @@ pub struct AppState {
     pub window: Option<WindowFrame>,
     /// The folder the ZMK config was last exported to.
     pub export_dir: Option<PathBuf>,
+    /// The firmware repository folder used for each project, keyed by the
+    /// project file's path.
+    pub repos: std::collections::BTreeMap<String, PathBuf>,
 }
 
 fn state_path() -> Option<PathBuf> {
