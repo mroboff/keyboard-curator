@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  # Run on pushes to main (post-merge) and on every PR. Branch pushes are covered
+  # by the pull_request trigger, avoiding duplicate runs on PR branches.
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions: {}
+
+jobs:
+  check-macos:
+    runs-on: macos-14 # Apple Silicon
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings denied)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: GUI boundary (only kc-app may depend on GPUI)
+        run: ci/check-gui-boundary.sh
+
+  audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit

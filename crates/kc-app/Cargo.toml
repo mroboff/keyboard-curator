@@ -1,0 +1,19 @@
+[package]
+name = "kc-app"
+description = "Keyboard Curator desktop application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "keyboard-curator"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui-kit = "=0.7.0"

@@ -1,0 +1,5 @@
+[toolchain]
+# Pin to stable so local builds, contributors, and CI all use one toolchain.
+# clippy + rustfmt are required by the CI quality gate (.github/workflows/ci.yml).
+channel = "stable"
+components = ["clippy", "rustfmt"]
