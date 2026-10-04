@@ -8,6 +8,16 @@ vendor = "MoErgo"
 # MoErgo voids the warranty above this (CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX).
 brightness_cap = 40
 default_layout = "physical_layout0"
+# The plain keys of the vendor's factory base layer, in binding order, used
+# to start new projects. Empty entries are left transparent.
+starter_keys = [
+  "EQUAL", "N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "N0", "MINUS",
+  "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "BSLH",
+  "ESC", "A", "S", "D", "F", "G", "H", "J", "K", "L", "SEMI", "SQT",
+  "", "Z", "X", "C", "V", "B", "N", "M", "COMMA", "DOT", "FSLH", "",
+  "GRAVE", "DEL", "BSPC", "LGUI", "LBKT", "RBKT",
+  "", "LSHFT", "LCTRL", "LALT", "SPACE", "",
+]
 
 [flash]
 order = ["right", "left"]

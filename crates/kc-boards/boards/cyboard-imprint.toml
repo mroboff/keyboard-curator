@@ -8,6 +8,18 @@ vendor = "Cyboard"
 # ZMK_RGB_UNDERGLOW_BRT_MAX in the shield's Kconfig.defconfig.
 brightness_cap = 50
 default_layout = "physical_layout_imprint_function_row_full_bottom_row"
+# The plain keys of the vendor's factory base layer, in binding order, used
+# to start new projects. Empty entries are left transparent.
+starter_keys = [
+  "ESC", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11",
+  "EQUAL", "N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "N0", "MINUS",
+  "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "BSLH",
+  "LCTRL", "A", "S", "D", "F", "G", "H", "J", "K", "L", "SEMI", "SQT",
+  "LSHFT", "Z", "X", "C", "V", "B", "N", "M", "COMMA", "DOT", "FSLH", "RSHFT",
+  "", "", "LGUI", "LALT", "", "", "LBKT", "RBKT", "", "",
+  "RET", "DEL", "ESC", "GRAVE", "BSPC", "SPACE",
+  "LGUI", "", "", "CAPS", "", "",
+]
 
 [flash]
 # Both halves mount under the same volume name, so the app must sequence them.

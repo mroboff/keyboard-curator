@@ -44,5 +44,5 @@ cargo run -p kc-app
 
 ## Workflow
 
-- One branch per milestone (for example `mark/m1-foundations`), one or more commits per Linear issue, each commit message prefixed with the issue key (for example `KEY-3: ...`).
+- While the initial app is being built, milestone work is committed and pushed straight to `main`. Each commit message is prefixed with its Linear issue key (for example `KEY-3: ...`).
 - CI runs fmt, clippy (warnings denied), tests and the GUI boundary check on macOS.

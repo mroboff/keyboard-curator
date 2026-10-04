@@ -19,6 +19,10 @@ pub struct Board {
     pub brightness_cap: u8,
     /// The layout a new project starts with.
     pub default_layout: String,
+    /// Keycode names for the base layer of a new project, one per key of
+    /// the default layout; an empty name leaves the key transparent.
+    #[serde(default)]
+    pub starter_keys: Vec<String>,
     pub flash: FlashInfo,
     pub halves: Vec<Half>,
     #[serde(default)]
@@ -178,6 +182,10 @@ pub enum BoardError {
     DuplicateProfile(String),
     #[error("a board needs at least one firmware profile")]
     NoProfiles,
+    #[error("starter_keys has {found} entries, but the default layout has {keys} keys")]
+    StarterKeyCount { found: usize, keys: usize },
+    #[error("starter key `{0}` is not a ZMK keycode")]
+    UnknownStarterKey(String),
 }
 
 impl Board {
@@ -219,6 +227,23 @@ impl Board {
                 field: "default_layout",
                 layout: self.default_layout.clone(),
             });
+        }
+
+        if let Some(layout) = self.layout(&self.default_layout) {
+            if !self.starter_keys.is_empty() && self.starter_keys.len() != layout.keys.len() {
+                return Err(BoardError::StarterKeyCount {
+                    found: self.starter_keys.len(),
+                    keys: layout.keys.len(),
+                });
+            }
+        }
+        let codes = kc_zmk::keycodes::keycodes();
+        if let Some(unknown) = self
+            .starter_keys
+            .iter()
+            .find(|k| !k.is_empty() && codes.get(k).is_none())
+        {
+            return Err(BoardError::UnknownStarterKey(unknown.clone()));
         }
 
         let mut sides = HashSet::new();

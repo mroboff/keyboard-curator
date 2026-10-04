@@ -16,4 +16,9 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+dirs = "7.0.0"
 gpui-kit = "=0.7.0"
+kc-boards = { version = "0.1.0", path = "../kc-boards" }
+kc-model = { version = "0.1.0", path = "../kc-model" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"

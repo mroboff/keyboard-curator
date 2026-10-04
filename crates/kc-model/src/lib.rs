@@ -12,6 +12,7 @@ pub mod editor;
 pub mod features;
 pub mod file;
 pub mod ids;
+pub mod keycap;
 pub mod project;
 pub mod validate;
 

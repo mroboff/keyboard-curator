@@ -7,7 +7,7 @@ use kc_boards::Board;
 use serde::{Deserialize, Serialize};
 
 use crate::behavior::{BehaviorDef, BehaviorKind};
-use crate::binding::{BehaviorRef, Binding};
+use crate::binding::{BehaviorRef, Binding, KeyExpr};
 use crate::features::{
     Combo, ConditionalLayer, InputProcessor, KeyLight, LayerLighting, PointingConfig, RawBlocks,
     Rgb, SettingValue,
@@ -102,7 +102,8 @@ pub struct Project {
 }
 
 impl Project {
-    /// A new project for `board` with one empty base layer.
+    /// A new project for `board`, with a base layer of the board's starter
+    /// keys.
     pub fn new(name: impl Into<String>, board: &Board) -> Self {
         let layout = board
             .layout(&board.default_layout)
@@ -126,6 +127,15 @@ impl Project {
             next_id: 1,
         };
         project.push_layer("Base".into());
+        for (binding, key) in project.layers[0]
+            .bindings
+            .iter_mut()
+            .zip(&board.starter_keys)
+        {
+            if !key.is_empty() {
+                *binding = Binding::kp(KeyExpr::new(key.clone()));
+            }
+        }
         project
     }
 

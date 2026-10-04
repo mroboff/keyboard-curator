@@ -134,6 +134,9 @@ fn new_projects_match_their_board() {
     let p = Project::new("Mine", &imprint);
     assert_eq!((p.key_count, p.layers.len()), (82, 1));
     assert_eq!(p.firmware, "cyboard-zmk-0.3");
+    // The base layer starts from the board's factory keys.
+    assert_eq!(p.binding(p.layers[0].id, 25), Some(&kp("Q")));
+    assert_eq!(p.binding(p.layers[0].id, 60), Some(&Binding::trans()));
     assert!(validate(&p, &imprint).is_empty());
 
     let go60 = board("moergo-go60");
@@ -517,4 +520,63 @@ fn unreadable_project_files_explain_themselves() {
         file::from_json(r#"{"format": 1}"#),
         Err(file::FileError::Invalid(_))
     ));
+}
+
+#[test]
+fn keycaps_show_what_a_key_does() {
+    use kc_model::keycap::{keycap, KeycapKind};
+
+    let (mut p, _) = rich_project();
+    let (base, nav) = (p.layers[0].id, p.layers[1].id);
+    let cap = |p: &Project, layer, position| keycap(p, layer, position).unwrap();
+
+    let chord = cap(&p, base, 0);
+    assert_eq!(
+        (chord.legend.as_str(), chord.kind),
+        ("⌃⇧K", KeycapKind::Key)
+    );
+
+    let momentary = cap(&p, base, 1);
+    assert_eq!(momentary.legend, "Nav");
+    assert_eq!(momentary.hold.as_deref(), Some("hold"));
+    assert_eq!(momentary.kind, KeycapKind::Layer);
+
+    assert_eq!(cap(&p, base, 2).legend, "BT SEL 2");
+    assert_eq!(cap(&p, base, 2).kind, KeycapKind::System);
+
+    // The user-defined hold-tap shows both sides.
+    let magic = cap(&p, base, 36);
+    assert_eq!(
+        (magic.legend.as_str(), magic.hold.as_deref()),
+        ("Esc", Some("Magic"))
+    );
+
+    // A transparent key shows what it inherits, flagged as transparent.
+    let inherited = cap(&p, nav, 0);
+    assert_eq!(
+        (inherited.legend.as_str(), inherited.kind),
+        ("⌃⇧K", KeycapKind::Transparent)
+    );
+    // On the base layer there is nothing below to inherit.
+    p.set_binding(base, 50, Binding::trans()).unwrap();
+    assert_eq!(cap(&p, base, 50).legend, "");
+
+    p.set_binding(
+        base,
+        5,
+        Binding::new(
+            "mt",
+            vec![
+                Param::Key(KeyExpr::new("LSHFT")),
+                Param::Key(KeyExpr::new("A")),
+            ],
+        ),
+    )
+    .unwrap();
+    let mod_tap = cap(&p, base, 5);
+    assert_eq!(
+        (mod_tap.legend.as_str(), mod_tap.hold.as_deref()),
+        ("A", Some("Shift"))
+    );
+    assert!(keycap(&p, base, 60).is_none());
 }
