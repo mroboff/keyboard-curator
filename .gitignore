@@ -16,3 +16,14 @@
 .env
 .env.local
 *.local.toml
+
+# West workspaces created when building the fixture configs
+/fixtures/*/.west/
+/fixtures/*/build/
+/fixtures/*/modules/
+/fixtures/*/tools/
+/fixtures/*/zephyr/
+/fixtures/*/bootloader/
+/fixtures/*/zmk/
+/fixtures/*/zmk-keyboards/
+/fixtures/*/zmk-pmw3610-driver/

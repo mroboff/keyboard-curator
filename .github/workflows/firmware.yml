@@ -1,0 +1,57 @@
+name: Firmware
+
+# Builds the generated fixture configs with the real ZMK toolchain, so an
+# emitter change that ZMK would reject fails here and never reaches a
+# keyboard. Runs weekly as well, to notice upstream changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fixtures/**"
+      - "ci/build-fixture.py"
+      - ".github/workflows/firmware.yml"
+  pull_request:
+    paths:
+      - "fixtures/**"
+      - "ci/build-fixture.py"
+      - ".github/workflows/firmware.yml"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      # Matches the Zephyr 3.5 generation both boards' firmware is on.
+      image: zmkfirmware/zmk-build-arm:3.5
+    strategy:
+      fail-fast: false
+      matrix:
+        fixture: [cyboard-imprint, moergo-go60]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache west modules
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: |
+            fixtures/${{ matrix.fixture }}/modules/
+            fixtures/${{ matrix.fixture }}/tools/
+            fixtures/${{ matrix.fixture }}/zephyr/
+            fixtures/${{ matrix.fixture }}/bootloader/
+            fixtures/${{ matrix.fixture }}/zmk/
+          key: west-${{ matrix.fixture }}-${{ hashFiles(format('fixtures/{0}/config/west.yml', matrix.fixture)) }}
+
+      - name: Build
+        run: python3 ci/build-fixture.py fixtures/${{ matrix.fixture }}
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.fixture }}
+          path: fixtures/${{ matrix.fixture }}/build/*/zephyr/zmk.uf2

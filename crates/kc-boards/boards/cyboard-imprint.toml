@@ -86,6 +86,9 @@ size = 130
 id = "cyboard-zmk-0.3"
 name = "ZMK v0.3.0 with Cyboard's module"
 zephyr = "3.5"
+config_name = "imprint"
+# Pinned to the release whose build container matches this Zephyr.
+workflow = "zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3.0"
 zmk = { url = "https://github.com/zmkfirmware/zmk", revision = "v0.3.0" }
 capabilities = ["studio", "rgb-underglow", "ext-power", "pointing"]
 

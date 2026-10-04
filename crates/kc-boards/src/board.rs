@@ -149,6 +149,11 @@ pub struct FirmwareProfile {
     pub name: String,
     /// Zephyr generation, for example `3.5`.
     pub zephyr: String,
+    /// The base name of the keymap and `.conf` files in a zmk-config
+    /// repository, which ZMK matches to the board or shield.
+    pub config_name: String,
+    /// The reusable GitHub Actions workflow that builds this firmware.
+    pub workflow: String,
     pub zmk: Source,
     #[serde(default)]
     pub modules: Vec<Module>,
