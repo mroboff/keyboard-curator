@@ -1,12 +1,17 @@
 //! The editing window for one project: layer list, keyboard canvas, key
 //! picker and key inspector.
 
+mod behaviors;
+mod combos;
+mod pointing;
+mod settings;
+
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{Input, InputEvent, InputState, TextareaState};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -19,7 +24,10 @@ use kc_model::features::Rgb;
 use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::picker::{picker_items, PickerGroup};
 use kc_model::text::{format_binding, parse_binding, LayerStyle};
-use kc_model::{file, validate, Binding, Editor, KeyExpr, LayerId, ModelError, Project, Severity};
+use kc_model::{
+    file, validate, BehaviorId, Binding, ComboId, Editor, KeyExpr, LayerId, ModelError, Project,
+    Severity, Slot,
+};
 use kc_zmk::{Feature, Modifier};
 
 use crate::canvas::{self, Device, Frame, Palette};
@@ -57,6 +65,10 @@ fn tag_color(tag: Rgb) -> Hsla {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Keyboard,
+    Behaviors,
+    Combos,
+    Pointing,
+    Settings,
     Files,
     Flash,
 }
@@ -106,7 +118,18 @@ impl Render for DraggedLayer {
     }
 }
 
+/// Which layer, behaviour and combo the name fields currently show, so
+/// that text typed into them is applied to the right thing even when the
+/// selection has just moved on.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Shown {
+    layer: Option<LayerId>,
+    behavior: Option<BehaviorId>,
+    combo: Option<ComboId>,
+}
+
 pub struct Workspace {
+    shown: Shown,
     editor: Editor,
     board: Board,
     path: Option<PathBuf>,
@@ -118,6 +141,22 @@ pub struct Workspace {
     /// The local clone of the firmware repository for this project.
     repo_dir: Option<PathBuf>,
     build: BuildStatus,
+    /// The binding inside a behaviour or combo that the picker assigns to,
+    /// in the Behaviors and Combos modes.
+    slot: Option<Slot>,
+    /// The behaviour and combo being edited.
+    behavior: Option<BehaviorId>,
+    combo: Option<ComboId>,
+    /// Where the small keyboard for choosing key positions was laid out.
+    mini_bounds: Rc<Cell<Bounds<Pixels>>>,
+    behavior_name: Entity<InputState>,
+    behavior_label: Entity<InputState>,
+    macro_text: Entity<InputState>,
+    combo_name: Entity<InputState>,
+    keyboard_name: Entity<InputState>,
+    raw_behaviors: Entity<TextareaState>,
+    raw_devicetree: Entity<TextareaState>,
+    raw_conf: Entity<TextareaState>,
     /// Selected key positions; the last one is the key the inspector shows.
     selection: Vec<usize>,
     hovered: Option<usize>,
@@ -211,7 +250,7 @@ impl Workspace {
                 if matches!(event, InputEvent::PressEnter { .. }) {
                     let text = input.read(cx).value();
                     let binding = parse_binding(this.project(), &text);
-                    this.apply_binding(binding, false, window, cx);
+                    this.assign_to_target(binding, false, window, cx);
                 }
             },
         )
@@ -219,21 +258,42 @@ impl Workspace {
         cx.subscribe_in(
             &layer_name,
             window,
-            |this, input, event: &InputEvent, window, cx| {
+            |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
-                    let name = input.read(cx).value().trim().to_string();
-                    this.rename_layer(name, window, cx);
+                    this.after_change(window, cx);
                 }
             },
         )
         .detach();
 
         let flash = cx.new(|cx| FlashView::new(board.clone(), cx));
+        let line = |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| {
+            cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
+        };
+        let behavior_name = line("Name", window, cx);
+        let behavior_label = line("label", window, cx);
+        let macro_text = line("Text to type", window, cx);
+        let combo_name = line("Name", window, cx);
+        let keyboard_name = line("Board default", window, cx);
+        let raw_behaviors = cx.new(|cx| TextareaState::new(window, cx));
+        let raw_devicetree = cx.new(|cx| TextareaState::new(window, cx));
+        let raw_conf = cx.new(|cx| TextareaState::new(window, cx));
+        settings::subscribe(
+            &keyboard_name,
+            &raw_behaviors,
+            &raw_devicetree,
+            &raw_conf,
+            window,
+            cx,
+        );
+        behaviors::subscribe(&behavior_name, &behavior_label, &macro_text, window, cx);
+        combos::subscribe(&combo_name, window, cx);
         let repo_dir = AppState::load()
             .repos
             .get(&Self::repo_key(path.as_deref(), &board))
             .cloned();
         let mut workspace = Self {
+            shown: Shown::default(),
             editor,
             board,
             path,
@@ -243,6 +303,18 @@ impl Workspace {
             flash,
             repo_dir,
             build: BuildStatus::Idle,
+            slot: None,
+            behavior: None,
+            combo: None,
+            mini_bounds: Rc::new(Cell::new(Bounds::default())),
+            behavior_name,
+            behavior_label,
+            macro_text,
+            combo_name,
+            keyboard_name,
+            raw_behaviors,
+            raw_devicetree,
+            raw_conf,
             selection: Vec::new(),
             hovered: None,
             drag: None,
@@ -259,6 +331,19 @@ impl Workspace {
             layer_name,
         };
         workspace.sync_inputs(window, cx);
+        // For checking a screen from the command line: KC_MODE=settings.
+        let start = match std::env::var("KC_MODE").as_deref() {
+            Ok("behaviors") => Some(Mode::Behaviors),
+            Ok("combos") => Some(Mode::Combos),
+            Ok("pointing") => Some(Mode::Pointing),
+            Ok("settings") => Some(Mode::Settings),
+            Ok("files") => Some(Mode::Files),
+            Ok("flash") => Some(Mode::Flash),
+            _ => None,
+        };
+        if let Some(mode) = start {
+            workspace.set_mode(mode, window, cx);
+        }
         workspace
     }
 
@@ -293,19 +378,123 @@ impl Workspace {
 
     pub fn undo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.editor.undo();
-        self.after_change(window, cx);
+        self.refresh(window, cx);
     }
 
     pub fn redo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.editor.redo();
-        self.after_change(window, cx);
+        self.refresh(window, cx);
     }
 
-    /// Brings the view back in line with the project after any change.
+    /// Applies text typed into the name fields to what they were showing.
+    fn commit_inputs(&mut self, cx: &mut Context<Self>) {
+        let shown = self.shown;
+        let layer = self.layer_name.read(cx).value().trim().to_string();
+        let name = self.behavior_name.read(cx).value().trim().to_string();
+        let label = self.behavior_label.read(cx).value().trim().to_string();
+        let combo = self.combo_name.read(cx).value().trim().to_string();
+        let project = self.project();
+        let layer_edit = shown
+            .layer
+            .filter(|id| !layer.is_empty() && project.layer(*id).is_some_and(|l| l.name != layer));
+        let behavior = shown.behavior.and_then(|id| project.behavior(id));
+        let name_edit = behavior
+            .filter(|b| !name.is_empty() && b.name != name)
+            .map(|b| b.id);
+        let label_edit = behavior
+            .filter(|b| !label.is_empty() && b.label != label)
+            .map(|b| b.id);
+        let combo_edit = shown.combo.filter(|id| {
+            !combo.is_empty()
+                && project
+                    .combos
+                    .iter()
+                    .any(|c| c.id == *id && c.name != combo)
+        });
+        if layer_edit.is_some() || name_edit.is_some() || combo_edit.is_some() {
+            let _ = self.editor.edit("Rename", |p| {
+                if let Some(id) = layer_edit {
+                    p.layer_mut(id)?.name = layer;
+                }
+                if let Some(id) = name_edit {
+                    p.behavior_mut(id)?.name = name;
+                }
+                if let Some(id) = combo_edit {
+                    p.combo_mut(id)?.name = combo;
+                }
+                Ok(())
+            });
+        }
+        if let Some(id) = label_edit {
+            if let Err(error) = self.editor.edit("Change Behavior Label", |p| {
+                p.rename_behavior_label(id, label)
+            }) {
+                self.notice = Some(format!("{error}."));
+            }
+        }
+        self.commit_settings_inputs(cx);
+    }
+
+    /// Shows the edited behaviour's and combo's names in their fields.
+    fn sync_editor_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (name, label) = self
+            .behavior
+            .and_then(|id| self.project().behavior(id))
+            .map(|b| (b.name.clone(), b.label.clone()))
+            .unwrap_or_default();
+        let combo = self
+            .combo
+            .and_then(|id| self.project().combos.iter().find(|c| c.id == id))
+            .map(|c| c.name.clone())
+            .unwrap_or_default();
+        for (input, text) in [
+            (&self.behavior_name, name),
+            (&self.behavior_label, label),
+            (&self.combo_name, combo),
+        ] {
+            if input.read(cx).value() != text {
+                input.update(cx, |input, cx| input.set_value(text, window, cx));
+            }
+        }
+        self.sync_settings_inputs(window, cx);
+        self.shown = Shown {
+            layer: Some(self.layer),
+            behavior: self.behavior,
+            combo: self.combo,
+        };
+    }
+
+    /// Brings the view back in line with the project after any change,
+    /// first applying anything typed into a text field.
     fn after_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_inputs(cx);
+        self.refresh(window, cx);
+    }
+
+    /// Brings the view back in line with the project, discarding anything
+    /// typed but not yet applied. Used after undo and redo.
+    fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.project().layer(self.layer).is_none() {
             self.layer = self.project().layers[0].id;
             self.selection.clear();
+        }
+        if self
+            .behavior
+            .is_some_and(|id| self.project().behavior(id).is_none())
+        {
+            self.behavior = None;
+        }
+        if self
+            .combo
+            .is_some_and(|id| !self.project().combos.iter().any(|c| c.id == id))
+        {
+            self.combo = None;
+        }
+        if self
+            .slot
+            .is_some_and(|slot| self.project().slot(slot).is_none())
+        {
+            self.slot = None;
         }
         self.sync_inputs(window, cx);
         cx.notify();
@@ -314,9 +503,10 @@ impl Workspace {
     /// Shows the selected key's binding and the layer's name in their fields.
     fn sync_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let binding = self
-            .selected_binding()
+            .target_binding()
             .map(|b| format_binding(self.project(), b, LayerStyle::Index))
             .unwrap_or_default();
+        self.sync_editor_inputs(window, cx);
         self.binding_input
             .update(cx, |input, cx| input.set_value(binding, window, cx));
         let name = self
@@ -324,8 +514,10 @@ impl Workspace {
             .layer(self.layer)
             .map(|l| l.name.clone())
             .unwrap_or_default();
-        self.layer_name
-            .update(cx, |input, cx| input.set_value(name, window, cx));
+        if self.layer_name.read(cx).value() != name {
+            self.layer_name
+                .update(cx, |input, cx| input.set_value(name, window, cx));
+        }
     }
 
     fn features(&self) -> Vec<Feature> {
@@ -371,6 +563,69 @@ impl Workspace {
 
     fn selected_binding(&self) -> Option<&Binding> {
         self.project().binding(self.layer, self.primary()?)
+    }
+
+    /// Whether the picker currently assigns to a slot rather than to keys.
+    fn targets_slot(&self) -> bool {
+        matches!(self.mode, Mode::Behaviors | Mode::Combos)
+    }
+
+    /// The binding the picker and the binding field act on.
+    fn target_binding(&self) -> Option<&Binding> {
+        if self.targets_slot() {
+            self.project().slot(self.slot?)
+        } else {
+            self.selected_binding()
+        }
+    }
+
+    /// Assigns a binding to whatever the picker is aimed at.
+    fn assign_to_target(
+        &mut self,
+        binding: Binding,
+        advance: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.targets_slot() {
+            if let Some(slot) = self.slot {
+                self.change("Change Binding", window, cx, |p| p.set_slot(slot, binding));
+            }
+        } else {
+            self.apply_binding(binding, advance, window, cx);
+        }
+    }
+
+    /// Applies an edit as one undo step and refreshes the view.
+    fn change(
+        &mut self,
+        label: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        edit: impl FnOnce(&mut Project) -> Result<(), ModelError>,
+    ) {
+        if let Err(error) = self.editor.edit(label, edit) {
+            self.notice = Some(format!("{error}."));
+        }
+        self.after_change(window, cx);
+    }
+
+    fn set_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_inputs(cx);
+        self.mode = mode;
+        self.hint = None;
+        // Open the editors on something, so they are not blank.
+        match mode {
+            Mode::Behaviors if self.behavior.is_none() => {
+                self.behavior = self.project().behaviors.first().map(|b| b.id);
+            }
+            Mode::Combos if self.combo.is_none() => {
+                self.combo = self.project().combos.first().map(|c| c.id);
+                self.slot = self.combo.map(Slot::Combo);
+            }
+            _ => {}
+        }
+        self.after_change(window, cx);
     }
 
     /// Puts keyboard focus on the canvas, so shortcuts reach the workspace.
@@ -586,8 +841,13 @@ impl Workspace {
         self.after_change(window, cx);
     }
 
-    /// Assigns a picker entry to the selected key.
+    /// Assigns a picker entry to the selected keys, or to the slot being
+    /// edited.
     fn pick(&mut self, picked: Binding, window: &mut Window, cx: &mut Context<Self>) {
+        if self.targets_slot() {
+            self.assign_to_target(picked, false, window, cx);
+            return;
+        }
         let Some(current) = self.selected_binding() else {
             return;
         };
@@ -662,16 +922,6 @@ impl Workspace {
         self.edit_layers("Change Reserved Layers", window, cx, |p| {
             p.set_reserved_layers(count).map(|()| None)
         });
-    }
-
-    fn rename_layer(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
-        let layer = self.layer;
-        if !name.is_empty() {
-            self.edit_layers("Rename Layer", window, cx, |p| {
-                p.layer_mut(layer)?.name = name;
-                Ok(None)
-            });
-        }
     }
 
     fn delete_layer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -913,6 +1163,7 @@ impl Workspace {
                 .layer(self.layer)
                 .and_then(|l| l.color)
                 .map(tag_color),
+            links: Vec::new(),
         };
         let bounds = self.canvas_bounds.clone();
 
@@ -970,7 +1221,7 @@ impl Workspace {
             })
             .collect::<Vec<_>>();
 
-        let enabled = !self.selection.is_empty();
+        let enabled = self.target_binding().is_some();
         let cells = items
             .into_iter()
             .filter(|item| {
@@ -1061,6 +1312,34 @@ impl Workspace {
                     .min_h_0()
                     .overflow_y_scroll()
                     .child(div().flex().flex_wrap().gap_1().children(cells)),
+            )
+    }
+
+    /// The picker with a binding field beside it, for the modes where it
+    /// assigns to a slot inside a behaviour or combo.
+    fn render_slot_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
+        div()
+            .h_64()
+            .flex()
+            .border_t_1()
+            .border_color(border)
+            .child(self.render_picker(cx))
+            .child(
+                div()
+                    .w_80()
+                    .h_full()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .p_3()
+                    .border_l_1()
+                    .border_color(border)
+                    .child(section_title("SELECTED BINDING", cx))
+                    .child(Input::new(&self.binding_input))
+                    .child(div().text_xs().text_color(muted).child(
+                        "Click a binding above to select it. Choose from the list, or type any ZMK binding and press Return.",
+                    )),
             )
     }
 
@@ -1589,10 +1868,8 @@ impl Workspace {
         let border = cx.theme().border;
         let muted = cx.theme().muted_foreground;
         let tab = |id: &'static str, label: &'static str, mode: Mode, cx: &mut Context<Self>| {
-            chip(id, label, self.mode == mode, cx).on_click(cx.listener(move |this, _, _, cx| {
-                this.mode = mode;
-                cx.notify();
-            }))
+            chip(id, label, self.mode == mode, cx)
+                .on_click(cx.listener(move |this, _, window, cx| this.set_mode(mode, window, cx)))
         };
         div()
             .flex()
@@ -1603,6 +1880,10 @@ impl Workspace {
             .border_b_1()
             .border_color(border)
             .child(tab("mode-keyboard", "Keyboard", Mode::Keyboard, cx))
+            .child(tab("mode-behaviors", "Behaviors", Mode::Behaviors, cx))
+            .child(tab("mode-combos", "Combos", Mode::Combos, cx))
+            .child(tab("mode-pointing", "Pointing", Mode::Pointing, cx))
+            .child(tab("mode-settings", "Settings", Mode::Settings, cx))
             .child(tab("mode-files", "Generated Files", Mode::Files, cx))
             .child(tab("mode-flash", "Build & Flash", Mode::Flash, cx))
             .child(
@@ -1851,6 +2132,14 @@ impl Render for Workspace {
                                 .child(self.render_picker(cx))
                                 .child(self.render_inspector(cx)),
                         ),
+                        Mode::Behaviors => main
+                            .child(self.render_behaviors(cx))
+                            .child(self.render_slot_picker(cx)),
+                        Mode::Combos => main
+                            .child(self.render_combos(cx))
+                            .child(self.render_slot_picker(cx)),
+                        Mode::Pointing => main.child(self.render_pointing(cx)),
+                        Mode::Settings => main.child(self.render_settings(cx)),
                         Mode::Files => main.child(self.render_files(cx)),
                         Mode::Flash => main.child(
                             div()

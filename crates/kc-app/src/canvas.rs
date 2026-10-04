@@ -129,6 +129,9 @@ pub struct Frame {
     pub palette: Palette,
     /// A colour tag per key, when the layer view wants one.
     pub tint: Option<Hsla>,
+    /// Groups of keys to join with a line, such as combos, and whether
+    /// each is the one being edited.
+    pub links: Vec<(Vec<usize>, bool)>,
 }
 
 /// The outline of a key, inset by the key gap, with rounded corners.
@@ -299,6 +302,41 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
                 window,
                 cx,
             ),
+        }
+    }
+
+    for (positions, active) in &frame.links {
+        let centers: Vec<Point<Pixels>> = positions
+            .iter()
+            .filter_map(|p| frame.keys.get(*p))
+            .map(|key| view.to_screen(key.center()))
+            .collect();
+        if centers.len() < 2 {
+            continue;
+        }
+        let color = if *active {
+            palette.accent
+        } else {
+            palette.muted_text.opacity(0.6)
+        };
+        let mut line = PathBuilder::stroke(px(if *active { 3. } else { 2. }));
+        line.move_to(centers[0]);
+        for center in &centers[1..] {
+            line.line_to(*center);
+        }
+        if let Ok(path) = line.build() {
+            window.paint_path(path, color);
+        }
+        for center in centers {
+            let dot = Bounds::centered_at(center, gpui_kit::size(unit * 0.16, unit * 0.16));
+            window.paint_quad(quad(
+                dot,
+                unit * 0.08,
+                color,
+                px(0.),
+                color,
+                Default::default(),
+            ));
         }
     }
 
