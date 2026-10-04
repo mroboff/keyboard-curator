@@ -3561,6 +3561,13 @@ version = "0.1.0"
 [[package]]
 name = "kc-model"
 version = "0.1.0"
+dependencies = [
+ "kc-boards",
+ "kc-zmk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "kc-studio"

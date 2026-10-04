@@ -10,3 +10,10 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+kc-boards = { version = "0.1.0", path = "../kc-boards" }
+kc-zmk = { version = "0.1.0", path = "../kc-zmk" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+thiserror = "2.0.21"
