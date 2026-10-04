@@ -8,12 +8,15 @@
 
 pub mod behavior;
 pub mod binding;
+pub mod edit;
 pub mod editor;
 pub mod features;
 pub mod file;
 pub mod ids;
 pub mod keycap;
+pub mod picker;
 pub mod project;
+pub mod text;
 pub mod validate;
 
 pub use binding::{BehaviorRef, Binding, KeyExpr, Param};

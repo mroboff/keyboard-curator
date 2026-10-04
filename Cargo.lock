@@ -3542,6 +3542,7 @@ dependencies = [
  "gpui-kit",
  "kc-boards",
  "kc-model",
+ "kc-zmk",
  "serde",
  "serde_json",
 ]

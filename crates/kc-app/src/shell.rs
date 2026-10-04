@@ -60,8 +60,15 @@ impl Shell {
             .is_some_and(|w| w.read(cx).is_dirty())
     }
 
-    fn show(&mut self, workspace: Workspace, window: &mut Window, cx: &mut Context<Self>) {
-        let workspace = cx.new(|_| workspace);
+    fn show(
+        &mut self,
+        project: Project,
+        board: Board,
+        path: Option<PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let workspace = cx.new(|cx| Workspace::new(project, board, path, window, cx));
         cx.observe(&workspace, |_, _, cx| cx.notify()).detach();
         self.workspace = Some(workspace);
         self.error = None;
@@ -71,10 +78,10 @@ impl Shell {
 
     fn new_project(&mut self, board: &Board, window: &mut Window, cx: &mut Context<Self>) {
         let project = Project::new(format!("My {}", board.name), board);
-        self.show(Workspace::new(project, board.clone(), None), window, cx);
+        self.show(project, board.clone(), None, window, cx);
     }
 
-    fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let opened = file::load(&path)
             .map_err(|e| e.to_string())
             .and_then(|project| {
@@ -83,13 +90,13 @@ impl Shell {
                     "This project is for an unknown board, `{}`.",
                     project.board
                 ))?;
-                Ok(Workspace::new(project, board.clone(), Some(path.clone())))
+                Ok((project, board.clone()))
             });
         match opened {
-            Ok(workspace) => {
-                self.state.note_recent(path);
+            Ok((project, board)) => {
+                self.state.note_recent(path.clone());
                 self.state.save();
-                self.show(workspace, window, cx);
+                self.show(project, board, Some(path), window, cx);
             }
             Err(message) => {
                 self.state.forget_recent(&path);
@@ -196,20 +203,18 @@ impl Shell {
         .detach();
     }
 
-    fn undo(&mut self, _: &Undo, _: &mut Window, cx: &mut Context<Self>) {
+    fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(workspace) = &self.workspace {
             workspace.update(cx, |w, cx| {
-                w.undo();
-                cx.notify();
+                w.undo(window, cx);
             });
         }
     }
 
-    fn redo(&mut self, _: &Redo, _: &mut Window, cx: &mut Context<Self>) {
+    fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(workspace) = &self.workspace {
             workspace.update(cx, |w, cx| {
-                w.redo();
-                cx.notify();
+                w.redo(window, cx);
             });
         }
     }

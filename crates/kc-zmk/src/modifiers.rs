@@ -56,6 +56,29 @@ impl Modifier {
         }
     }
 
+    /// The keycode of the modifier key itself, as in `&kp LSHFT`.
+    pub fn keycode(self) -> &'static str {
+        match self {
+            Modifier::LCtrl => "LCTRL",
+            Modifier::LShift => "LSHFT",
+            Modifier::LAlt => "LALT",
+            Modifier::LGui => "LGUI",
+            Modifier::RCtrl => "RCTRL",
+            Modifier::RShift => "RSHFT",
+            Modifier::RAlt => "RALT",
+            Modifier::RGui => "RGUI",
+        }
+    }
+
+    pub fn from_keycode(name: &str) -> Option<Self> {
+        let code = crate::keycodes::keycodes().get(name)?;
+        Modifier::ALL.into_iter().find(|m| {
+            crate::keycodes::keycodes()
+                .get(m.keycode())
+                .is_some_and(|k| std::ptr::eq(k, code))
+        })
+    }
+
     /// The modifier's bit in ZMK's modifier byte.
     pub fn bit(self) -> u8 {
         1 << Modifier::ALL.iter().position(|m| *m == self).unwrap_or(0)

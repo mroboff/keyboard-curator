@@ -74,8 +74,12 @@ fn main() {
         })
         .expect("failed to open window");
 
-        // Closing the window with unsaved changes asks first.
         let _ = window.update(cx, |_, window, cx| {
+            // A project file given on the command line opens straight away.
+            if let Some(path) = std::env::args_os().nth(1) {
+                shell.update(cx, |shell, cx| shell.open_path(path.into(), window, cx));
+            }
+            // Closing the window with unsaved changes asks first.
             window.on_window_should_close(cx, move |window, cx| {
                 if !shell.read(cx).has_unsaved_changes(cx) {
                     return true;

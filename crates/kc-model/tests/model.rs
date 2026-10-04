@@ -580,3 +580,143 @@ fn keycaps_show_what_a_key_does() {
     );
     assert!(keycap(&p, base, 60).is_none());
 }
+
+#[test]
+fn bindings_round_trip_through_keymap_text() {
+    use kc_model::text::{format_binding, parse_binding, LayerStyle};
+
+    let (p, _) = rich_project();
+    let nav = p.layers[1].id;
+    let cases = [
+        ("&kp LC(LS(K))", kp("LC(LS(K))")),
+        ("&mo 1", Binding::layer("mo", nav)),
+        ("&bt BT_SEL 2", command("bt", "BT_SEL", &[2])),
+        ("&bt BT_CLR", command("bt", "BT_CLR", &[])),
+        (
+            "&rgb_ug RGB_COLOR_HSB(120,100,50)",
+            command("rgb_ug", "RGB_COLOR_HSB", &[120, 100, 50]),
+        ),
+        (
+            "&mkp LCLK",
+            Binding::new("mkp", vec![Param::Constant("LCLK".into())]),
+        ),
+        ("&trans", Binding::trans()),
+        (
+            "&mt LSHFT A",
+            Binding::new(
+                "mt",
+                vec![
+                    Param::Key(KeyExpr::new("LSHFT")),
+                    Param::Key(KeyExpr::new("A")),
+                ],
+            ),
+        ),
+        (
+            "&lt 1 SPACE",
+            Binding::new(
+                "lt",
+                vec![Param::Layer(nav), Param::Key(KeyExpr::new("SPACE"))],
+            ),
+        ),
+        ("&nav_td", Binding::user(p.behaviors[1].id, vec![])),
+    ];
+    for (text, binding) in cases {
+        assert_eq!(parse_binding(&p, text), binding, "{text}");
+        assert_eq!(format_binding(&p, &binding, LayerStyle::Index), text);
+    }
+
+    // Layers can be named, and are emitted as constants when asked.
+    assert_eq!(parse_binding(&p, "&mo Nav"), Binding::layer("mo", nav));
+    assert_eq!(
+        parse_binding(&p, "&mo LAYER_Nav"),
+        Binding::layer("mo", nav)
+    );
+    assert_eq!(
+        format_binding(&p, &Binding::layer("mo", nav), LayerStyle::Constant),
+        "&mo LAYER_Nav"
+    );
+    // The user-defined hold-tap takes a layer and a key.
+    let magic = parse_binding(&p, "&magic Magic ESC");
+    assert_eq!(magic, *p.binding(p.layers[0].id, 36).unwrap());
+    assert_eq!(
+        format_binding(&p, &magic, LayerStyle::Index),
+        "&magic 2 ESC"
+    );
+    // Loose spacing inside a call is tolerated.
+    assert_eq!(
+        parse_binding(&p, "  &rgb_ug   RGB_COLOR_HSB(120, 100, 50) "),
+        command("rgb_ug", "RGB_COLOR_HSB", &[120, 100, 50])
+    );
+}
+
+#[test]
+fn text_the_model_cannot_read_is_kept_verbatim() {
+    use kc_model::text::{format_binding, parse_binding, LayerStyle};
+
+    let (p, _) = rich_project();
+    for text in [
+        "&unknown 1 2",
+        "&kp",
+        "&kp A B",
+        "&mo 9",
+        "&bt BT_SEL",
+        "&mkp NOPE",
+        "kp A",
+        "",
+    ] {
+        let binding = parse_binding(&p, text);
+        assert_eq!(binding, Binding::Raw { raw: text.into() }, "{text}");
+        assert_eq!(format_binding(&p, &binding, LayerStyle::Index), text);
+    }
+}
+
+#[test]
+fn the_picker_offers_what_the_firmware_supports() {
+    use kc_model::picker::{picker_items, PickerGroup};
+
+    let (p, go60) = rich_project();
+    let features = &go60.profile(&p.firmware).unwrap().capabilities;
+    let items = picker_items(&p, features);
+    let find = |label: &str| items.iter().find(|i| i.label == label);
+
+    assert_eq!(find("A").unwrap().binding, kp("A"));
+    assert_eq!(find("A").unwrap().group, PickerGroup::Basic);
+    assert_eq!(
+        find("mo Nav").unwrap().binding,
+        Binding::layer("mo", p.layers[1].id)
+    );
+    assert_eq!(
+        find("BT SEL 4").unwrap().binding,
+        command("bt", "BT_SEL", &[4])
+    );
+    assert_eq!(find("Left click").unwrap().group, PickerGroup::Mouse);
+    assert_eq!(find("Nav tap-dance").unwrap().group, PickerGroup::Custom);
+    assert!(find("Transparent").is_some() && find("Bootloader").is_some());
+    // MoErgo's status command is offered on the Go60; backlight is not.
+    assert!(find("RGB STATUS").is_some());
+    assert!(find("BL TOG").is_none());
+    // Multi-argument commands and parameterised behaviours need the inspector.
+    assert!(find("RGB COLOR HSB").is_none() && find("Magic").is_none());
+
+    let imprint = board("cyboard-imprint");
+    let plain = Project::new("Plain", &imprint);
+    let imprint_items = picker_items(&plain, &imprint.firmware[0].capabilities);
+    assert!(!imprint_items.iter().any(|i| i.label == "RGB STATUS"));
+
+    // Search matches names, aliases and descriptions, in any order.
+    let hits = |q: &str| items.iter().filter(|i| i.matches(q)).count();
+    assert!(find("Enter").unwrap().matches("ret"));
+    assert!(items
+        .iter()
+        .any(|i| i.description == "Play/Pause" && i.matches("pause play c_pp")));
+    assert!(find("BT SEL 2").unwrap().matches("bluetooth profile"));
+    assert_eq!(hits("zzzz"), 0);
+    assert_eq!(hits(""), items.len());
+    // Every assignable binding is valid for the board.
+    let mut all = p.clone();
+    for item in &items {
+        all.set_binding(all.layers[0].id, 0, item.binding.clone())
+            .unwrap();
+        assert_eq!(validate(&all, &go60), [], "{}", item.label);
+    }
+}
