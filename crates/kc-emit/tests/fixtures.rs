@@ -324,6 +324,21 @@ fn lighting_fixture(board: &Board) -> Project {
         .clone();
     let (base, second, third) = (p.layers[0].id, p.layers[1].id, p.layers[2].id);
     let keys = p.key_count;
+    // Until a board's LED positions are confirmed on hardware, its lighting
+    // fixture is the pattern used to check them: rows on the base layer,
+    // columns on the next.
+    if board
+        .halves
+        .iter()
+        .any(|h| h.leds.as_ref().is_some_and(|l| !l.verified))
+    {
+        p.name = format!("{} LED check", board.name);
+        let layout = board.layout(&p.layout).unwrap();
+        let (rows, columns) = kc_model::lighting::led_check(&layout.keys);
+        p.lighting_mut(base).unwrap().keys = rows;
+        p.lighting_mut(second).unwrap().keys = columns;
+        return p;
+    }
     {
         let lights = &mut p.lighting_mut(base).unwrap().keys;
         for (position, light) in lights.iter_mut().enumerate() {
@@ -389,7 +404,11 @@ fn fixtures_match_the_emitter() {
         ]
     });
     for (board, directory, project) in projects.chain(lit) {
-        assert_eq!(kc_model::validate(&project, board), [], "{directory}");
+        let errors: Vec<_> = kc_model::validate(&project, board)
+            .into_iter()
+            .filter(|p| p.severity == kc_model::Severity::Error)
+            .collect();
+        assert_eq!(errors, [], "{directory}");
         let mut files = kc_emit::generate(&project, board).unwrap();
         files.push(kc_emit::GeneratedFile {
             path: format!("project.{}", file::EXTENSION),

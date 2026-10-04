@@ -179,6 +179,11 @@ pub struct LightingBackend {
     /// keyboard start in it. Where it does not, the user reaches the
     /// effect once with the next-effect key and the keyboard remembers.
     pub start_effect: Option<u8>,
+    /// Whether the generated config must tell the firmware which key each
+    /// LED sits under, from this board definition's LED chains. False when
+    /// the firmware's own board files already do.
+    #[serde(default)]
+    pub led_map_overlay: bool,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]

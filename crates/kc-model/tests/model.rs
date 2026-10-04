@@ -1010,3 +1010,43 @@ fn lights_resolve_through_layers_and_follow_key_types() {
         "transparent keys inherit"
     );
 }
+
+#[test]
+fn led_check_patterns_and_unverified_maps() {
+    use kc_model::lighting::led_check;
+
+    let imprint = board("cyboard-imprint");
+    let keys = &imprint.layout(&imprint.default_layout).unwrap().keys;
+    let (rows, columns) = led_check(keys);
+    assert_eq!((rows.len(), columns.len()), (82, 82));
+    // The first twelve keys are one row; the thirteenth starts the next.
+    assert!(rows[..12].iter().all(|l| *l == rows[0]));
+    assert_ne!(rows[12], rows[0]);
+    // Keys in the same physical column share a colour down the board.
+    assert_eq!(columns[0], columns[12]);
+    assert_ne!(columns[0], columns[1]);
+
+    let mut p = Project::from_template("Check", &imprint);
+    let base = p.layers[0].id;
+    p.lighting_mut(base).unwrap().keys = rows;
+    // The stock firmware has no per-key lighting.
+    assert!(errors(&p, &imprint)
+        .iter()
+        .any(|e| e.contains("per-key lighting is not supported")));
+    p.firmware = "kc-zmk-0.3-perkey".into();
+    assert!(errors(&p, &imprint).is_empty());
+    let problems = validate(&p, &imprint);
+    assert!(problems
+        .iter()
+        .any(|w| w.message.contains("have not been confirmed on hardware")));
+    // Our firmware starts in the per-key effect, so no effect key is needed.
+    assert!(!problems
+        .iter()
+        .any(|w| w.message.contains("no key changes the lighting effect")));
+
+    // The LED map is only known for the 82-key layout.
+    p.layout = "physical_layout_imprint_number_row".into();
+    assert!(errors(&p, &imprint)
+        .iter()
+        .any(|e| e.contains("not available for this key layout")));
+}

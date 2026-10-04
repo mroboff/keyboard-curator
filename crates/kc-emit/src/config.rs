@@ -84,6 +84,23 @@ pub fn artifact_name(profile: &FirmwareProfile, side: Side) -> String {
     format!("{}_{side}", profile.config_name)
 }
 
+/// The name of the generated overlay that tells one half's firmware which
+/// key each of its LEDs sits under.
+pub fn led_overlay_name(profile: &FirmwareProfile, side: Side) -> String {
+    format!("{}_leds.overlay", artifact_name(profile, side))
+}
+
+/// The LED overlay for one half: the key position under each LED, and the
+/// real length of the LED chain.
+pub fn led_overlay(chain: &[usize]) -> String {
+    let lookup: Vec<String> = chain.iter().map(|p| format!("<{p}>")).collect();
+    format!(
+        "/* {NOTICE} */\n\n/ {{\n    underglow-layer {{\n        compatible = \"zmk,underglow-layer\";\n        pixel-lookup = {};\n    }};\n}};\n\n&led_strip {{\n    chain-length = <{}>;\n}};\n",
+        lookup.join(", "),
+        chain.len()
+    )
+}
+
 pub fn build(profile: &FirmwareProfile) -> String {
     let mut out = format!("# {NOTICE}\n---\ninclude:\n");
     for target in &profile.builds {
@@ -94,11 +111,17 @@ pub fn build(profile: &FirmwareProfile) -> String {
         if !target.snippets.is_empty() {
             out.push_str(&format!("    snippet: {}\n", target.snippets.join(";")));
         }
-        if !target.cmake_args.is_empty() {
-            out.push_str(&format!(
-                "    cmake-args: {}\n",
-                target.cmake_args.join(" ")
+        let mut cmake_args = target.cmake_args.clone();
+        if profile.lighting.as_ref().is_some_and(|l| l.led_map_overlay) {
+            // Relative to ZMK's app directory, which sits two levels below
+            // the config directory in every build layout.
+            cmake_args.push(format!(
+                "-DEXTRA_DTC_OVERLAY_FILE=../../config/{}",
+                led_overlay_name(profile, target.side)
             ));
+        }
+        if !cmake_args.is_empty() {
+            out.push_str(&format!("    cmake-args: {}\n", cmake_args.join(" ")));
         }
         out.push_str(&format!(
             "    artifact-name: {}\n",

@@ -399,6 +399,28 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
             |p| matches!(p, Param::Command { name, .. } if name == "RGB_EFF" || name == "RGB_EFR"),
         ))
     });
+    let needs_map = board
+        .profile(&project.firmware)
+        .and_then(|p| p.lighting.as_ref())
+        .is_some_and(|l| l.led_map_overlay);
+    if lit && needs_map {
+        let maps: Vec<_> = board
+            .halves
+            .iter()
+            .filter_map(|h| h.leds.as_ref())
+            .collect();
+        if maps.len() != board.halves.len() || maps.iter().any(|m| m.layout != project.layout) {
+            c.error(
+                &root,
+                "per-key lighting is not available for this key layout: the positions of its LEDs are not known",
+            );
+        } else if maps.iter().any(|m| !m.verified) {
+            c.warning(
+                &root,
+                "the LED positions for this keyboard have not been confirmed on hardware, so colours may land on the wrong keys",
+            );
+        }
+    }
     if lit && !starts_lit && !cycles {
         c.warning(
             &root,

@@ -76,3 +76,34 @@ pub fn by_key_type(project: &Project, layer: LayerId) -> Vec<KeyLight> {
         })
         .collect()
 }
+
+/// Six colours that are easy to tell apart on LEDs.
+const CHECK_COLORS: [Rgb; 6] = [
+    Rgb(0xFF, 0x00, 0x00),
+    Rgb(0xFF, 0xA0, 0x00),
+    Rgb(0x00, 0xFF, 0x00),
+    Rgb(0x00, 0xFF, 0xFF),
+    Rgb(0x00, 0x00, 0xFF),
+    Rgb(0xFF, 0x00, 0xFF),
+];
+
+/// Two lighting patterns for checking that LEDs are mapped to the right
+/// keys: one colour per row of the keymap, and one colour per column.
+/// With a correct map each row, then each column, is a single colour, and
+/// a key in the wrong colour is a key whose LED is mapped wrongly.
+pub fn led_check(keys: &[kc_boards::geometry::Key]) -> (Vec<KeyLight>, Vec<KeyLight>) {
+    let mut row = 0;
+    let mut last_x = i32::MIN;
+    let (mut rows, mut columns) = (Vec::new(), Vec::new());
+    for key in keys {
+        // A row ends where the layout steps back to the left.
+        if key.x < last_x {
+            row += 1;
+        }
+        last_x = key.x;
+        let column = (key.center().x.max(0.) / 100.) as usize;
+        rows.push(KeyLight::Color(CHECK_COLORS[row % CHECK_COLORS.len()]));
+        columns.push(KeyLight::Color(CHECK_COLORS[column % CHECK_COLORS.len()]));
+    }
+    (rows, columns)
+}

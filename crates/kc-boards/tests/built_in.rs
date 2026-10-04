@@ -78,6 +78,12 @@ fn imprint_halves_and_firmware() {
         .iter()
         .all(|h| !h.leds.as_ref().unwrap().verified));
 
+    let lit = imprint.profile("kc-zmk-0.3-perkey").unwrap();
+    assert!(lit.capabilities.contains(&Capability::PerKeyLighting));
+    let backend = lit.lighting.as_ref().unwrap();
+    assert!(backend.led_map_overlay && backend.start_effect == Some(4));
+    assert_eq!(lit.zmk.revision.len(), 40, "pinned to a commit");
+
     let profile = imprint.profile("cyboard-zmk-0.3").unwrap();
     assert_eq!(profile.zmk.revision, "v0.3.0");
     assert!(profile.capabilities.contains(&Capability::Studio));

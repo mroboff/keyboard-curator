@@ -53,7 +53,7 @@ pub fn generate(project: &Project, board: &Board) -> Result<Vec<GeneratedFile>, 
     let profile = profile(project, board)?;
     let name = &profile.config_name;
     let file = |path: String, contents: String| GeneratedFile { path, contents };
-    Ok(vec![
+    let mut files = vec![
         file(format!("config/{name}.keymap"), keymap(project, board)?),
         file(
             format!("config/{name}.conf"),
@@ -65,5 +65,15 @@ pub fn generate(project: &Project, board: &Board) -> Result<Vec<GeneratedFile>, 
             ".github/workflows/build.yml".into(),
             config::workflow(profile),
         ),
-    ])
+    ];
+    if profile.lighting.as_ref().is_some_and(|l| l.led_map_overlay) {
+        for half in &board.halves {
+            let chain = half.leds.as_ref().map_or(&[][..], |l| l.chain.as_slice());
+            files.push(file(
+                format!("config/{}", config::led_overlay_name(profile, half.side)),
+                config::led_overlay(chain),
+            ));
+        }
+    }
+    Ok(files)
 }

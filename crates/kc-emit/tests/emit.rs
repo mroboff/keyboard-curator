@@ -392,3 +392,45 @@ fn per_key_lighting_is_written_for_firmware_that_has_it() {
         Err(EmitError::Invalid(_))
     ));
 }
+
+#[test]
+fn the_imprint_lighting_firmware_gets_its_led_map_from_the_config() {
+    use kc_model::features::{KeyLight, Rgb};
+
+    let imprint = board("cyboard-imprint");
+    let mut project = Project::from_template("Lit", &imprint);
+    project.firmware = "kc-zmk-0.3-perkey".into();
+    let base = project.layers[0].id;
+    project.lighting_mut(base).unwrap().keys[0] = KeyLight::Color(Rgb(255, 0, 0));
+    let files = generate(&project, &imprint).unwrap();
+
+    let left = file(&files, "config/imprint_left_leds.overlay");
+    assert!(left.contains("pixel-lookup = <41>, <53>, <5>, <17>, <29>, <40>,"));
+    assert!(left.contains("&led_strip {\n    chain-length = <41>;\n};"));
+    assert_eq!(left.matches('<').count(), 41 + 1);
+    assert!(
+        file(&files, "config/imprint_right_leds.overlay").contains("pixel-lookup = <42>, <54>,")
+    );
+
+    let build = file(&files, "build.yaml");
+    assert!(build.contains(
+        "    cmake-args: -DCONFIG_ZMK_STUDIO=y -DEXTRA_DTC_OVERLAY_FILE=../../config/imprint_left_leds.overlay\n"
+    ));
+    assert!(build.contains(
+        "    cmake-args: -DEXTRA_DTC_OVERLAY_FILE=../../config/imprint_right_leds.overlay\n"
+    ));
+    assert!(file(&files, "config/west.yml")
+        .contains("url: https://github.com/mroboff/zmk\n      revision: ebb86151"));
+    // This firmware can start in the per-key effect.
+    let conf = file(&files, "config/imprint.conf");
+    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_EFF_START=4\n"));
+    assert!(conf.contains("CONFIG_ZMK_RGB_UNDERGLOW_ON_START=y\n"));
+
+    // The Go60's firmware carries its own LED map, so none is generated.
+    let go60 = board("moergo-go60");
+    let mut lit = Project::from_template("Lit", &go60);
+    lit.firmware = "moergo-zmk-perkey".into();
+    let files = generate(&lit, &go60).unwrap();
+    assert!(!files.iter().any(|f| f.path.ends_with(".overlay")));
+    assert!(!file(&files, "build.yaml").contains("EXTRA_DTC_OVERLAY_FILE"));
+}

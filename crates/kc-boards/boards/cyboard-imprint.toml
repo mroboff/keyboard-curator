@@ -111,6 +111,37 @@ side = "right"
 board = "assimilator-bt"
 shield = "imprint_right"
 
+# Upstream ZMK v0.3.0 with the community per-key lighting work applied; see
+# firmware/zmk-v0.3.0-per-key-lighting in this repository. The branch lives in
+# a fork and is pinned to a commit.
+[[firmware]]
+id = "kc-zmk-0.3-perkey"
+name = "ZMK v0.3.0 with per-key lighting (experimental)"
+zephyr = "3.5"
+config_name = "imprint"
+workflow = "zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3.0"
+zmk = { url = "https://github.com/mroboff/zmk", revision = "ebb86151d8bbcb697913110a6b71c95e29fd5151" }
+capabilities = ["studio", "rgb-underglow", "ext-power", "pointing", "per-key-lighting"]
+lighting = { transparent = true, start_effect = 4, led_map_overlay = true }
+
+[[firmware.modules]]
+name = "zmk-keyboards"
+url = "https://github.com/Cyboard-DigitalTailor/zmk-keyboards"
+revision = "v2026.07"
+import = "config/west.yml"
+
+[[firmware.builds]]
+side = "left"
+board = "assimilator-bt"
+shield = "imprint_left"
+snippets = ["studio-rpc-usb-uart"]
+cmake_args = ["-DCONFIG_ZMK_STUDIO=y"]
+
+[[firmware.builds]]
+side = "right"
+board = "assimilator-bt"
+shield = "imprint_right"
+
 [[layouts]]
 id = "physical_layout_imprint_function_row_full_bottom_row"
 name = "Imprint Function Row (5-Key Bottom Row)"
