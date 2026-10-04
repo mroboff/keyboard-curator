@@ -91,7 +91,10 @@ impl Checker<'_> {
         for param in params {
             match param {
                 Param::Layer(id) => self.layer(location, *id),
-                Param::Key(expr) if keycodes().get(&expr.key).is_none() => {
+                // `MACRO_PLACEHOLDER` stands for a macro's own parameter.
+                Param::Key(expr)
+                    if keycodes().get(&expr.key).is_none() && expr.key != "MACRO_PLACEHOLDER" =>
+                {
                     self.warning(location, format!("`{}` is not a known keycode", expr.key));
                 }
                 _ => {}

@@ -13,7 +13,7 @@ use kc_model::{file, Project};
 
 use crate::state::{default_project_dir, AppState, WindowFrame};
 use crate::workspace::Workspace;
-use crate::{CloseProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo};
+use crate::{CloseProject, ImportProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo};
 
 pub struct Shell {
     boards: Rc<Vec<Board>>,
@@ -124,6 +124,56 @@ impl Shell {
             let _ = this.update_in(cx, |this, window, cx| this.open_path(path, window, cx));
         })
         .detach();
+    }
+
+    /// Imports a `.keymap` file or a MoErgo Layout Editor export as a new,
+    /// unsaved project. The source file is never changed.
+    fn import(&mut self, _: &ImportProject, window: &mut Window, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Import".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            let _ = this.update_in(cx, |this, window, cx| this.import_path(path, window, cx));
+        })
+        .detach();
+    }
+
+    pub fn import_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        let imported = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|text| {
+                // A keymap's settings live in a `.conf` file beside it.
+                let conf = std::fs::read_to_string(path.with_extension("conf")).ok();
+                kc_import::import_file(
+                    &path.display().to_string(),
+                    &text,
+                    conf.as_deref(),
+                    &self.boards,
+                )
+                .map_err(|e| e.to_string())
+            });
+        match imported {
+            Ok((project, board, report)) => {
+                let board = self.boards[board].clone();
+                self.show(project, board, None, window, cx);
+                if let Some(workspace) = &self.workspace {
+                    workspace.update(cx, |w, cx| w.set_notice(report.summary(), cx));
+                }
+            }
+            Err(message) => {
+                self.error = Some(format!("Could not import {}: {message}", path.display()));
+                cx.notify();
+            }
+        }
     }
 
     fn save_as(&mut self, _: &SaveAs, window: &mut Window, cx: &mut Context<Self>) {
@@ -295,11 +345,21 @@ impl Shell {
             )
             .child(div().flex().gap_3().children(new_buttons))
             .child(
-                Button::new("open-project")
-                    .label("Open Project…")
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.open(&OpenProject, window, cx);
-                    })),
+                div()
+                    .flex()
+                    .gap_3()
+                    .child(Button::new("open-project").label("Open Project…").on_click(
+                        cx.listener(|this, _, window, cx| {
+                            this.open(&OpenProject, window, cx);
+                        }),
+                    ))
+                    .child(
+                        Button::new("import-project")
+                            .label("Import a Keymap…")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.import(&ImportProject, window, cx);
+                            })),
+                    ),
             )
             .when(!recent.is_empty(), |page| {
                 page.child(
@@ -341,6 +401,7 @@ impl Render for Shell {
             .key_context("Shell")
             .track_focus(&self.focus)
             .on_action(cx.listener(Self::open))
+            .on_action(cx.listener(Self::import))
             .on_action(cx.listener(Self::save))
             .on_action(cx.listener(Self::save_as))
             .on_action(cx.listener(Self::close_project))

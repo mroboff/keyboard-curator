@@ -20,6 +20,7 @@ actions!(
         Quit,
         NewProject,
         OpenProject,
+        ImportProject,
         CloseProject,
         Save,
         SaveAs,
@@ -59,6 +60,7 @@ fn menus() -> Vec<Menu> {
         Menu::new("File").items([
             MenuItem::action("New Project…", NewProject),
             MenuItem::action("Open…", OpenProject),
+            MenuItem::action("Import Keymap…", ImportProject),
             MenuItem::separator(),
             MenuItem::action("Save", Save),
             MenuItem::action("Save As…", SaveAs),
@@ -105,6 +107,7 @@ fn main() {
             KeyBinding::new("cmd-q", Quit, None),
             KeyBinding::new("cmd-n", NewProject, Some("Shell")),
             KeyBinding::new("cmd-o", OpenProject, Some("Shell")),
+            KeyBinding::new("cmd-i", ImportProject, Some("Shell")),
             KeyBinding::new("cmd-e", ExportConfig, Some("Workspace")),
             KeyBinding::new("cmd-c", Copy, Some("Workspace")),
             KeyBinding::new("cmd-v", Paste, Some("Workspace")),
@@ -146,9 +149,20 @@ fn main() {
         .expect("failed to open window");
 
         let _ = window.update(cx, |_, window, cx| {
-            // A project file given on the command line opens straight away.
+            // A project given on the command line opens straight away; a
+            // keymap or Layout Editor export is imported.
             if let Some(path) = std::env::args_os().nth(1) {
-                shell.update(cx, |shell, cx| shell.open_path(path.into(), window, cx));
+                let path = std::path::PathBuf::from(path);
+                let is_project = path
+                    .extension()
+                    .is_some_and(|e| e == kc_model::file::EXTENSION);
+                shell.update(cx, |shell, cx| {
+                    if is_project {
+                        shell.open_path(path, window, cx);
+                    } else {
+                        shell.import_path(path, window, cx);
+                    }
+                });
             }
             // Closing the window with unsaved changes asks first.
             window.on_window_should_close(cx, move |window, cx| {

@@ -239,3 +239,216 @@ fn conf_files_become_settings_and_extra_lines() {
         "CONFIG_ZMK_USB_LOGGING=y\nCONFIG_ZMK_SLEEP_ODD=maybe"
     );
 }
+
+/// A layout in the MoErgo Layout Editor's export format, using its
+/// shorthands and every section the importer reads.
+fn moergo_export() -> String {
+    let key =
+        |binding: &str| format!(r#"{{"value": "&kp", "params": [{{"value": "{binding}"}}]}}"#);
+    let mut base: Vec<String> = (0..60).map(|_| key("A")).collect();
+    base[0] = r#"{"value": "&kp", "params": [{"value": "LG", "params": [{"value": "LA", "params": [{"value": "K"}]}]}]}"#.into();
+    base[1] = r#"{"value": "&magic"}"#.into();
+    base[2] = r#"{"value": "&layer", "params": [{"value": 1}]}"#.into();
+    base[3] = r#"{"value": "&reset"}"#.into();
+    base[4] = r#"{"value": "&bt_2"}"#.into();
+    base[5] = r#"{"value": "&hrm", "params": [{"value": "LSHFT"}, {"value": "F"}]}"#.into();
+    base[6] = r#"{"value": "&hello"}"#.into();
+    base[7] = r#"{"value": "&mo", "params": [{"value": "1"}]}"#.into();
+    let layer = |keys: &[String]| format!("[{}]", keys.join(","));
+    let other: Vec<String> = (0..60)
+        .map(|_| r#"{"value": "&trans"}"#.to_string())
+        .collect();
+    format!(
+        r#"{{
+  "keyboard": "go60", "title": "My Go60", "layer_names": ["Base", "Magic"],
+  "layers": [{}, {}],
+  "holdTaps": [{{"name": "&hrm", "bindings": ["&kp", "&kp"], "tappingTermMs": 190,
+     "flavor": "balanced", "quickTapMs": 300, "requirePriorIdleMs": 100,
+     "holdTriggerOnRelease": true, "holdTriggerKeyPositions": [6, 7, 8]}}],
+  "macros": [{{"name": "&hello", "waitMs": 10, "tapMs": 20, "params": [],
+     "bindings": [{{"value": "&macro_press"}}, {{"value": "&kp", "params": [{{"value": "LSHFT"}}]}},
+                  {{"value": "&macro_tap"}}, {{"value": "&kp", "params": [{{"value": "H"}}]}},
+                  {{"value": "&macro_release"}}, {{"value": "&kp", "params": [{{"value": "LSHFT"}}]}}]}}],
+  "combos": [{{"name": "esc combo", "binding": {{"value": "&kp", "params": [{{"value": "ESC"}}]}},
+     "keyPositions": [13, 14], "timeoutMs": 50, "layers": [0]}}],
+  "inputListeners": [{{"code": "&cirque_rh_listener",
+     "inputProcessors": [{{"code": "&zip_xy_scaler", "params": [3, 1]}},
+                         {{"code": "&zip_xy_transform", "params": [["INPUT_TRANSFORM_Y_INVERT"]]}},
+                         {{"code": "&zip_click_to_right_click_mapper", "params": []}}],
+     "nodes": [{{"code": "layer_1", "layers": [1], "inputProcessors": [{{"code": "&zip_xy_scaler", "params": [9, 1]}}]}}]}}],
+  "config_parameters": [{{"paramName": "DEEP_SLEEP", "value": "y"}},
+                        {{"paramName": "DEEP_SLEEP_TIMEOUT_MS", "value": "900000"}},
+                        {{"paramName": "SOMETHING_NEW", "value": "1"}}],
+  "layout_parameters": {{"cirque_touch_sensitivity": "high"}},
+  "custom_defined_behaviors": "", "custom_devicetree": ""
+}}"#,
+        layer(&base),
+        layer(&other)
+    )
+}
+
+#[test]
+fn moergo_layout_editor_exports_import_with_their_shorthands_written_out() {
+    use kc_import::import_moergo;
+    use kc_model::behavior::{BehaviorKind, Flavor, MacroStep};
+    use kc_model::features::InputProcessor;
+    use kc_model::text::{format_binding, LayerStyle};
+
+    let go60 = board("moergo-go60");
+    let (project, report) = import_moergo(&moergo_export(), &go60).unwrap();
+    assert_eq!(project.name, "My Go60");
+    assert_eq!(report.layers, 2);
+    assert_eq!(report.raw_bindings, 0);
+    assert_eq!(report.combos, 1);
+
+    let base = &project.layers[0];
+    let show =
+        |position: usize| format_binding(&project, &base.bindings[position], LayerStyle::Index);
+    assert_eq!(show(0), "&kp LG(LA(K))");
+    // The editor's shorthands become the behaviours they stand for.
+    assert_eq!(show(1), "&magic 1 0");
+    assert_eq!(show(2), "&layer_td_1");
+    assert_eq!(show(3), "&sys_reset");
+    assert_eq!(show(4), "&bt_2");
+    assert_eq!(show(5), "&hrm LSHFT F");
+    assert_eq!(show(7), "&mo 1");
+
+    let behavior = |label: &str| {
+        &project
+            .behaviors
+            .iter()
+            .find(|b| b.label == label)
+            .unwrap_or_else(|| panic!("no &{label}"))
+            .kind
+    };
+    // Only what is used is brought in: Bluetooth profile 2 and what it needs.
+    assert!(matches!(behavior("magic"), BehaviorKind::HoldTap(_)));
+    assert!(matches!(
+        behavior("rgb_ug_status_macro"),
+        BehaviorKind::Macro(_)
+    ));
+    assert!(matches!(behavior("bt_select_2"), BehaviorKind::Macro(_)));
+    assert!(!project.behaviors.iter().any(|b| b.label == "bt_0"));
+    assert!(matches!(behavior("layer_td_1"), BehaviorKind::TapDance(t) if t.bindings.len() == 2));
+    let BehaviorKind::HoldTap(hrm) = behavior("hrm") else {
+        panic!("&hrm is a hold-tap");
+    };
+    assert_eq!(
+        (hrm.flavor, hrm.tapping_term_ms, hrm.quick_tap_ms),
+        (Flavor::Balanced, 190, Some(300))
+    );
+    assert_eq!(hrm.hold_trigger_key_positions, [6, 7, 8]);
+    assert!(hrm.hold_trigger_on_release);
+    let BehaviorKind::Macro(hello) = behavior("hello") else {
+        panic!("&hello is a macro");
+    };
+    assert_eq!((hello.wait_ms, hello.tap_ms), (Some(10), Some(20)));
+    assert!(matches!(
+        hello.steps.as_slice(),
+        [
+            MacroStep::Press(_),
+            MacroStep::Tap(_),
+            MacroStep::Release(_)
+        ]
+    ));
+
+    assert_eq!(project.combos[0].key_positions, [13, 14]);
+    assert_eq!(project.combos[0].layers, [project.layers[0].id]);
+    let pad = &project.pointing[0];
+    assert_eq!(pad.listener, "cirque_rh_listener");
+    assert!(matches!(
+        pad.processors[0],
+        InputProcessor::Scale {
+            multiplier: 3,
+            divisor: 1
+        }
+    ));
+    assert!(matches!(
+        pad.processors[1],
+        InputProcessor::Transform {
+            invert_y: true,
+            scroll: false,
+            ..
+        }
+    ));
+    assert!(
+        matches!(&pad.processors[2], InputProcessor::Raw(text) if text.contains("right_click"))
+    );
+    assert_eq!(pad.overrides[0].layers, [project.layers[1].id]);
+    assert!(project
+        .raw
+        .devicetree
+        .contains("zip_click_to_right_click_mapper:"));
+
+    assert_eq!(
+        project.settings["CONFIG_ZMK_SLEEP"],
+        SettingValue::Bool(true)
+    );
+    assert_eq!(
+        project.settings["CONFIG_ZMK_IDLE_SLEEP_TIMEOUT"],
+        SettingValue::Int(900000)
+    );
+    assert!(report.notes.iter().any(|n| n.contains("SOMETHING_NEW")));
+    assert!(report.notes.iter().any(|n| n.contains("sensitivity")));
+
+    // The result is a valid project that generates a config.
+    assert!(kc_emit::generate(&project, &go60).is_ok());
+    assert!(matches!(
+        import_moergo("{}", &go60),
+        Err(ImportError::NotAnExport(_))
+    ));
+    assert!(matches!(
+        import_moergo("nope", &go60),
+        Err(ImportError::NotAnExport(_))
+    ));
+}
+
+#[test]
+fn files_find_their_board() {
+    use kc_import::import_file;
+
+    let boards = kc_boards::built_in().unwrap();
+    let row = |keys: usize| vec!["&kp A"; keys].join(" ");
+    let keymap = |keys: usize, extra: &str| {
+        format!(
+            "/ {{ keymap {{ compatible = \"zmk,keymap\"; base {{ bindings = <{}>; }}; }}; }};\n{extra}",
+            row(keys)
+        )
+    };
+    let board_of = |name: &str, text: &str| {
+        let (project, index, _) = import_file(name, text, None, &boards).unwrap();
+        assert_eq!(boards[index].id, project.board);
+        project.board
+    };
+    // 82 keys can only be the Imprint.
+    assert_eq!(board_of("x.keymap", &keymap(82, "")), "cyboard-imprint");
+    // 60 keys fits both; the file's name or contents decide.
+    assert_eq!(board_of("go60.keymap", &keymap(60, "")), "moergo-go60");
+    assert_eq!(
+        board_of("imprint.keymap", &keymap(60, "")),
+        "cyboard-imprint"
+    );
+    assert_eq!(
+        board_of("x.keymap", &keymap(60, "&cirque_lh_listener { };")),
+        "moergo-go60"
+    );
+    // A Layout Editor export is recognised by being JSON.
+    assert_eq!(board_of("layout.json", &moergo_export()), "moergo-go60");
+
+    let (project, _, report) = import_file(
+        "config/go60.keymap",
+        &keymap(60, ""),
+        Some("CONFIG_ZMK_SLEEP=y\n"),
+        &boards,
+    )
+    .unwrap();
+    assert_eq!(project.name, "go60");
+    assert_eq!(
+        project.settings["CONFIG_ZMK_SLEEP"],
+        SettingValue::Bool(true)
+    );
+    assert!(report
+        .summary()
+        .starts_with("Imported 1 layer(s), 0 behavior(s) and 0 combo(s)."));
+    assert!(import_file("x.keymap", &keymap(7, ""), None, &boards).is_err());
+}

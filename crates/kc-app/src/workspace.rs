@@ -367,6 +367,12 @@ impl Workspace {
         self.editor.project()
     }
 
+    /// Shows a message in the bar above the keyboard.
+    pub fn set_notice(&mut self, notice: String, cx: &mut Context<Self>) {
+        self.notice = Some(notice);
+        cx.notify();
+    }
+
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }

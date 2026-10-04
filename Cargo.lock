@@ -3619,6 +3619,7 @@ dependencies = [
  "kc-build",
  "kc-emit",
  "kc-flash",
+ "kc-import",
  "kc-model",
  "kc-zmk",
  "serde",
@@ -3672,6 +3673,7 @@ dependencies = [
  "kc-emit",
  "kc-model",
  "kc-zmk",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

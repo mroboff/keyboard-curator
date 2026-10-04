@@ -15,6 +15,7 @@ workspace = true
 kc-boards = { version = "0.1.0", path = "../kc-boards" }
 kc-model = { version = "0.1.0", path = "../kc-model" }
 kc-zmk = { version = "0.1.0", path = "../kc-zmk" }
+serde_json = "1.0.151"
 thiserror = "2.0.21"
 
 [dev-dependencies]
