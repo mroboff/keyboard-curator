@@ -292,9 +292,34 @@ fn fixture(board: &Board) -> Project {
     if let Some(device) = board.pointing.get(1) {
         p.pointing.push(PointingConfig {
             listener: device.listener.clone(),
-            processors: vec![InputProcessor::TempLayer {
-                layer: mouse,
-                timeout_ms: 500,
+            processors: vec![
+                InputProcessor::RightClick,
+                InputProcessor::TempLayer {
+                    layer: mouse,
+                    timeout_ms: 500,
+                },
+            ],
+            overrides: vec![],
+        });
+    }
+    // The mouse keys, slower on one layer.
+    if features.contains(&Feature::Pointing) {
+        p.pointing.push(PointingConfig {
+            listener: "mmv_input_listener".into(),
+            processors: vec![],
+            overrides: vec![PointingOverride {
+                layers: vec![nav],
+                processors: vec![InputProcessor::Scale {
+                    multiplier: 1,
+                    divisor: 4,
+                }],
+            }],
+        });
+        p.pointing.push(PointingConfig {
+            listener: "msc_input_listener".into(),
+            processors: vec![InputProcessor::ScrollScale {
+                multiplier: 3,
+                divisor: 2,
             }],
             overrides: vec![],
         });

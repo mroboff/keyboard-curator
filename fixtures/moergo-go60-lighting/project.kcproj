@@ -545,11 +545,7 @@
     },
     {
       "listener": "cirque_lh_listener",
-      "processors": [
-        "to_scroll",
-        {"scale": {"multiplier": 1, "divisor": 8}},
-        {"raw": "<&zip_click_to_right_click_mapper>"}
-      ],
+      "processors": ["to_scroll", {"scale": {"multiplier": 1, "divisor": 8}}, "right_click"],
       "overrides": [{"layers": [5], "processors": [{"scale": {"multiplier": 3, "divisor": 1}}]}]
     }
   ],
@@ -757,10 +753,6 @@
     }
   ],
   "settings": {},
-  "raw": {
-    "behaviors": "",
-    "devicetree": "#include <zephyr/dt-bindings/input/input-event-codes.h>\n\n/ {\n    input_processors {\n        zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {\n            compatible = \"zmk,input-processor-code-mapper\";\n            #input-processor-cells = <0>;\n            type = <INPUT_EV_KEY>;\n            map = <INPUT_BTN_0 INPUT_BTN_1>;\n        };\n    };\n};",
-    "conf": ""
-  },
+  "raw": {"behaviors": "", "devicetree": "", "conf": ""},
   "next_id": 18
 }

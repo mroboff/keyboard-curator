@@ -84,6 +84,9 @@ fn mods(mods: &[kc_zmk::Modifier]) -> String {
 
 fn behavior(w: &mut Writer, def: &BehaviorDef) {
     let cells = def.kind.param_count();
+    for line in def.description.lines().filter(|l| !l.trim().is_empty()) {
+        w.line(2, &format!("// {}", line.trim()));
+    }
     w.line(2, &format!("{}: {} {{", def.label, def.label));
     let compatible = match &def.kind {
         BehaviorKind::HoldTap(_) => "zmk,behavior-hold-tap",
@@ -247,6 +250,10 @@ fn grid(keys: &[Key], cells: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// The label of the input processor that makes a click a right click.
+/// ZMK does not ship one, so the keymap defines it when it is used.
+const RIGHT_CLICK_MAPPER: &str = "zip_click_to_right_click_mapper";
+
 fn processor(w: &Writer, processor: &InputProcessor) -> String {
     match processor {
         InputProcessor::Scale {
@@ -255,7 +262,14 @@ fn processor(w: &Writer, processor: &InputProcessor) -> String {
         } => {
             format!("<&zip_xy_scaler {multiplier} {divisor}>")
         }
+        InputProcessor::ScrollScale {
+            multiplier,
+            divisor,
+        } => {
+            format!("<&zip_scroll_scaler {multiplier} {divisor}>")
+        }
         InputProcessor::ToScroll => "<&zip_xy_to_scroll_mapper>".to_string(),
+        InputProcessor::RightClick => format!("<&{RIGHT_CLICK_MAPPER}>"),
         InputProcessor::Transform {
             invert_x,
             invert_y,
@@ -370,6 +384,19 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
         includes.push("input/processors.dtsi");
         includes.push("dt-bindings/zmk/input_transform.h");
     }
+    // Unless custom devicetree already defines it.
+    let right_click = project
+        .pointing
+        .iter()
+        .flat_map(|d| d.all_processors())
+        .any(|p| *p == InputProcessor::RightClick)
+        && !project
+            .raw
+            .devicetree
+            .contains(&format!("{RIGHT_CLICK_MAPPER}:"));
+    if right_click {
+        includes.push("zephyr/dt-bindings/input/input-event-codes.h");
+    }
     for include in includes {
         w.line(0, &format!("#include <{include}>"));
     }
@@ -424,6 +451,18 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
             w.line(3, ">;");
             w.line(2, "};");
         }
+        w.line(1, "};");
+        w.line(0, "");
+    }
+
+    if right_click {
+        w.line(1, "input_processors {");
+        w.line(2, &format!("{RIGHT_CLICK_MAPPER}: {RIGHT_CLICK_MAPPER} {{"));
+        w.line(3, "compatible = \"zmk,input-processor-code-mapper\";");
+        w.line(3, "#input-processor-cells = <0>;");
+        w.line(3, "type = <INPUT_EV_KEY>;");
+        w.line(3, "map = <INPUT_BTN_0 INPUT_BTN_1>;");
+        w.line(2, "};");
         w.line(1, "};");
         w.line(0, "");
     }
@@ -545,8 +584,11 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
             w.line(1, &format!("override_{index} {{"));
             let layers = w.layers(&layer_override.layers);
             w.line(2, &format!("layers = <{layers}>;"));
-            let processors = list(&w, &layer_override.processors);
-            w.line(2, &format!("input-processors = {processors};"));
+            // With none, movement is passed on as it is on these layers.
+            if !layer_override.processors.is_empty() {
+                let processors = list(&w, &layer_override.processors);
+                w.line(2, &format!("input-processors = {processors};"));
+            }
             w.line(1, "};");
         }
         w.line(0, "};");

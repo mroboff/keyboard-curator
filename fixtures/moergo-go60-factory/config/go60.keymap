@@ -9,6 +9,7 @@
 #include <dt-bindings/zmk/pointing.h>
 #include <input/processors.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #define LAYER_Base 0
 #define LAYER_Keypad 1
@@ -17,6 +18,15 @@
 #define LAYER_Factory 4
 
 / {
+    input_processors {
+        zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {
+            compatible = "zmk,input-processor-code-mapper";
+            #input-processor-cells = <0>;
+            type = <INPUT_EV_KEY>;
+            map = <INPUT_BTN_0 INPUT_BTN_1>;
+        };
+    };
+
     behaviors {
         magic: magic {
             compatible = "zmk,behavior-hold-tap";
@@ -179,18 +189,5 @@
     override_0 {
         layers = <LAYER_Factory>;
         input-processors = <&zip_xy_scaler 3 1>;
-    };
-};
-
-#include <zephyr/dt-bindings/input/input-event-codes.h>
-
-/ {
-    input_processors {
-        zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {
-            compatible = "zmk,input-processor-code-mapper";
-            #input-processor-cells = <0>;
-            type = <INPUT_EV_KEY>;
-            map = <INPUT_BTN_0 INPUT_BTN_1>;
-        };
     };
 };

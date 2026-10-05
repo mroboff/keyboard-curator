@@ -35,6 +35,8 @@ pub struct ConditionalLayer {
 pub enum InputProcessor {
     /// Scale pointer movement by `multiplier / divisor`.
     Scale { multiplier: u32, divisor: u32 },
+    /// Scale scrolling by `multiplier / divisor`.
+    ScrollScale { multiplier: u32, divisor: u32 },
     /// Turn pointer movement into scrolling.
     ToScroll,
     /// Flip or swap axes. `scroll` applies it to scrolling instead of movement.
@@ -46,6 +48,8 @@ pub enum InputProcessor {
     },
     /// Activate a layer while the device is in use.
     TempLayer { layer: LayerId, timeout_ms: u32 },
+    /// Turn the device's click into a right click.
+    RightClick,
     /// Processor text the model does not understand, kept verbatim.
     Raw(String),
 }
@@ -91,6 +95,8 @@ pub struct PointingProfile {
     pub invert_x: bool,
     pub invert_y: bool,
     pub swap_xy: bool,
+    /// Whether the device's click is a right click.
+    pub right_click: bool,
     /// A layer to activate while the device is in use, and for how long
     /// after it stops.
     pub auto_layer: Option<(LayerId, u32)>,
@@ -104,22 +110,32 @@ impl Default for PointingProfile {
             invert_x: false,
             invert_y: false,
             swap_xy: false,
+            right_click: false,
             auto_layer: None,
         }
     }
 }
 
 impl PointingProfile {
-    /// The input processors that give this behaviour.
-    pub fn to_processors(self) -> Vec<InputProcessor> {
+    /// The input processors that give this behaviour. `native_scroll` says
+    /// that the device reports scrolling itself, as the mouse scroll keys
+    /// do, so its speed and direction are those of scrolling.
+    pub fn to_processors(self, native_scroll: bool) -> Vec<InputProcessor> {
         let mut out = Vec::new();
-        if self.speed != (1, 1) {
+        let (multiplier, divisor) = self.speed;
+        if self.speed != (1, 1) && native_scroll {
+            out.push(InputProcessor::ScrollScale {
+                multiplier,
+                divisor,
+            });
+        } else if self.speed != (1, 1) {
             out.push(InputProcessor::Scale {
-                multiplier: self.speed.0,
-                divisor: self.speed.1,
+                multiplier,
+                divisor,
             });
         }
-        if self.scroll {
+        let scroll = self.scroll && !native_scroll;
+        if scroll {
             out.push(InputProcessor::ToScroll);
         }
         if self.invert_x || self.invert_y || self.swap_xy {
@@ -127,8 +143,11 @@ impl PointingProfile {
                 invert_x: self.invert_x,
                 invert_y: self.invert_y,
                 swap_xy: self.swap_xy,
-                scroll: self.scroll,
+                scroll: scroll || native_scroll,
             });
+        }
+        if self.right_click {
+            out.push(InputProcessor::RightClick);
         }
         if let Some((layer, timeout_ms)) = self.auto_layer {
             out.push(InputProcessor::TempLayer { layer, timeout_ms });
@@ -136,43 +155,55 @@ impl PointingProfile {
         out
     }
 
-    /// Reads a processor list back, when it is one the editor could have
-    /// produced. Anything else (raw processors, repeats) is left to the
-    /// raw view.
-    pub fn from_processors(processors: &[InputProcessor]) -> Option<Self> {
+    /// Reads a processor list back, when it is one these settings can
+    /// describe. Anything else (raw processors, repeats, a processor
+    /// acting on something the device is not producing at that point) is
+    /// left to the raw view.
+    pub fn from_processors(processors: &[InputProcessor], native_scroll: bool) -> Option<Self> {
         let mut profile = Self::default();
-        let (mut scaled, mut transformed) = (false, None);
+        // What the reports are at this point in the list.
+        let mut scrolling = native_scroll;
+        let (mut scaled, mut transformed) = (false, false);
         for processor in processors {
             match processor {
                 InputProcessor::Scale {
                     multiplier,
                     divisor,
-                } if !scaled => {
+                } if !scaled && !scrolling => {
                     profile.speed = (*multiplier, *divisor);
                     scaled = true;
                 }
-                InputProcessor::ToScroll if !profile.scroll => profile.scroll = true,
+                InputProcessor::ScrollScale {
+                    multiplier,
+                    divisor,
+                } if !scaled && scrolling => {
+                    profile.speed = (*multiplier, *divisor);
+                    scaled = true;
+                }
+                InputProcessor::ToScroll if !scrolling => {
+                    profile.scroll = true;
+                    scrolling = true;
+                }
+                // Reversing movement before it becomes scrolling is the
+                // same as reversing the scrolling.
                 InputProcessor::Transform {
                     invert_x,
                     invert_y,
                     swap_xy,
                     scroll,
-                } if transformed.is_none() => {
+                } if !transformed && *scroll == scrolling => {
                     (profile.invert_x, profile.invert_y, profile.swap_xy) =
                         (*invert_x, *invert_y, *swap_xy);
-                    transformed = Some(*scroll);
+                    transformed = true;
                 }
+                InputProcessor::RightClick if !profile.right_click => profile.right_click = true,
                 InputProcessor::TempLayer { layer, timeout_ms } if profile.auto_layer.is_none() => {
                     profile.auto_layer = Some((*layer, *timeout_ms));
                 }
                 _ => return None,
             }
         }
-        // A transform has to act on what the device produces.
-        match transformed {
-            Some(scroll) if scroll != profile.scroll => None,
-            _ => Some(profile),
-        }
+        Some(profile)
     }
 }
 
@@ -309,15 +340,15 @@ mod tests {
             auto_layer: Some((LayerId(4), 500)),
             ..PointingProfile::default()
         };
-        let processors = scroller.to_processors();
+        let processors = scroller.to_processors(false);
         assert_eq!(processors.len(), 4);
         assert_eq!(
-            PointingProfile::from_processors(&processors),
+            PointingProfile::from_processors(&processors, false),
             Some(scroller)
         );
-        assert_eq!(PointingProfile::default().to_processors(), []);
+        assert_eq!(PointingProfile::default().to_processors(false), []);
         assert_eq!(
-            PointingProfile::from_processors(&[]),
+            PointingProfile::from_processors(&[], false),
             Some(PointingProfile::default())
         );
         // The Imprint's factory scroller, in the vendor's own order.
@@ -334,14 +365,18 @@ mod tests {
                 scroll: true,
             },
         ];
-        assert!(PointingProfile::from_processors(&factory).is_some_and(|p| p.scroll && p.invert_y));
+        assert!(PointingProfile::from_processors(&factory, false)
+            .is_some_and(|p| p.scroll && p.invert_y));
         // Lists the editor could not have written are left alone.
         assert_eq!(
-            PointingProfile::from_processors(&[InputProcessor::Raw("<&x>".into())]),
+            PointingProfile::from_processors(&[InputProcessor::Raw("<&x>".into())], false),
             None
         );
         assert_eq!(
-            PointingProfile::from_processors(&[InputProcessor::ToScroll, InputProcessor::ToScroll]),
+            PointingProfile::from_processors(
+                &[InputProcessor::ToScroll, InputProcessor::ToScroll],
+                false
+            ),
             None
         );
         let mismatched = [InputProcessor::Transform {
@@ -350,7 +385,56 @@ mod tests {
             swap_xy: false,
             scroll: true,
         }];
-        assert_eq!(PointingProfile::from_processors(&mismatched), None);
+        assert_eq!(PointingProfile::from_processors(&mismatched, false), None);
+    }
+
+    #[test]
+    fn pointing_profiles_read_vendor_orders_and_scrolling_devices() {
+        // MoErgo's scrolling touchpad reverses movement before turning it
+        // into scrolling, and makes its click a right click.
+        let touchpad = [
+            InputProcessor::Scale {
+                multiplier: 11,
+                divisor: 12,
+            },
+            InputProcessor::Transform {
+                invert_x: false,
+                invert_y: true,
+                swap_xy: false,
+                scroll: false,
+            },
+            InputProcessor::ToScroll,
+            InputProcessor::RightClick,
+            InputProcessor::TempLayer {
+                layer: LayerId(3),
+                timeout_ms: 250,
+            },
+        ];
+        let profile = PointingProfile::from_processors(&touchpad, false).unwrap();
+        assert!(profile.scroll && profile.invert_y && profile.right_click);
+        assert_eq!(profile.speed, (11, 12));
+        assert_eq!(profile.auto_layer, Some((LayerId(3), 250)));
+        // Written back, the same settings read the same.
+        assert_eq!(
+            PointingProfile::from_processors(&profile.to_processors(false), false),
+            Some(profile)
+        );
+
+        // The mouse scroll keys report scrolling, so their speed is a
+        // scroll scale and a pointer scale would do nothing.
+        let fast = [InputProcessor::ScrollScale {
+            multiplier: 3,
+            divisor: 1,
+        }];
+        let profile = PointingProfile::from_processors(&fast, true).unwrap();
+        assert_eq!((profile.speed, profile.scroll), ((3, 1), false));
+        assert_eq!(profile.to_processors(true), fast);
+        assert_eq!(PointingProfile::from_processors(&fast, false), None);
+        let pointer = [InputProcessor::Scale {
+            multiplier: 3,
+            divisor: 1,
+        }];
+        assert_eq!(PointingProfile::from_processors(&pointer, true), None);
     }
 
     #[test]

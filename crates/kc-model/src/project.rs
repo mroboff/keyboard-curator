@@ -453,6 +453,7 @@ impl Project {
             id,
             label,
             name: name.into(),
+            description: String::new(),
             kind,
         });
         Ok(id)

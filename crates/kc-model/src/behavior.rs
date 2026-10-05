@@ -14,6 +14,10 @@ pub struct BehaviorDef {
     pub label: String,
     /// The name shown in the app.
     pub name: String,
+    /// What the behaviour is for, in the user's words. Written above it in
+    /// the generated keymap as a comment.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
     pub kind: BehaviorKind,
 }
 

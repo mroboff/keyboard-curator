@@ -1069,6 +1069,16 @@ impl Workspace {
                             |this, _, window, cx| this.delete_behavior(window, cx),
                         ))),
                 )
+                .when(!def.description.is_empty(), |form| {
+                    form.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(section_title("DESCRIPTION", cx))
+                            .child(div().text_sm().text_color(muted).child(def.description.clone())),
+                    )
+                })
                 .child(body)
             }
         };

@@ -197,16 +197,13 @@ fn pointing(p: &mut Project, board: &str) {
         processors: vec![
             InputProcessor::ToScroll,
             scale(1, 8),
-            InputProcessor::Raw("<&zip_click_to_right_click_mapper>".into()),
+            InputProcessor::RightClick,
         ],
         overrides: vec![PointingOverride {
             layers: vec![factory],
             processors: vec![scale(3, 1)],
         }],
     });
-    // The left pad's tap is turned into a right click by a processor the
-    // editor does not model, so it is carried as devicetree.
-    p.raw.devicetree = "#include <zephyr/dt-bindings/input/input-event-codes.h>\n\n/ {\n    input_processors {\n        zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {\n            compatible = \"zmk,input-processor-code-mapper\";\n            #input-processor-cells = <0>;\n            type = <INPUT_EV_KEY>;\n            map = <INPUT_BTN_0 INPUT_BTN_1>;\n        };\n    };\n};".into();
 }
 
 fn build(board: &Board, vendor: &str) -> Result<Project, Error> {

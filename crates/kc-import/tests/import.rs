@@ -4,8 +4,11 @@ use std::path::PathBuf;
 
 use kc_boards::Board;
 use kc_import::{import_conf, import_keymap, ImportError};
-use kc_model::features::SettingValue;
-use kc_model::{file, Binding, Project, Severity};
+use kc_model::behavior::BehaviorKind;
+use kc_model::features::{
+    InputProcessor, PointingConfig, PointingOverride, PointingProfile, RawBlocks, SettingValue,
+};
+use kc_model::{file, Binding, LayerId, Param, Project, Severity};
 
 fn board(id: &str) -> Board {
     kc_boards::built_in()
@@ -78,8 +81,9 @@ fn the_go60_factory_keymap_imports_to_the_factory_template() {
     assert_eq!(report.layers, 5);
     assert_eq!(report.behaviors, 12);
     assert_eq!(report.raw_bindings, 0);
-    // The only thing not modelled is the tap-to-right-click processor.
-    assert_eq!(report.raw_blocks, ["input_processors"]);
+    // Everything in it is modelled, the tap-to-right-click processor too.
+    assert_eq!(report.raw_blocks, [] as [&str; 0]);
+    assert_eq!(report.notes, [] as [&str; 0]);
 
     let names = |p: &Project| p.layers.iter().map(|l| l.name.clone()).collect::<Vec<_>>();
     assert_eq!(names(&imported), names(&template));
@@ -98,15 +102,8 @@ fn the_go60_factory_keymap_imports_to_the_factory_template() {
             .collect::<Vec<_>>()
     };
     assert_eq!(text(&imported), text(&template));
-    assert_eq!(imported.pointing.len(), 2);
-    assert!(imported
-        .raw
-        .devicetree
-        .contains("zip_click_to_right_click_mapper"));
-    assert!(imported
-        .raw
-        .devicetree
-        .starts_with("#include <zephyr/dt-bindings/input/input-event-codes.h>"));
+    assert_eq!(imported.pointing, template_pointing(&imported, &template));
+    assert_eq!(imported.raw, template.raw);
 
     let errors: Vec<_> = kc_model::validate(&imported, &go60)
         .into_iter()
@@ -115,6 +112,36 @@ fn the_go60_factory_keymap_imports_to_the_factory_template() {
     assert_eq!(errors, []);
     // And it generates a keymap again.
     assert!(kc_emit::generate(&imported, &go60).is_ok());
+}
+
+/// The template's pointing settings, with its layer IDs replaced by the
+/// imported project's for the layers of the same name.
+fn template_pointing(imported: &Project, template: &Project) -> Vec<PointingConfig> {
+    let layer = |id: LayerId| {
+        let name = &template.layer(id).unwrap().name;
+        imported.layers.iter().find(|l| l.name == *name).unwrap().id
+    };
+    let mut pointing = template.pointing.clone();
+    for device in &mut pointing {
+        for layer_override in &mut device.overrides {
+            for id in &mut layer_override.layers {
+                *id = layer(*id);
+            }
+        }
+        for processor in device.processors_mut() {
+            if let InputProcessor::TempLayer { layer: id, .. } = processor {
+                *id = layer(*id);
+            }
+        }
+    }
+    // The order devices are listed in is the file's.
+    pointing.sort_by_key(|d| {
+        imported
+            .pointing
+            .iter()
+            .position(|i| i.listener == d.listener)
+    });
+    pointing
 }
 
 #[test]
@@ -126,6 +153,9 @@ fn what_cannot_be_read_is_kept_and_reported() {
 #define MY_KEY LC(A)
 #define HRM(a, b) &mt a b
 #include "my_helpers.dtsi"
+#ifdef MY_SWITCH
+#include "never.dtsi"
+#endif
 / {{
     behaviors {{
         odd: odd {{
@@ -175,7 +205,8 @@ fn what_cannot_be_read_is_kept_and_reported() {
         .devicetree
         .contains("#include \"my_helpers.dtsi\""));
     assert!(report.raw_blocks.contains(&"leds".to_string()));
-    assert!(report.notes.iter().any(|n| n.contains("HRM")));
+    assert!(!project.raw.devicetree.contains("never.dtsi"));
+    assert!(report.notes.iter().any(|n| n.contains("MY_SWITCH")));
     assert!(report.notes.iter().any(|n| n.contains("60 binding(s)")));
 }
 
@@ -371,14 +402,9 @@ fn moergo_layout_editor_exports_import_with_their_shorthands_written_out() {
             ..
         }
     ));
-    assert!(
-        matches!(&pad.processors[2], InputProcessor::Raw(text) if text.contains("right_click"))
-    );
+    assert_eq!(pad.processors[2], InputProcessor::RightClick);
     assert_eq!(pad.overrides[0].layers, [project.layers[1].id]);
-    assert!(project
-        .raw
-        .devicetree
-        .contains("zip_click_to_right_click_mapper:"));
+    assert_eq!(project.raw.devicetree, "");
 
     assert_eq!(
         project.settings["CONFIG_ZMK_SLEEP"],
@@ -451,4 +477,119 @@ fn files_find_their_board() {
         .summary()
         .starts_with("Imported 1 layer(s), 0 behavior(s) and 0 combo(s)."));
     assert!(import_file("x.keymap", &keymap(7, ""), None, &boards).is_err());
+}
+
+/// A keymap downloaded from MoErgo's Layout Editor: helper macros with
+/// arguments, behaviours chosen by `#ifdef`, mouse-key listeners, a
+/// right-click processor and described behaviours. All of it is read into
+/// the model, and nothing is left as text.
+#[test]
+fn moergo_layout_editor_keymaps_import_completely() {
+    let go60 = board("moergo-go60");
+    let source = include_str!("data/moergo-editor.keymap");
+    let (project, report) = import_keymap("Editor", source, &go60).unwrap();
+    assert_eq!(report.raw_blocks, [] as [&str; 0]);
+    assert_eq!(report.notes, [] as [&str; 0]);
+    assert_eq!(report.raw_bindings, 0);
+    assert_eq!(project.raw, RawBlocks::default());
+    assert_eq!((report.layers, report.combos), (4, 1));
+
+    let behavior = |label: &str| {
+        project
+            .behaviors
+            .iter()
+            .find(|b| b.label == label)
+            .unwrap_or_else(|| panic!("no &{label}"))
+    };
+    // `ZMK_TD_LAYER(lower, LAYER_Lower)` is a tap-dance once expanded, and
+    // `LAYER_Lower` is the default the file gives it.
+    let base = project.layers[0].id;
+    let BehaviorKind::TapDance(lower) = &behavior("lower").kind else {
+        panic!("&lower is not a tap-dance");
+    };
+    assert_eq!(
+        lower.bindings,
+        [
+            Binding::new("mo", vec![Param::Layer(base)]),
+            Binding::new("to", vec![Param::Layer(base)])
+        ]
+    );
+    // ZMK's `bt.h` defines `BT_DISC_CMD`, so the `#ifdef` branch is the one
+    // read, and each behaviour is defined once.
+    assert!(matches!(behavior("bt_0").kind, BehaviorKind::TapDance(_)));
+    assert!(matches!(
+        behavior("bt_select_0").kind,
+        BehaviorKind::Macro(_)
+    ));
+    assert_eq!(report.behaviors, 8);
+    assert_eq!(project.behaviors.len(), 8);
+    // The comment above a behaviour is its description.
+    assert_eq!(
+        behavior("AS_HT_v2_TKZ").description,
+        "AutoShift Helper - &AS main macro is chained to &AS_HT hold tap and &AS_Shifted macro. More: https://github.com/nickcoutsos/keymap-editor/wiki/Autoshift-using-ZMK-behaviors"
+    );
+    assert_eq!(
+        behavior("mod_tab_v1_TKZ").description,
+        "mod_tab_switcher - TailorKey"
+    );
+    assert_eq!(behavior("magic").description, "");
+
+    let (mouse, slow) = (project.layers[1].id, project.layers[2].id);
+    let device = |listener: &str| {
+        project
+            .pointing
+            .iter()
+            .find(|d| d.listener == listener)
+            .unwrap_or_else(|| panic!("no {listener}"))
+    };
+    assert_eq!(project.pointing.len(), 4);
+    let keys = device("mmv_input_listener");
+    assert_eq!(keys.processors, []);
+    assert_eq!(
+        keys.overrides,
+        [PointingOverride {
+            layers: vec![slow],
+            processors: vec![InputProcessor::Scale {
+                multiplier: 1,
+                divisor: 9
+            }]
+        }]
+    );
+    assert_eq!(
+        device("msc_input_listener").overrides[0].processors,
+        [InputProcessor::ScrollScale {
+            multiplier: 1,
+            divisor: 9
+        }]
+    );
+    let left = device("cirque_lh_listener");
+    assert_eq!(left.processors[3], InputProcessor::RightClick);
+    let profile = PointingProfile::from_processors(&left.processors, false).unwrap();
+    assert!(profile.scroll && profile.invert_y && profile.right_click);
+    assert_eq!(profile.speed, (11, 12));
+    assert_eq!(profile.auto_layer, Some((mouse, 250)));
+    assert!(PointingProfile::from_processors(&left.overrides[0].processors, false).is_some());
+
+    let problems = kc_model::validate(&project, &go60);
+    assert_eq!(problems, []);
+
+    // The keymap written from it defines the right-click processor and
+    // each behaviour once, keeps the descriptions, and reads back the same.
+    let keymap = kc_emit::keymap(&project, &go60).unwrap();
+    for once in [
+        "bt_0: bt_0 {",
+        "lower: lower {",
+        "zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {",
+        "#include <zephyr/dt-bindings/input/input-event-codes.h>",
+        "// mod_tab_switcher - TailorKey",
+        "&msc_input_listener {",
+    ] {
+        assert_eq!(keymap.matches(once).count(), 1, "{once}");
+    }
+    let (again, report) = import_keymap("Editor", &keymap, &go60).unwrap();
+    assert_eq!(report.raw_blocks, [] as [&str; 0]);
+    assert_eq!(
+        without_combo_ids(&kc_emit::keymap(&again, &go60).unwrap()),
+        without_combo_ids(&keymap)
+    );
 }

@@ -33,6 +33,19 @@ struct Importer<'a> {
     source: &'a Source,
     project: Project,
     report: Report,
+    /// Labels of input processors the file defines that make a click a
+    /// right click.
+    right_click: Vec<String>,
+}
+
+/// Whether an input processor node is a code mapper that turns the first
+/// button into the second: a click into a right click.
+fn is_right_click_mapper(node: &Node) -> bool {
+    let cells = |prop: &str| node.prop(prop).map(dts::tokens_in).unwrap_or_default();
+    node.string("compatible") == Some("zmk,input-processor-code-mapper")
+        && cells("#input-processor-cells") == ["0"]
+        && cells("type") == ["INPUT_EV_KEY"]
+        && cells("map") == ["INPUT_BTN_0", "INPUT_BTN_1"]
 }
 
 impl Importer<'_> {
@@ -276,7 +289,12 @@ impl Importer<'_> {
                 let label = node.label().unwrap_or(&node.name).to_string();
                 match self.behavior_kind(node) {
                     Some(kind) => match self.project.add_behavior(label.clone(), label, kind) {
-                        Ok(_) => self.report.behaviors += 1,
+                        Ok(id) => {
+                            self.report.behaviors += 1;
+                            if let Ok(def) = self.project.behavior_mut(id) {
+                                def.description = node.comment.clone();
+                            }
+                        }
                         Err(_) => deferred.push(node),
                     },
                     None => deferred.push(node),
@@ -342,7 +360,23 @@ impl Importer<'_> {
                 },
                 _ => raw(),
             },
+            Some("&zip_scroll_scaler") => match (number(1), number(2)) {
+                (Some(multiplier), Some(divisor)) => InputProcessor::ScrollScale {
+                    multiplier,
+                    divisor,
+                },
+                _ => raw(),
+            },
             Some("&zip_xy_to_scroll_mapper") => InputProcessor::ToScroll,
+            Some(label)
+                if tokens.len() == 1
+                    && self
+                        .right_click
+                        .iter()
+                        .any(|l| label.strip_prefix('&') == Some(l)) =>
+            {
+                InputProcessor::RightClick
+            }
             Some(node @ ("&zip_xy_transform" | "&zip_scroll_transform")) => {
                 let flags = tokens.get(1).map(String::as_str).unwrap_or_default();
                 InputProcessor::Transform {
@@ -576,6 +610,12 @@ pub fn import_keymap(
             layers: layers.len(),
             ..Report::default()
         },
+        right_click: section("input_processors")
+            .iter()
+            .flat_map(|n| n.children.iter())
+            .filter(|n| is_right_click_mapper(n))
+            .filter_map(|n| n.label().map(str::to_string))
+            .collect(),
     };
 
     let behavior_nodes: Vec<&Node> = section("behaviors")
@@ -624,7 +664,13 @@ pub fn import_keymap(
     }
 
     // Everything else is kept as written.
-    let listeners: Vec<&str> = board.pointing.iter().map(|d| d.listener.as_str()).collect();
+    // The mouse keys have listeners on every firmware, whatever the board.
+    let listeners: Vec<&str> = board
+        .pointing
+        .iter()
+        .map(|d| d.listener.as_str())
+        .chain(kc_zmk::pointing::MOUSE_KEY_LISTENERS.iter().map(|l| l.0))
+        .collect();
     for node in &source.nodes {
         if node.name == "/" {
             for child in node
@@ -632,6 +678,24 @@ pub fn import_keymap(
                 .iter()
                 .filter(|c| !UNDERSTOOD.contains(&c.name.as_str()))
             {
+                // Right-click mappers are part of the pointing settings;
+                // any other input processor is kept as written.
+                if child.name == "input_processors" {
+                    let other: Vec<&str> = child
+                        .children
+                        .iter()
+                        .filter(|n| !is_right_click_mapper(n) || n.label().is_none())
+                        .map(|n| n.text.as_str())
+                        .collect();
+                    if !other.is_empty() {
+                        importer.report.raw_blocks.push(child.name.clone());
+                        importer.project.raw.devicetree.push_str(&format!(
+                            "/ {{\n    input_processors {{\n        {}\n    }};\n}};\n",
+                            other.join("\n        ")
+                        ));
+                    }
+                    continue;
+                }
                 importer.report.raw_blocks.push(child.name.clone());
                 importer
                     .project
@@ -670,16 +734,11 @@ pub fn import_keymap(
     } = importer;
     project.raw.behaviors = project.raw.behaviors.trim_end().to_string();
     project.raw.devicetree = project.raw.devicetree.trim_end().to_string();
-    if !source.macros.is_empty() {
+    if !source.unknown_tests.is_empty() {
         report.notes.push(format!(
-            "The file defines macros with arguments ({}), which are not expanded. Bindings that use them are kept as text.",
-            source.macros.join(", ")
+            "The file chooses what to include by whether {} is defined. Nothing the app knows defines it, so it was taken as not defined.",
+            source.unknown_tests.join(", ")
         ));
-    }
-    if source.conditionals {
-        report.notes.push(
-            "The file has #if blocks, which are not evaluated: every branch was read.".to_string(),
-        );
     }
     if report.raw_bindings > 0 {
         report.notes.push(format!(

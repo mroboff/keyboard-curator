@@ -9,6 +9,7 @@
 #include <dt-bindings/zmk/pointing.h>
 #include <input/processors.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #define LAYER_Base 0
 #define LAYER_Nav 1
@@ -16,6 +17,15 @@
 #define LAYER_Mouse 3
 
 / {
+    input_processors {
+        zip_click_to_right_click_mapper: zip_click_to_right_click_mapper {
+            compatible = "zmk,input-processor-code-mapper";
+            #input-processor-cells = <0>;
+            type = <INPUT_EV_KEY>;
+            map = <INPUT_BTN_0 INPUT_BTN_1>;
+        };
+    };
+
     behaviors {
         hml: hml {
             compatible = "zmk,behavior-hold-tap";
@@ -180,5 +190,16 @@
 };
 
 &cirque_rh_listener {
-    input-processors = <&zip_temp_layer LAYER_Mouse 500>;
+    input-processors = <&zip_click_to_right_click_mapper>, <&zip_temp_layer LAYER_Mouse 500>;
+};
+
+&mmv_input_listener {
+    override_0 {
+        layers = <LAYER_Nav>;
+        input-processors = <&zip_xy_scaler 1 4>;
+    };
+};
+
+&msc_input_listener {
+    input-processors = <&zip_scroll_scaler 3 2>;
 };

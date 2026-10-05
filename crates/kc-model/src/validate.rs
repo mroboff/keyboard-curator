@@ -203,6 +203,23 @@ impl Checker<'_> {
     }
 }
 
+/// The labels of the nodes custom devicetree defines, as in
+/// `label: name {`.
+fn raw_labels_in(text: &str) -> Vec<String> {
+    let word = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    text.split('{')
+        .filter_map(|head| {
+            // The statement that opens the node is what follows the last
+            // `;` or `}` before its brace.
+            let head = head.rsplit([';', '}']).next()?.trim();
+            let (label, name) = head.split_once(':')?;
+            let (label, name) = (label.trim(), name.trim());
+            (word(label) && !name.is_empty() && !name.contains(char::is_whitespace))
+                .then(|| label.to_string())
+        })
+        .collect()
+}
+
 /// Every problem in `project`, checked against the board it targets.
 pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
     let root = Location::Project;
@@ -304,6 +321,27 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         }
     }
 
+    // Custom devicetree is not checked, except that it must not define a
+    // label a second time: the firmware would not build.
+    let mut raw_labels = HashSet::new();
+    for label in raw_labels_in(&project.raw.behaviors)
+        .into_iter()
+        .chain(raw_labels_in(&project.raw.devicetree))
+    {
+        let clash = project.behaviors.iter().find(|b| b.label == label);
+        if let Some(def) = clash {
+            c.error(
+                &Location::Behavior(def.id),
+                format!("`&{label}` is also defined in the custom devicetree"),
+            );
+        } else if !raw_labels.insert(label.clone()) {
+            c.error(
+                &root,
+                format!("the custom devicetree defines `{label}` more than once"),
+            );
+        }
+    }
+
     for combo in &project.combos {
         let location = Location::Combo(combo.id);
         if combo.key_positions.len() < 2 {
@@ -330,7 +368,9 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
             "pointing device configuration",
             Some(Feature::Pointing),
         );
-        if !listeners.contains(&device.listener.as_str()) {
+        // The mouse keys have listeners on every firmware with pointing.
+        let mouse_keys = kc_zmk::pointing::mouse_key_listener(&device.listener).is_some();
+        if !mouse_keys && !listeners.contains(&device.listener.as_str()) {
             c.error(
                 &location,
                 format!("the board has no pointing device `{}`", device.listener),

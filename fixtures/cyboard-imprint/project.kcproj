@@ -497,7 +497,17 @@
     },
     {
       "listener": "trackball_peripheral_listener",
-      "processors": [{"temp_layer": {"layer": 4, "timeout_ms": 500}}],
+      "processors": ["right_click", {"temp_layer": {"layer": 4, "timeout_ms": 500}}],
+      "overrides": []
+    },
+    {
+      "listener": "mmv_input_listener",
+      "processors": [],
+      "overrides": [{"layers": [2], "processors": [{"scale": {"multiplier": 1, "divisor": 4}}]}]
+    },
+    {
+      "listener": "msc_input_listener",
+      "processors": [{"scroll_scale": {"multiplier": 3, "divisor": 2}}],
       "overrides": []
     }
   ],

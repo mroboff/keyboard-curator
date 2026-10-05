@@ -328,6 +328,49 @@ fn validation_reports_what_the_firmware_would_reject() {
 }
 
 #[test]
+fn mouse_keys_are_pointing_devices_on_every_board() {
+    for id in ["moergo-go60", "cyboard-imprint"] {
+        let board = board(id);
+        let mut p = Project::new("Mine", &board);
+        p.pointing.push(PointingConfig {
+            listener: "msc_input_listener".into(),
+            processors: vec![InputProcessor::ScrollScale {
+                multiplier: 1,
+                divisor: 2,
+            }],
+            overrides: vec![],
+        });
+        assert_eq!(errors(&p, &board), [] as [&str; 0], "{id}");
+        p.pointing[0].listener = "some_other_listener".into();
+        assert_eq!(errors(&p, &board).len(), 1, "{id}");
+    }
+}
+
+#[test]
+fn custom_devicetree_may_not_define_a_label_twice() {
+    let (mut p, go60) = rich_project();
+    assert!(errors(&p, &go60).is_empty());
+    // A behaviour the project already has.
+    p.raw.behaviors =
+        "hello: hello {\n    compatible = \"zmk,behavior-macro\";\n    bindings = <&kp A>;\n};"
+            .into();
+    let found = errors(&p, &go60);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].contains("`&hello` is also defined"), "{found:?}");
+    // The same label twice within the custom text.
+    p.raw.behaviors = "mine: mine { a = <1>; };".into();
+    p.raw.devicetree = "/ {\n    x {\n        mine: other { b = \"c: d\"; };\n    };\n};".into();
+    let found = errors(&p, &go60);
+    assert_eq!(found.len(), 1);
+    assert!(
+        found[0].contains("defines `mine` more than once"),
+        "{found:?}"
+    );
+    p.raw.devicetree = "&mine { a = <2>; };\n/ { y: z { }; };".into();
+    assert!(errors(&p, &go60).is_empty());
+}
+
+#[test]
 fn undo_and_redo_restore_exact_states() {
     let (project, _) = rich_project();
     let original = project.clone();
