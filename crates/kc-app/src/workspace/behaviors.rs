@@ -260,12 +260,8 @@ impl Workspace {
 
     fn render_behavior_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted, accent, hover) = (
-            theme.border,
-            theme.muted_foreground,
-            theme.primary,
-            theme.secondary,
-        );
+        let (border, muted, hover) = (theme.border, theme.muted_foreground, theme.secondary);
+        let accent_ink = crate::theme::look(cx).colors.accent_text;
         let rows = self
             .project()
             .behaviors
@@ -300,7 +296,10 @@ impl Workspace {
                             ),
                     )
                     // What kind of behavior it is, set apart from its name.
-                    .child(badge(def.kind.name(), if active { accent } else { muted }))
+                    .child(badge(
+                        def.kind.name(),
+                        if active { accent_ink } else { muted },
+                    ))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.behavior = Some(id);
                         this.slot = None;

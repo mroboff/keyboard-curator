@@ -55,15 +55,26 @@ actions!(
         AppearanceSystem,
         AppearanceLight,
         AppearanceDark,
-        ThemeGallery
+        ThemeGallery,
+        ThemeGoldenGate,
+        ThemeArena,
+        ThemeCurator,
+        ThemeBench
     ]
 );
 
 /// The menu bar. The theme and appearance in use are checked in the View
 /// menu.
 fn menus(theme: ThemeId, appearance: Appearance) -> Vec<Menu> {
-    let themes = ThemeId::ALL.map(|id| match id {
-        ThemeId::Gallery => MenuItem::action(id.name(), ThemeGallery).checked(theme == id),
+    let themes = ThemeId::ALL.map(|id| {
+        let item = match id {
+            ThemeId::Gallery => MenuItem::action(id.name(), ThemeGallery),
+            ThemeId::GoldenGate => MenuItem::action(id.name(), ThemeGoldenGate),
+            ThemeId::Arena => MenuItem::action(id.name(), ThemeArena),
+            ThemeId::Curator => MenuItem::action(id.name(), ThemeCurator),
+            ThemeId::Bench => MenuItem::action(id.name(), ThemeBench),
+        };
+        item.checked(theme == id)
     });
     vec![
         Menu::new("Keyboard Curator").items([
@@ -156,8 +167,14 @@ fn main() {
         ]);
         let state = AppState::load();
         theme::init(cx);
-        theme::apply(state.theme, state.appearance, cx);
-        cx.set_menus(menus(state.theme, state.appearance));
+        // For checking a theme from the command line: KC_THEME=arena. It
+        // is not remembered.
+        let shown = std::env::var("KC_THEME")
+            .ok()
+            .and_then(|name| serde_json::from_value(serde_json::Value::String(name)).ok())
+            .unwrap_or(state.theme);
+        theme::apply(shown, state.appearance, cx);
+        cx.set_menus(menus(shown, state.appearance));
         catalog::start(cx);
 
         let bounds = match state.window {

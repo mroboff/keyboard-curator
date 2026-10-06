@@ -32,14 +32,28 @@ pub enum Appearance {
 pub enum ThemeId {
     #[default]
     Gallery,
+    GoldenGate,
+    Arena,
+    Curator,
+    Bench,
 }
 
 impl ThemeId {
-    pub const ALL: [ThemeId; 1] = [ThemeId::Gallery];
+    pub const ALL: [ThemeId; 5] = [
+        ThemeId::Gallery,
+        ThemeId::GoldenGate,
+        ThemeId::Arena,
+        ThemeId::Curator,
+        ThemeId::Bench,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             ThemeId::Gallery => "Gallery",
+            ThemeId::GoldenGate => "Golden Gate",
+            ThemeId::Arena => "Arena",
+            ThemeId::Curator => "Curator",
+            ThemeId::Bench => "Bench",
         }
     }
 }

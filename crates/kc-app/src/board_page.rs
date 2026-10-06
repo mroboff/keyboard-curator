@@ -966,7 +966,7 @@ impl BoardPage {
     /// Which firmware the board runs, family by family.
     fn render_firmware(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
-        let (muted, accent, warning) = (theme.muted_foreground, theme.primary, theme.warning);
+        let (muted, warning) = (theme.muted_foreground, theme.warning);
         let mut page = div()
             .flex()
             .flex_col()
@@ -1010,7 +1010,12 @@ impl BoardPage {
                                 .items_center()
                                 .gap_2()
                                 .child(display(profile.name.clone(), 18., cx))
-                                .when(chosen, |row| row.child(badge("Selected", accent)))
+                                .when(chosen, |row| {
+                                    row.child(badge(
+                                        "Selected",
+                                        crate::theme::look(cx).colors.accent_text,
+                                    ))
+                                })
                                 .when(profile.experimental, |row| {
                                     row.child(badge("Experimental", warning))
                                 }),

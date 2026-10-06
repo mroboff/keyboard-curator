@@ -127,6 +127,7 @@ pub struct Palette {
     pub layer_text: Hsla,
     pub system_key: Hsla,
     pub system_lip: Hsla,
+    pub system_text: Hsla,
     pub caps: CapStyle,
 }
 
@@ -147,6 +148,7 @@ impl Palette {
             layer_text: colors.layer_text,
             system_key: colors.system_key,
             system_lip: colors.system_lip,
+            system_text: colors.system_text,
             caps: look.caps,
         }
     }
@@ -161,6 +163,7 @@ impl Palette {
             layer_text: palette.text,
             system_key: palette.key,
             system_lip: palette.lip,
+            system_text: palette.text,
             ..palette
         }
     }
@@ -324,7 +327,7 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         let ghost = matches!(cap.kind, KeycapKind::Transparent | KeycapKind::None);
         let (fill, lip, legend) = match cap.kind {
             KeycapKind::Layer => (palette.layer_key, palette.layer_lip, palette.layer_text),
-            KeycapKind::System => (palette.system_key, palette.system_lip, palette.text),
+            KeycapKind::System => (palette.system_key, palette.system_lip, palette.system_text),
             _ if ghost => (palette.key.opacity(0.35), palette.lip, palette.muted_text),
             _ => (palette.key, palette.lip, palette.text),
         };
@@ -395,7 +398,9 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             _ => None,
         };
         let text = own.unwrap_or(legend);
-        let muted_text = own.map_or(palette.muted_text, |text| text.opacity(0.7));
+        // What holding does is the legend's color, quieter: the theme's
+        // muted text is chosen for the page, not for a keycap.
+        let muted_text = text.opacity(0.7);
         let max_width = unit * 0.86;
         match &cap.hold {
             Some(hold) => {

@@ -301,6 +301,7 @@ pub(crate) fn tab(
         .font_family(crate::theme::look(cx).display_font.clone())
         .text_size(px(15.))
         .cursor_pointer()
+        .child(cased(label, crate::theme::look(cx).uppercase))
         .when(active, |tab| {
             tab.border_color(accent)
                 .text_color(text)
@@ -312,7 +313,6 @@ pub(crate) fn tab(
                 .font_weight(FontWeight::MEDIUM)
                 .hover(|tab| tab.text_color(text))
         })
-        .child(label.into())
 }
 
 /// The title of a page.
@@ -414,12 +414,23 @@ pub(crate) fn card(chosen: bool, cx: &App) -> Div {
 
 /// Text in the theme's display face, for headings and figures.
 pub(crate) fn display(text: impl Into<SharedString>, size: f32, cx: &App) -> Div {
+    let look = crate::theme::look(cx);
     div()
-        .font_family(crate::theme::look(cx).display_font.clone())
+        .font_family(look.display_font.clone())
         .font_weight(FontWeight::SEMIBOLD)
         .text_size(px(size))
         .line_height(relative(1.05))
-        .child(text.into())
+        .child(cased(text, look.uppercase))
+}
+
+/// Text as a theme sets its headings: as written, or in capitals.
+fn cased(text: impl Into<SharedString>, uppercase: bool) -> SharedString {
+    let text: SharedString = text.into();
+    if uppercase {
+        text.to_uppercase().into()
+    } else {
+        text
+    }
 }
 
 /// The surface a keyboard is shown on.
@@ -1324,6 +1335,7 @@ impl Workspace {
             theme.primary,
             theme.secondary,
         );
+        let accent_ink = crate::theme::look(cx).colors.accent_text;
         // While a layer is dragged, the list is drawn in the order a drop
         // would give: the other layers have moved out of the way, and a
         // shaded slot shows where the dragged layer would land. A drag let
@@ -1373,7 +1385,7 @@ impl Workspace {
                     .child(
                         display(index.to_string(), 13., cx)
                             .w_5()
-                            .when(active, |d| d.text_color(accent)),
+                            .when(active, |d| d.text_color(accent_ink)),
                     )
                     .child(display(layer.name.clone(), 17., cx).flex_1().min_w_0())
                     .when_some(layer.color, |row, tag| {
@@ -1890,7 +1902,10 @@ impl Workspace {
                                     cap.hold,
                                     |face, hold| {
                                         face.child(
-                                            div().text_size(px(9.)).text_color(muted).child(hold),
+                                            div()
+                                                .text_size(px(9.))
+                                                .text_color(colors.key_text.opacity(0.7))
+                                                .child(hold),
                                         )
                                     },
                                 )
@@ -2502,9 +2517,12 @@ impl Workspace {
             Some(path) => path.display().to_string(),
             None => "Not saved yet".to_string(),
         };
+        let look = crate::theme::look(cx);
+        let mono = theme.mono_font_family.clone();
         div()
             .flex()
             .justify_between()
+            .gap_4()
             .px_4()
             .py_1()
             .border_t_1()
@@ -2515,6 +2533,13 @@ impl Workspace {
                 "{} {}  ·  {summary}",
                 self.board.vendor, self.board.name
             ))
+            .when(look.hints && self.mode == Mode::Keyboard, |status| {
+                status.child(
+                    div()
+                        .font_family(mono)
+                        .child("←↑↓→ move   ⇧←→ add to selection   ⌫ clear   ⌘[ ⌘] layer   ⌘C ⌘V copy, paste   ⌘Z undo"),
+                )
+            })
             .child(location)
     }
 }

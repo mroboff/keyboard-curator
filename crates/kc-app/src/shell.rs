@@ -74,6 +74,9 @@ pub struct Shell {
     /// That board's keyboard as it is drawn, kept so that its layout is
     /// read from disk once and not on every frame.
     exhibit: Option<Exhibit>,
+    /// How the window was last set to sit on the desktop, to change it
+    /// only when the theme asks for something else.
+    window_style: Option<crate::theme::WindowStyle>,
     focus: FocusHandle,
 }
 
@@ -162,6 +165,7 @@ impl Shell {
             applying: false,
             shown: None,
             exhibit: None,
+            window_style: None,
             focus,
         }
     }
@@ -1103,6 +1107,7 @@ impl Shell {
             theme.primary_foreground,
             theme.success,
         );
+        let accent_ink = crate::theme::look(cx).colors.accent_text;
         let shown = self.shown_keyboard(cx);
         let library = self.library.read(cx);
         let count = library.keyboards().iter().count();
@@ -1135,7 +1140,7 @@ impl Shell {
                     .child(
                         display(format!("{:02}", index + 1), 14., cx)
                             .w_7()
-                            .text_color(if current { accent } else { muted }),
+                            .text_color(if current { accent_ink } else { muted }),
                     )
                     .child(
                         div()
@@ -1568,6 +1573,9 @@ impl Shell {
             .pt_10()
             .pb_8()
             .gap_4()
+            .when_some(crate::theme::backdrop(cx), |page, backdrop| {
+                page.child(backdrop)
+            })
             // A theme may set the shown board's number, very large and
             // barely there, behind everything.
             .when_some(place.filter(|_| figures), |page, place| {
@@ -1599,6 +1607,16 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.workspace.is_none() && self.page.is_none() {
             self.prepare_exhibit(cx);
+        }
+        // A glass theme has the window see-through and blurs what is
+        // behind it; any other has it solid.
+        let style = crate::theme::look(cx).window;
+        if self.window_style != Some(style) {
+            window.set_background_appearance(match style {
+                crate::theme::WindowStyle::Opaque => WindowBackgroundAppearance::Opaque,
+                crate::theme::WindowStyle::Blurred => WindowBackgroundAppearance::Blurred,
+            });
+            self.window_style = Some(style);
         }
         let board_name = self
             .page
@@ -1637,6 +1655,18 @@ impl Render for Shell {
             .on_action(cx.listener(Self::export))
             .on_action(cx.listener(|this, _: &crate::ThemeGallery, _, cx| {
                 this.set_theme(ThemeId::Gallery, cx);
+            }))
+            .on_action(cx.listener(|this, _: &crate::ThemeGoldenGate, _, cx| {
+                this.set_theme(ThemeId::GoldenGate, cx);
+            }))
+            .on_action(cx.listener(|this, _: &crate::ThemeArena, _, cx| {
+                this.set_theme(ThemeId::Arena, cx);
+            }))
+            .on_action(cx.listener(|this, _: &crate::ThemeCurator, _, cx| {
+                this.set_theme(ThemeId::Curator, cx);
+            }))
+            .on_action(cx.listener(|this, _: &crate::ThemeBench, _, cx| {
+                this.set_theme(ThemeId::Bench, cx);
             }))
             .on_action(cx.listener(|this, _: &crate::AppearanceSystem, _, cx| {
                 this.set_appearance(Appearance::System, cx);

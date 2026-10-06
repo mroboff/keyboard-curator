@@ -10,6 +10,7 @@
       "name": "Gallery Light",
       "mode": "light",
       "font.family": "Figtree",
+      "mono_font.family": "Menlo",
       "radius": 10,
       "radius.lg": 16,
       "colors": {
@@ -56,7 +57,10 @@
       "layer_text": "#FFFFFF",
       "plinth": "#F8F9F7",
       "plinth_border": "#D9DDD9",
-      "wash": "#E2E5E2"
+      "wash": "#E2E5E2",
+      "accent_text": "#2B3BD6",
+      "system_text": "#14171A",
+      "mark": "#E2E5E2"
     }
   },
   "dark": {
@@ -65,6 +69,7 @@
       "name": "Gallery Dark",
       "mode": "dark",
       "font.family": "Figtree",
+      "mono_font.family": "Menlo",
       "radius": 10,
       "radius.lg": 16,
       "colors": {
@@ -111,7 +116,10 @@
       "layer_text": "#FFFFFF",
       "plinth": "#1D2024",
       "plinth_border": "#2B3035",
-      "wash": "#1D2024"
+      "wash": "#1D2024",
+      "accent_text": "#8C9AFF",
+      "system_text": "#ECEEEC",
+      "mark": "#1D2024"
     }
   }
 }
