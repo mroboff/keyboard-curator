@@ -1,5 +1,5 @@
-//! App state that outlives a session: the keyboard last worked on and the
-//! window frame. Saved keyboards themselves live in the library.
+//! App state that outlives a session: the keyboard last worked on, the
+//! window frame and whether the app is light or dark. Saved keyboards themselves live in the library.
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +15,17 @@ pub struct WindowFrame {
     pub height: f32,
 }
 
+/// Whether the app is drawn light or dark.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Appearance {
+    /// As the computer is set, changing when it does.
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppState {
@@ -24,6 +35,7 @@ pub struct AppState {
     /// keyboard's own list when it is next opened.
     pub recent: Vec<PathBuf>,
     pub window: Option<WindowFrame>,
+    pub appearance: Appearance,
     /// The folder the ZMK config was last exported to.
     pub export_dir: Option<PathBuf>,
     /// Firmware repository folders from before they were kept per
@@ -84,6 +96,20 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn appearance_is_remembered_and_starts_as_the_systems() {
+        // State saved before there was a choice follows the system.
+        let earlier: AppState = serde_json::from_str(r#"{"recent": []}"#).unwrap();
+        assert_eq!(earlier.appearance, Appearance::System);
+        let state = AppState {
+            appearance: Appearance::Dark,
+            ..AppState::default()
+        };
+        let text = serde_json::to_string(&state).unwrap();
+        assert!(text.contains(r#""appearance":"dark""#), "{text}");
+        assert_eq!(serde_json::from_str::<AppState>(&text).unwrap(), state);
+    }
 
     #[test]
     fn earlier_recent_projects_are_forgotten_one_at_a_time() {

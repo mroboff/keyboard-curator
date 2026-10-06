@@ -174,6 +174,31 @@ fn key_path(key: &Key, view: Viewport, stroke: Option<Pixels>) -> Option<Path<Pi
 }
 
 /// Paints `text` centered on `center`, shrinking it to fit `max_width`.
+/// How bright a color looks, from 0 (black) to 1 (white).
+fn brightness(color: Hsla) -> f32 {
+    let Rgba { r, g, b, .. } = color.into();
+    let linear = |c: f32| {
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+}
+
+/// Black or white, whichever reads better on `fill`. A fill that is partly
+/// see-through is judged as it looks over `behind`.
+fn text_on(fill: Hsla, behind: Hsla) -> Hsla {
+    let seen = fill.a * brightness(fill) + (1. - fill.a) * brightness(behind);
+    // Where black and white contrast equally with a color.
+    if seen > 0.179 {
+        black()
+    } else {
+        white()
+    }
+}
+
 fn paint_text(
     text: &str,
     center: Point<Pixels>,
@@ -282,26 +307,26 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         }
 
         let center = view.to_screen(key.center());
-        let text = if ghost {
-            palette.muted_text
-        } else {
-            palette.text
+        // A key drawn in a color of its own (a light's color, a key being
+        // tested) takes whichever of black and white reads on that color;
+        // the theme's text color is only right on the theme's own fills.
+        let own = match lit {
+            Some(Some(color)) => Some(text_on(color, palette.key)),
+            _ => None,
         };
+        let text = match own {
+            Some(text) => text,
+            None if ghost => palette.muted_text,
+            None => palette.text,
+        };
+        let muted_text = own.map_or(palette.muted_text, |text| text.opacity(0.7));
         let max_width = unit * 0.86;
         match &cap.hold {
             Some(hold) => {
                 let up = point(center.x, center.y - unit * 0.14);
                 let down = point(center.x, center.y + unit * 0.24);
                 paint_text(&cap.legend, up, unit * 0.26, max_width, text, window, cx);
-                paint_text(
-                    hold,
-                    down,
-                    unit * 0.17,
-                    max_width,
-                    palette.muted_text,
-                    window,
-                    cx,
-                );
+                paint_text(hold, down, unit * 0.17, max_width, muted_text, window, cx);
             }
             None => paint_text(
                 &cap.legend,
@@ -396,4 +421,32 @@ pub fn keyboard(frame: Frame, on_bounds: impl Fn(Bounds<Pixels>) + 'static) -> i
         move |bounds, _, window, cx| paint(&frame, bounds, window, cx),
     )
     .size_full()
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::{black, hsla, rgb, white, Hsla};
+
+    use super::text_on;
+
+    #[test]
+    fn text_on_a_colored_key_is_whichever_of_black_and_white_reads() {
+        let (light, dark): (Hsla, Hsla) = (rgb(0xf4f4f5).into(), rgb(0x18181b).into());
+        for behind in [light, dark] {
+            for (fill, text) in [
+                (0xffff00, black()),
+                (0xffffff, black()),
+                (0x00ff00, black()),
+                (0x0000ff, white()),
+                (0x000000, white()),
+                (0x7f1d1d, white()),
+            ] {
+                assert_eq!(text_on(rgb(fill).into(), behind), text, "{fill:06x}");
+            }
+        }
+        // A fill that is barely there is judged by what shows through it.
+        let faint = hsla(0., 0., 0.5, 0.05);
+        assert_eq!(text_on(faint, light), black());
+        assert_eq!(text_on(faint, dark), white());
+    }
 }

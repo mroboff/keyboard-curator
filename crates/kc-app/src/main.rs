@@ -1,6 +1,7 @@
 //! The Keyboard Curator desktop application. This is the only crate allowed
 //! to depend on the GUI framework; everything else stays UI-independent.
 
+mod appearance;
 mod board_page;
 mod canvas;
 mod catalog;
@@ -16,7 +17,7 @@ use std::rc::Rc;
 use gpui_kit::*;
 
 use crate::shell::Shell;
-use crate::state::AppState;
+use crate::state::{AppState, Appearance};
 
 actions!(
     keyboard_curator,
@@ -50,11 +51,15 @@ actions!(
         ShowFlash,
         ExportConfig,
         OpenHelp,
-        OpenZmkDocs
+        OpenZmkDocs,
+        AppearanceSystem,
+        AppearanceLight,
+        AppearanceDark
     ]
 );
 
-fn menus() -> Vec<Menu> {
+/// The menu bar. The appearance in use is checked in the View menu.
+fn menus(appearance: Appearance) -> Vec<Menu> {
     vec![
         Menu::new("Keyboard Curator").items([
             MenuItem::os_submenu("Services", SystemMenuType::Services),
@@ -90,6 +95,17 @@ fn menus() -> Vec<Menu> {
             MenuItem::separator(),
             MenuItem::action("Advance After Assigning", ToggleAutoAdvance),
             MenuItem::action("Type to Assign", ToggleTypeToAssign),
+            MenuItem::separator(),
+            MenuItem::submenu(
+                Menu::new("Appearance").items([
+                    MenuItem::action("Match System", AppearanceSystem)
+                        .checked(appearance == Appearance::System),
+                    MenuItem::action("Light", AppearanceLight)
+                        .checked(appearance == Appearance::Light),
+                    MenuItem::action("Dark", AppearanceDark)
+                        .checked(appearance == Appearance::Dark),
+                ]),
+            ),
         ]),
         Menu::new("Help").items([
             MenuItem::action("Keyboard Curator Help", OpenHelp),
@@ -132,10 +148,11 @@ fn main() {
             KeyBinding::new("cmd-z", Undo, Some("Shell")),
             KeyBinding::new("cmd-shift-z", Redo, Some("Shell")),
         ]);
-        cx.set_menus(menus());
+        let state = AppState::load();
+        appearance::apply(state.appearance, cx);
+        cx.set_menus(menus(state.appearance));
         catalog::start(cx);
 
-        let state = AppState::load();
         let bounds = match state.window {
             Some(frame) => Bounds {
                 origin: point(px(frame.x), px(frame.y)),

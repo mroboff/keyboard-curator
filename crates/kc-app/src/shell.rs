@@ -17,7 +17,7 @@ use kc_model::{file, Carried, Keyboard, KeyboardId, Project};
 
 use crate::board_page::{BoardEvent, BoardPage, Section};
 use crate::library::Library;
-use crate::state::{default_project_dir, AppState, WindowFrame};
+use crate::state::{default_project_dir, AppState, Appearance, WindowFrame};
 use crate::workspace::{chip, Workspace, WorkspaceEvent};
 use crate::{
     CloseProject, ExportConfig, ImportProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo,
@@ -112,6 +112,10 @@ impl Shell {
                 height: bounds.size.height.into(),
             });
             this.state.save();
+        })
+        .detach();
+        cx.observe_window_appearance(window, |_, window, cx| {
+            crate::appearance::follow(window, cx);
         })
         .detach();
         let library = cx.new(Library::new);
@@ -798,6 +802,16 @@ impl Shell {
         }
     }
 
+    /// Chooses light, dark or whatever the computer is set to, from the
+    /// View menu, and remembers it.
+    fn set_appearance(&mut self, appearance: Appearance, cx: &mut Context<Self>) {
+        self.state.appearance = appearance;
+        self.state.save();
+        crate::appearance::apply(appearance, cx);
+        cx.set_menus(crate::menus(appearance));
+        cx.notify();
+    }
+
     fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(workspace) = &self.workspace {
             workspace.update(cx, |w, cx| {
@@ -1310,6 +1324,15 @@ impl Render for Shell {
             .on_action(cx.listener(Self::close))
             .on_action(cx.listener(Self::new_action))
             .on_action(cx.listener(Self::export))
+            .on_action(cx.listener(|this, _: &crate::AppearanceSystem, _, cx| {
+                this.set_appearance(Appearance::System, cx);
+            }))
+            .on_action(cx.listener(|this, _: &crate::AppearanceLight, _, cx| {
+                this.set_appearance(Appearance::Light, cx);
+            }))
+            .on_action(cx.listener(|this, _: &crate::AppearanceDark, _, cx| {
+                this.set_appearance(Appearance::Dark, cx);
+            }))
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .size_full()
