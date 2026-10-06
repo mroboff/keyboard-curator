@@ -388,6 +388,9 @@ impl Shell {
             }
         });
         self.workspace = Some(workspace);
+        if let Some(page) = &self.page {
+            page.update(cx, |page, cx| page.set_aside(cx));
+        }
         self.applying = false;
         self.error = None;
         self.notice = None;

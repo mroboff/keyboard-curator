@@ -21,6 +21,7 @@ use crate::flash_view::FlashView;
 use crate::library::Library;
 use crate::shell::connection_hint;
 use crate::state::AppState;
+use crate::tester::KeyTester;
 use crate::workspace::chip;
 
 const KEYBOARD_NAME: &str = "CONFIG_ZMK_KEYBOARD_NAME";
@@ -36,6 +37,8 @@ pub enum Section {
     /// Building and flashing, or for firmware configured live, reading
     /// from and applying to the keyboard.
     Build,
+    /// Pressing keys to see that they work, and to play them.
+    Tester,
 }
 
 /// What the page asks of the window around it.
@@ -87,6 +90,7 @@ pub struct BoardPage {
     source_url: Entity<InputState>,
     source_revision: Entity<InputState>,
     flash: Entity<FlashView>,
+    tester: Entity<KeyTester>,
     build: BuildStatus,
     /// What reading from or applying to a live-configured keyboard is
     /// doing, or how it went.
@@ -147,6 +151,7 @@ impl BoardPage {
         })
         .detach();
         let flash = cx.new(|cx| FlashView::new(board.clone(), cx));
+        let tester = cx.new(|cx| KeyTester::new(board.clone(), window, cx));
 
         let mut page = Self {
             boards,
@@ -160,6 +165,7 @@ impl BoardPage {
             source_url,
             source_revision,
             flash,
+            tester,
             build: BuildStatus::Idle,
             live: None,
             live_busy: false,
@@ -219,8 +225,50 @@ impl BoardPage {
 
     pub fn show_section(&mut self, section: Section, cx: &mut Context<Self>) {
         self.commit_inputs(cx);
+        if self.section == Section::Tester && section != Section::Tester {
+            self.tester.update(cx, |tester, cx| tester.leave(cx));
+        }
         self.section = section;
         cx.notify();
+    }
+
+    /// The page is going out of sight behind the layout editor: nothing
+    /// on it keeps listening or sounding.
+    pub fn set_aside(&mut self, cx: &mut Context<Self>) {
+        self.tester.update(cx, |tester, cx| {
+            if tester.is_active() {
+                tester.leave(cx);
+            }
+        });
+    }
+
+    /// The layout the key tester matches presses against, and a sentence
+    /// saying which it is: the board's current layout, or the factory
+    /// layout when there is none to use.
+    fn tester_layout(&self, cx: &App) -> (Project, String) {
+        let factory =
+            || Project::from_template(format!("{} factory layout", self.board.name), &self.board);
+        let Some(path) = self.saved(cx).and_then(|k| k.current.clone()) else {
+            return (
+                factory(),
+                "This board has no current layout, so keys are matched against the factory layout."
+                    .to_string(),
+            );
+        };
+        match file::load(&path) {
+            Ok(layout) if layout.board == self.board.id => {
+                let source = format!(
+                    "Keys are matched against the board's current layout, {}.",
+                    layout.name
+                );
+                (layout, source)
+            }
+            _ => (
+                factory(),
+                "The board's current layout could not be used, so keys are matched against the factory layout."
+                    .to_string(),
+            ),
+        }
     }
 
     pub fn set_notice(&mut self, notice: String, cx: &mut Context<Self>) {
@@ -1604,14 +1652,42 @@ impl Render for BoardPage {
                 chip(id, label, self.section == section, cx)
                     .on_click(cx.listener(move |this, _, _, cx| this.show_section(section, cx)))
             };
+        // The tester starts, on the board's current layout, each time it
+        // comes into sight: on its tab being chosen, and on coming back
+        // from the layout editor.
+        if self.section == Section::Tester && !self.tester.read(cx).is_active() {
+            let (layout, source) = self.tester_layout(cx);
+            self.tester
+                .update(cx, |tester, cx| tester.enter(layout, source, cx));
+        }
         let content = match self.section {
-            Section::Firmware => self.render_firmware(&config, cx),
-            Section::Settings => self.render_settings(&config, cx),
-            Section::Layouts => self.render_layouts(&saved, cx),
-            Section::Build => match config.family(&self.board).delivery() {
+            Section::Firmware => Some(self.render_firmware(&config, cx)),
+            Section::Settings => Some(self.render_settings(&config, cx)),
+            Section::Layouts => Some(self.render_layouts(&saved, cx)),
+            Section::Build => Some(match config.family(&self.board).delivery() {
                 Delivery::Build => self.render_build_section(&saved, &config, cx),
                 Delivery::Live => self.render_keyboard_section(&saved, cx),
-            },
+            }),
+            // The tester fills the page instead of sitting in its column.
+            Section::Tester => None,
+        };
+        let body = match content {
+            Some(content) => div()
+                .id("board-page")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .p_6()
+                .flex()
+                .flex_col()
+                .items_center()
+                .child(div().w(px(760.)).child(content))
+                .into_any_element(),
+            None => div()
+                .flex_1()
+                .min_h_0()
+                .child(self.tester.clone())
+                .into_any_element(),
         };
         div()
             .size_full()
@@ -1664,6 +1740,7 @@ impl Render for BoardPage {
                     .child(tab("section-settings", "Settings", Section::Settings, cx))
                     .child(tab("section-layouts", "Layouts", Section::Layouts, cx))
                     .child(tab("section-build", build_label, Section::Build, cx))
+                    .child(tab("section-tester", "Key Tester", Section::Tester, cx))
                     .child(
                         div()
                             .flex_1()
@@ -1673,18 +1750,7 @@ impl Render for BoardPage {
                             .child(self.notice.clone().unwrap_or_default()),
                     ),
             )
-            .child(
-                div()
-                    .id("board-page")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .p_6()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .child(div().w(px(760.)).child(content)),
-            )
+            .child(body)
             .into_any_element()
     }
 }

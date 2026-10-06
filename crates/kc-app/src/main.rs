@@ -8,6 +8,7 @@ mod flash_view;
 mod library;
 mod shell;
 mod state;
+mod tester;
 mod workspace;
 
 use std::rc::Rc;
