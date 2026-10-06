@@ -333,6 +333,96 @@ pub(crate) fn help(text: impl Into<SharedString>, cx: &App) -> Div {
         .child(text.into())
 }
 
+/// One setting: its name on the left, with what it does under it when
+/// there is something to say, and its control on the right. The rule
+/// under each keeps a column of them apart.
+pub(crate) fn field(
+    label: impl Into<SharedString>,
+    detail: impl Into<SharedString>,
+    control: impl IntoElement,
+    cx: &App,
+) -> Div {
+    let theme = cx.theme();
+    let (muted, border) = (theme.muted_foreground, theme.border);
+    let detail: SharedString = detail.into();
+    div()
+        .flex()
+        .items_center()
+        .gap_6()
+        .py_2p5()
+        .border_b_1()
+        .border_color(border)
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(label.into()),
+                )
+                .when(!detail.is_empty(), |text| {
+                    text.child(
+                        div()
+                            .text_sm()
+                            .line_height(relative(1.4))
+                            .text_color(muted)
+                            .child(detail),
+                    )
+                }),
+        )
+        .child(div().flex_shrink_0().child(control))
+}
+
+/// A setting chosen from several: its name, then the choices under it,
+/// since a row of them is too wide to sit beside the name.
+pub(crate) fn choice(
+    label: impl Into<SharedString>,
+    detail: impl Into<SharedString>,
+    choices: impl IntoElement,
+    cx: &App,
+) -> Div {
+    let theme = cx.theme();
+    let (muted, border) = (theme.muted_foreground, theme.border);
+    let detail: SharedString = detail.into();
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .py_3()
+        .border_b_1()
+        .border_color(border)
+        .child(
+            div()
+                .text_sm()
+                .font_weight(FontWeight::MEDIUM)
+                .child(label.into()),
+        )
+        .child(choices)
+        .when(!detail.is_empty(), |text| {
+            text.child(
+                div()
+                    .text_sm()
+                    .line_height(relative(1.4))
+                    .text_color(muted)
+                    .child(detail),
+            )
+        })
+}
+
+/// A titled part of a form, set apart from the part before it.
+pub(crate) fn group(title: &'static str, cx: &App) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .pt_8()
+        .child(section_title(title, cx).pb_1())
+}
+
 /// A surface for one thing among several, such as a firmware, an add-on
 /// or a layout. The chosen one is ringed in the accent color.
 pub(crate) fn card(chosen: bool, cx: &App) -> Div {
@@ -1743,6 +1833,20 @@ impl Workspace {
 
     /// The picker with a binding field beside it, for the modes where it
     /// assigns to a slot inside a behavior or combo.
+    /// Whether the behavior being edited has bindings of its own to fill.
+    fn behavior_has_slots(&self) -> bool {
+        self.behavior
+            .and_then(|id| self.project().behavior(id))
+            .is_some_and(|def| {
+                matches!(
+                    def.kind,
+                    kc_model::behavior::BehaviorKind::TapDance(_)
+                        | kc_model::behavior::BehaviorKind::ModMorph(_)
+                        | kc_model::behavior::BehaviorKind::Macro(_)
+                )
+            })
+    }
+
     fn render_slot_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
         div()
@@ -2543,9 +2647,14 @@ impl Workspace {
                                 .child(self.render_inspector(cx)),
                         ),
                         Mode::Lighting => main.child(self.render_lighting(cx)),
+                        // The key picker is only there for behaviors that
+                        // have keys to choose: a hold-tap or a sticky key
+                        // has none, and keeps the room.
                         Mode::Behaviors => main
                             .child(self.render_behaviors(cx))
-                            .child(self.render_slot_picker(cx)),
+                            .when(self.behavior_has_slots(), |main| {
+                                main.child(self.render_slot_picker(cx))
+                            }),
                         Mode::Combos => main
                             .child(self.render_combos(cx))
                             .child(self.render_slot_picker(cx)),
