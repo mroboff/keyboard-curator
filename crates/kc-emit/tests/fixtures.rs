@@ -403,6 +403,70 @@ fn lighting_fixture(board: &Board) -> (Project, FirmwareConfig) {
     (p, config)
 }
 
+/// The factory layout built with a set of add-ons from the catalog, each
+/// add-on's starter in Custom Behaviors and a key bound to what it adds, so
+/// that the firmware CI job proves the add-ons build for the board.
+fn addons_fixture(board: &Board, ids: &[&str]) -> (Project, FirmwareConfig) {
+    let catalog = kc_zmk::addons::catalog();
+    let mut p = Project::from_template(format!("{} add-ons fixture", board.name), board);
+    let mut config = FirmwareConfig::stock(board);
+    let base = p.layers[0].id;
+    let target = p.layers[1].id;
+    let mut position = 0;
+    let mut bind = |p: &mut Project, binding: Binding| {
+        p.set_binding(base, position, binding).unwrap();
+        position += 1;
+    };
+    for id in ids {
+        let addon = catalog
+            .addon(id)
+            .unwrap_or_else(|| panic!("no add-on {id}"));
+        config.addons.push((*id).to_string());
+        if let Some(snippet) = &addon.snippet {
+            p.raw.behaviors.push_str(snippet);
+            p.raw.behaviors.push('\n');
+            // The starter's node label is what a key binds to.
+            let label = snippet.split(':').next().unwrap().trim();
+            let cells = if snippet.contains("#binding-cells = <1>") {
+                " 1"
+            } else {
+                ""
+            };
+            bind(
+                &mut p,
+                Binding::Raw {
+                    raw: format!("&{label}{cells}"),
+                },
+            );
+        }
+    }
+    if ids.contains(&"zmk-auto-layer") {
+        bind(&mut p, Binding::layer("num_word", target));
+    }
+    if ids.contains(&"zmk-unicode") {
+        bind(
+            &mut p,
+            Binding::Raw {
+                raw: "&uc UC_WINKING_FACE".into(),
+            },
+        );
+    }
+    (p, config)
+}
+
+/// Add-ons that only add behaviors of their own.
+const PLAIN_ADDONS: [&str; 5] = [
+    "zmk-auto-layer",
+    "zmk-tri-state",
+    "zmk-smart-toggle",
+    "zmk-unicode",
+    "zmk-helpers",
+];
+
+/// Add-ons whose documentation warns of a Zephyr init-priority failure,
+/// kept apart so that a failure names them.
+const SEQUENCE_ADDONS: [&str; 2] = ["zmk-leader-key", "zmk-adaptive-key"];
+
 #[test]
 fn fixtures_match_the_emitter() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
@@ -432,7 +496,21 @@ fn fixtures_match_the_emitter() {
             ),
         ]
     });
-    for (board, directory, (project, config)) in projects.chain(lit) {
+    let with_addons = boards.iter().flat_map(|board| {
+        [
+            (
+                board,
+                format!("{}-addons", board.id),
+                addons_fixture(board, &PLAIN_ADDONS),
+            ),
+            (
+                board,
+                format!("{}-addons-sequences", board.id),
+                addons_fixture(board, &SEQUENCE_ADDONS),
+            ),
+        ]
+    });
+    for (board, directory, (project, config)) in projects.chain(lit).chain(with_addons) {
         let errors: Vec<_> = kc_model::validate(&project, board, &config)
             .into_iter()
             .filter(|p| p.severity == kc_model::Severity::Error)

@@ -40,4 +40,10 @@ pub enum Feature {
     StickyKeys,
     /// Devicetree text carried into the generated keymap as it is.
     Devicetree,
+    /// `&num_word` and auto layers, from the zmk-auto-layer add-on.
+    AutoLayer,
+    /// Leader keys, from the zmk-leader-key add-on.
+    LeaderKey,
+    /// Adaptive keys, from the zmk-adaptive-key add-on.
+    AdaptiveKey,
 }

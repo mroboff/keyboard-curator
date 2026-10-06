@@ -4,6 +4,7 @@
 use kc_boards::board::{FirmwareProfile, Side, Source};
 use kc_model::features::SettingValue;
 use kc_model::{FirmwareConfig, Project};
+use kc_zmk::addons::Addon;
 
 use crate::NOTICE;
 
@@ -30,9 +31,15 @@ fn lighting_settings(profile: &FirmwareProfile) -> Vec<(String, SettingValue)> {
     settings
 }
 
-pub fn conf(project: &Project, config: &FirmwareConfig, profile: &FirmwareProfile) -> String {
+pub fn conf(
+    project: &Project,
+    config: &FirmwareConfig,
+    profile: &FirmwareProfile,
+    profile_features: &[kc_zmk::Feature],
+) -> String {
     let mut out = format!("# {NOTICE}\n");
     let mut settings = config.settings.clone();
+    let features = profile_features;
     if crate::keymap::uses_lighting(project) {
         for (key, value) in lighting_settings(profile) {
             settings.entry(key).or_insert(value);
@@ -43,7 +50,7 @@ pub fn conf(project: &Project, config: &FirmwareConfig, profile: &FirmwareProfil
         // but is not generated.
         let unsupported = kc_zmk::settings::setting_for(key)
             .and_then(|setting| setting.requires)
-            .is_some_and(|feature| !profile.features().contains(&feature));
+            .is_some_and(|feature| !features.contains(&feature));
         if unsupported {
             continue;
         }
@@ -73,12 +80,13 @@ fn source(profile: &FirmwareProfile) -> &Source {
         .expect("a ZMK firmware profile names its ZMK source")
 }
 
-pub fn west(profile: &FirmwareProfile) -> String {
+pub fn west(profile: &FirmwareProfile, config: &FirmwareConfig, addons: &[Addon]) -> String {
     let mut out = format!("# {NOTICE}\nmanifest:\n  projects:\n");
+    // A source the user chose for the board replaces the profile's own.
+    let zmk = config.source.as_ref().unwrap_or_else(|| source(profile));
     out.push_str(&format!(
         "    - name: zmk\n      url: {}\n      revision: {}\n      import: app/west.yml\n",
-        source(profile).url,
-        source(profile).revision
+        zmk.url, zmk.revision
     ));
     for module in &profile.modules {
         out.push_str(&format!(
@@ -88,6 +96,17 @@ pub fn west(profile: &FirmwareProfile) -> String {
         if let Some(import) = &module.import {
             out.push_str(&format!("      import: {import}\n"));
         }
+    }
+    // Add-ons, each pinned to the commit the catalog resolved. One the
+    // profile already carries as a module is not listed twice.
+    for addon in addons {
+        if profile.modules.iter().any(|m| m.name == addon.module) {
+            continue;
+        }
+        out.push_str(&format!(
+            "    - name: {}\n      url: {}\n      revision: {}\n",
+            addon.module, addon.url, addon.revision
+        ));
     }
     out.push_str("  self:\n    path: config\n");
     out

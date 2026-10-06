@@ -345,7 +345,8 @@ pub fn keymap(
     config: &FirmwareConfig,
 ) -> Result<String, EmitError> {
     let profile = profile(config, board)?;
-    let features = profile.features();
+    let features = config.features(board);
+    let addons = config.active_addons(board);
     let layout = board
         .layout(&project.layout)
         .ok_or_else(|| EmitError::NoLayout(project.layout.clone()))?;
@@ -405,6 +406,10 @@ pub fn keymap(
     }
     for include in includes {
         w.line(0, &format!("#include <{include}>"));
+    }
+    // What the board's add-ons bring in, written as their catalog gives it.
+    for include in addons.iter().flat_map(|a| a.includes.iter()) {
+        w.line(0, &format!("#include {include}"));
     }
     w.line(0, "");
     if unique {

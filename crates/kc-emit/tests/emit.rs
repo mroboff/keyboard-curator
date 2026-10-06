@@ -484,3 +484,67 @@ fn a_layout_builds_with_any_firmware_of_its_board() {
         assert!(file(&files, "config/west.yml").contains(&profile.zmk.as_ref().unwrap().url));
     }
 }
+
+#[test]
+fn add_ons_reach_the_manifest_the_keymap_and_the_picker() {
+    use kc_boards::board::Source;
+    use kc_zmk::Feature;
+
+    let imprint = board("cyboard-imprint");
+    let mut project = Project::new("Mine", &imprint);
+    let base = project.layers[0].id;
+    let nav = project.add_layer("Nav").unwrap();
+    project
+        .set_binding(base, 0, Binding::layer("num_word", nav))
+        .unwrap();
+
+    // Num word comes from an add-on; without it the key is an error.
+    let mut config = stock(&imprint);
+    assert!(!config.features(&imprint).contains(&Feature::AutoLayer));
+    assert!(matches!(
+        generate(&project, &imprint, &config),
+        Err(EmitError::Invalid(_))
+    ));
+
+    config.addons = vec!["zmk-auto-layer".into(), "zmk-helpers".into()];
+    assert!(config.features(&imprint).contains(&Feature::AutoLayer));
+    let files = generate(&project, &imprint, &config).unwrap();
+    let west = file(&files, "config/west.yml");
+    // Each add-on is a west project pinned to a commit, after the board's
+    // own module.
+    assert!(west.contains(
+        "    - name: zmk-auto-layer\n      url: https://github.com/urob/zmk-auto-layer\n      revision: b31aa0a357343535a56d535edd0c2ad64d3d7230\n"
+    ));
+    assert!(
+        west.contains("    - name: zmk-helpers\n      url: https://github.com/urob/zmk-helpers\n")
+    );
+    assert!(west.find("zmk-keyboards").unwrap() < west.find("zmk-auto-layer").unwrap());
+    let keymap = file(&files, "config/imprint.keymap");
+    assert!(keymap.contains("#include <behaviors/num_word.dtsi>\n"));
+    assert!(keymap.contains("#include \"zmk-helpers/helper.h\"\n"));
+    assert!(keymap.contains("&num_word LAYER_Nav"));
+
+    // An add-on the catalog does not have is left out, with a warning.
+    config.addons.push("no-such-add-on".into());
+    assert_eq!(config.inactive_addons(&imprint), ["no-such-add-on"]);
+    assert!(generate(&project, &imprint, &config).is_ok());
+    assert!(kc_model::validate(&project, &imprint, &config)
+        .iter()
+        .any(|p| p
+            .message
+            .contains("`no-such-add-on` does not fit this firmware")));
+
+    // A source chosen for the board replaces the profile's own ZMK.
+    config.source = Some(Source {
+        url: "https://github.com/someone/zmk".into(),
+        revision: "my-branch".into(),
+    });
+    let west = file(
+        &generate(&project, &imprint, &config).unwrap(),
+        "config/west.yml",
+    );
+    assert!(west.contains(
+        "    - name: zmk\n      url: https://github.com/someone/zmk\n      revision: my-branch\n"
+    ));
+    assert!(!west.contains("zmkfirmware/zmk\n"));
+}

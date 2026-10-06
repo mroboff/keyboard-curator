@@ -270,6 +270,47 @@ pub const SETTINGS: &[Setting] = &[
             Bool,
         )
     },
+    // Settings of add-ons, offered once the add-on is in the build.
+    Setting {
+        requires: Some(Feature::LeaderKey),
+        ..setting(
+            "Add-ons",
+            "CONFIG_ZMK_LEADER_MAX_KEYS_PER_SEQUENCE",
+            "Leader key: longest sequence",
+            "The most keys one leader sequence can have.",
+            int(1, 16, 1),
+        )
+    },
+    Setting {
+        requires: Some(Feature::LeaderKey),
+        ..setting(
+            "Add-ons",
+            "CONFIG_ZMK_LEADER_MAX_SEQUENCES",
+            "Leader key: most sequences",
+            "The most sequences one leader key can have.",
+            int(1, 64, 1),
+        )
+    },
+    Setting {
+        requires: Some(Feature::AdaptiveKey),
+        ..setting(
+            "Add-ons",
+            "CONFIG_ZMK_ADAPTIVE_KEY_MAX_TRIGGER_CONDITIONS",
+            "Adaptive keys: most triggers",
+            "The most trigger conditions one adaptive key can have.",
+            int(1, 64, 1),
+        )
+    },
+    Setting {
+        requires: Some(Feature::AdaptiveKey),
+        ..setting(
+            "Add-ons",
+            "CONFIG_ZMK_ADAPTIVE_KEY_MAX_BINDINGS",
+            "Adaptive keys: most bindings",
+            "The most bindings one trigger of an adaptive key can have.",
+            int(1, 16, 1),
+        )
+    },
 ];
 
 pub fn setting_for(key: &str) -> Option<&'static Setting> {

@@ -433,3 +433,60 @@ fn a_layout_file_from_before_the_split_hands_its_settings_back() {
     assert!(!current.contains("firmware") && !current.contains("settings"));
     assert!(current.contains("\"format\": 2"));
 }
+
+#[test]
+fn add_ons_and_a_custom_source_belong_to_the_keyboard() {
+    use kc_boards::board::Source;
+
+    let go60 = board("moergo-go60");
+    let mut keyboards = Keyboards::default();
+    let id = keyboards.add("Desk", &go60, GO60_STOCK).unwrap();
+
+    keyboards.set_addon(id, "zmk-auto-layer", true).unwrap();
+    keyboards.set_addon(id, "zmk-auto-layer", true).unwrap();
+    keyboards.set_addon(id, "zmk-leader-key", true).unwrap();
+    let firmware = keyboards.get(id).unwrap().firmware.clone();
+    assert_eq!(firmware.addons, ["zmk-auto-layer", "zmk-leader-key"]);
+    // What an add-on provides becomes something the firmware can do.
+    assert!(firmware.features(&go60).contains(&Feature::AutoLayer));
+    assert!(firmware.features(&go60).contains(&Feature::LeaderKey));
+    assert_eq!(firmware.active_addons(&go60).len(), 2);
+
+    keyboards.set_addon(id, "zmk-auto-layer", false).unwrap();
+    let firmware = &keyboards.get(id).unwrap().firmware;
+    assert_eq!(firmware.addons, ["zmk-leader-key"]);
+    assert!(!firmware.features(&go60).contains(&Feature::AutoLayer));
+
+    let source = |url: &str, revision: &str| {
+        Some(Source {
+            url: url.into(),
+            revision: revision.into(),
+        })
+    };
+    keyboards
+        .set_source(id, source("https://github.com/someone/zmk", "feature/x"))
+        .unwrap();
+    assert!(keyboards.get(id).unwrap().firmware.source.is_some());
+    // Anything that could break out of the generated manifest is refused.
+    for (url, revision) in [
+        ("http://github.com/someone/zmk", "main"),
+        ("https://github.com/someone/zmk\n  evil: yes", "main"),
+        ("https://github.com/someone/zmk", "main\n  import: evil"),
+        ("https://github.com/someone/zmk", ""),
+    ] {
+        assert!(matches!(
+            keyboards.set_source(id, source(url, revision)),
+            Err(KeyboardError::BadSource(_))
+        ));
+    }
+    keyboards.set_source(id, None).unwrap();
+    assert_eq!(keyboards.get(id).unwrap().firmware.source, None);
+
+    // The file round-trips with add-ons, and a board without any stays as
+    // short as before.
+    let text = keyboards.to_json();
+    assert!(text.contains("\"addons\""));
+    assert_eq!(Keyboards::from_json(&text).unwrap(), keyboards);
+    keyboards.set_addon(id, "zmk-leader-key", false).unwrap();
+    assert!(!keyboards.to_json().contains("\"addons\""));
+}

@@ -3,6 +3,7 @@
 
 mod board_page;
 mod canvas;
+mod catalog;
 mod flash_view;
 mod library;
 mod shell;
@@ -131,6 +132,7 @@ fn main() {
             KeyBinding::new("cmd-shift-z", Redo, Some("Shell")),
         ]);
         cx.set_menus(menus());
+        catalog::start(cx);
 
         let state = AppState::load();
         let bounds = match state.window {

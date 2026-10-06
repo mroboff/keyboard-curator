@@ -1,5 +1,6 @@
 //! ZMK knowledge as data: keycodes and legends, the behavior catalog with typed parameters, and the Kconfig option catalog.
 
+pub mod addons;
 pub mod behaviors;
 pub mod feature;
 pub mod headers;

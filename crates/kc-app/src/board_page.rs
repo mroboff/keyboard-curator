@@ -10,6 +10,7 @@ use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, Textar
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
+use kc_boards::board::Source;
 use kc_boards::Board;
 use kc_firmware::{Delivery, Family, FirmwareError, GeneratedFile};
 use kc_model::features::SettingValue;
@@ -79,6 +80,10 @@ pub struct BoardPage {
     /// The name the keyboard announces itself by, a firmware setting.
     announced_name: Entity<InputState>,
     raw_conf: Entity<TextareaState>,
+    /// A ZMK repository and revision to build from in place of the
+    /// firmware's own.
+    source_url: Entity<InputState>,
+    source_revision: Entity<InputState>,
     flash: Entity<FlashView>,
     build: BuildStatus,
     /// A short message about the last action.
@@ -112,6 +117,8 @@ impl BoardPage {
         let name = line("Board name", window, cx);
         let announced_name = line("Board default", window, cx);
         let raw_conf = cx.new(|cx| TextareaState::new(window, cx));
+        let source_url = line("https://github.com/someone/zmk", window, cx);
+        let source_revision = line("branch, tag or commit", window, cx);
         // Text is applied when Return is pressed or focus leaves the field.
         for input in [&name, &announced_name] {
             cx.subscribe(input, |this, _, event: &InputEvent, cx| {
@@ -143,12 +150,20 @@ impl BoardPage {
             name,
             announced_name,
             raw_conf,
+            source_url,
+            source_revision,
             flash,
             build: BuildStatus::Idle,
             notice: None,
             seen: None,
         };
         page.sync_inputs(window, cx);
+        if let Some(source) = page.saved(cx).and_then(|k| k.firmware.source.clone()) {
+            page.source_url
+                .update(cx, |input, cx| input.set_value(source.url, window, cx));
+            page.source_revision
+                .update(cx, |input, cx| input.set_value(source.revision, window, cx));
+        }
         page
     }
 
@@ -272,6 +287,30 @@ impl BoardPage {
     fn set_firmware(&mut self, profile: String, cx: &mut Context<Self>) {
         let (id, board) = (self.keyboard, self.board.clone());
         self.change(cx, |k| k.set_firmware(id, &board, &profile));
+        self.build = BuildStatus::Idle;
+    }
+
+    fn toggle_addon(&mut self, addon: String, cx: &mut Context<Self>) {
+        let id = self.keyboard;
+        let on = !self.config(cx).addons.contains(&addon);
+        self.change(cx, |k| k.set_addon(id, &addon, on));
+        self.build = BuildStatus::Idle;
+    }
+
+    /// Builds from the repository and revision typed into the custom
+    /// source fields, or with `clear` from the firmware's own again.
+    fn apply_source(&mut self, clear: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let id = self.keyboard;
+        let source = (!clear).then(|| Source {
+            url: self.source_url.read(cx).value().trim().to_string(),
+            revision: self.source_revision.read(cx).value().trim().to_string(),
+        });
+        if clear {
+            for input in [&self.source_url, &self.source_revision] {
+                input.update(cx, |input, cx| input.set_value(String::new(), window, cx));
+            }
+        }
+        self.change(cx, |k| k.set_source(id, source));
         self.build = BuildStatus::Idle;
     }
 
@@ -821,7 +860,171 @@ impl BoardPage {
                 );
             }
         }
+        if config.family(&self.board) == Family::Zmk {
+            page = page
+                .child(self.render_addons(config, cx))
+                .child(self.render_source(config, cx));
+        }
         page
+    }
+
+    /// The add-ons the chosen ZMK can take, each with what it is for.
+    fn render_addons(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
+        let theme = cx.theme();
+        let (muted, border, accent, warning) = (
+            theme.muted_foreground,
+            theme.border,
+            theme.primary,
+            theme.warning,
+        );
+        let catalog = kc_zmk::addons::catalog();
+        let zephyr = self
+            .board
+            .profile(&config.profile)
+            .map_or_else(String::new, |p| p.zephyr.clone());
+        let checked = catalog.checked.as_ref().map_or_else(String::new, |date| {
+            format!(" The list was last refreshed on {date}.")
+        });
+        let mut section = div()
+            .pt_4()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(div().text_lg().child("Add-ons"))
+            .child(div().text_xs().text_color(muted).child(format!(
+                "Extras from the ZMK community that can be built into this firmware. Each is pinned to a version made for this ZMK. They are other people's code: read the notes, and expect to test.{checked}"
+            )));
+        for (index, addon) in catalog
+            .addons
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.fits(&zephyr, &self.board.id))
+        {
+            let on = config.addons.contains(&addon.id);
+            let (id, url) = (addon.id.clone(), addon.url.clone());
+            let mut facts = vec![format!("By {}", addon.author), addon.category.clone()];
+            if let Some(stars) = addon.stars {
+                facts.push(format!("{stars} stars"));
+            }
+            if let Some(pushed) = &addon.pushed {
+                facts.push(format!("updated {pushed}"));
+            }
+            let notes = addon
+                .notes
+                .iter()
+                .map(|note| div().text_xs().text_color(muted).child(format!("• {note}")))
+                .collect::<Vec<_>>();
+            section = section.child(
+                div()
+                    .px_3()
+                    .py_2()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(if on { accent } else { border })
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().flex_1().min_w_0().text_sm().child(addon.name.clone()))
+                            .when(addon.archived, |row| {
+                                row.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(warning)
+                                        .child("No longer maintained"),
+                                )
+                            })
+                            .child(
+                                chip(("addon-page", index), "Its Page", false, cx)
+                                    .on_click(move |_, _, cx| cx.open_url(&url)),
+                            )
+                            .child(
+                                chip(
+                                    ("addon-toggle", index),
+                                    if on { "Added" } else { "Add" },
+                                    on,
+                                    cx,
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.toggle_addon(id.clone(), cx);
+                                    },
+                                )),
+                            ),
+                    )
+                    .child(div().text_xs().text_color(muted).child(facts.join(" · ")))
+                    .child(div().text_sm().child(addon.summary.clone()))
+                    .child(
+                        div()
+                            .text_xs()
+                            .child(format!("People use it for: {}", addon.uses)),
+                    )
+                    .children(notes),
+            );
+        }
+        // Chosen add-ons this firmware cannot take stay chosen, and say so.
+        for (index, id) in config.inactive_addons(&self.board).into_iter().enumerate() {
+            let remove = id.clone();
+            section = section.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().flex_1().text_xs().text_color(warning).child(format!(
+                        "The add-on “{id}” does not fit this firmware and is left out of the build."
+                    )))
+                    .child(chip(("addon-remove", index), "Remove", false, cx).on_click(
+                        cx.listener(move |this, _, _, cx| this.toggle_addon(remove.clone(), cx)),
+                    )),
+            );
+        }
+        section
+    }
+
+    /// Building from another ZMK repository, for trying a fork.
+    fn render_source(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
+        let theme = cx.theme();
+        let (muted, warning) = (theme.muted_foreground, theme.warning);
+        let current = match &config.source {
+            Some(source) => div().text_xs().text_color(warning).child(format!(
+                "Building from {} at {}, not from the firmware chosen above.",
+                source.url, source.revision
+            )),
+            None => div()
+                .text_xs()
+                .text_color(muted)
+                .child("Building from the chosen firmware's own source."),
+        };
+        div()
+            .pt_4()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(div().text_lg().child("Custom source"))
+            .child(div().text_xs().text_color(muted).child(
+                "Builds from another ZMK repository and revision in place of the chosen firmware's own, for trying a fork or an unmerged feature. The app still assumes the firmware chosen above when deciding what to offer, so choose the closest one. ZMK takes one source: several unmerged features can only be combined in a fork that merges them.",
+            ))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().w_80().child(Input::new(&self.source_url)))
+                    .child(div().w_56().child(Input::new(&self.source_revision)))
+                    .child(chip("source-apply", "Use This Source", false, cx).on_click(
+                        cx.listener(|this, _, window, cx| this.apply_source(false, window, cx)),
+                    ))
+                    .when(config.source.is_some(), |row| {
+                        row.child(chip("source-clear", "Use the Firmware's Own", false, cx).on_click(
+                            cx.listener(|this, _, window, cx| this.apply_source(true, window, cx)),
+                        ))
+                    }),
+            )
+            .child(current)
     }
 
     /// Every setting of the board's firmware.

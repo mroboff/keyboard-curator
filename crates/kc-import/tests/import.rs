@@ -60,6 +60,12 @@ fn generated_keymaps_survive_a_round_trip() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let mut checked = 0;
     for entry in std::fs::read_dir(&root).unwrap().flatten() {
+        // The add-on fixtures exist to prove add-ons compile. Their keymaps
+        // hold other people's hand-written devicetree, which the importer
+        // keeps but does not promise to lay out the same way.
+        if entry.file_name().to_string_lossy().contains("-addons") {
+            continue;
+        }
         let path = entry.path().join("project.kcproj");
         let Ok(project) = file::load(&path) else {
             continue;

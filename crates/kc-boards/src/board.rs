@@ -130,7 +130,7 @@ pub struct FlashInfo {
 pub use kc_zmk::Feature as Capability;
 
 /// A git repository pinned to a revision.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
     pub url: String,

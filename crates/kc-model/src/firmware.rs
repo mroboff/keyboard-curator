@@ -5,8 +5,9 @@
 
 use std::collections::BTreeMap;
 
-use kc_boards::board::FirmwareProfile;
+use kc_boards::board::{FirmwareProfile, Source};
 use kc_boards::{Board, Family};
+use kc_zmk::addons::Addon;
 use kc_zmk::settings::setting_for;
 use kc_zmk::Feature;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,16 @@ pub struct FirmwareConfig {
     /// cover.
     #[serde(default)]
     pub raw_conf: String,
+    /// Add-ons built into the firmware, by their IDs in the add-on
+    /// catalog. One the chosen firmware cannot take is kept, and left out
+    /// of the build.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addons: Vec<String>,
+    /// A ZMK repository and revision to build from in place of the
+    /// profile's own, for trying a fork. The profile still says what the
+    /// firmware can do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<Source>,
 }
 
 impl FirmwareConfig {
@@ -33,6 +44,8 @@ impl FirmwareConfig {
             profile: profile.into(),
             settings: BTreeMap::new(),
             raw_conf: String::new(),
+            addons: Vec::new(),
+            source: None,
         }
     }
 
@@ -44,10 +57,47 @@ impl FirmwareConfig {
     /// What the chosen firmware can do; nothing when the board does not
     /// have it.
     pub fn features(&self, board: &Board) -> Vec<Feature> {
-        board
+        let mut features = board
             .profile(&self.profile)
             .map(FirmwareProfile::features)
-            .unwrap_or_default()
+            .unwrap_or_default();
+        for addon in self.active_addons(board) {
+            for feature in addon.provides {
+                if !features.contains(&feature) {
+                    features.push(feature);
+                }
+            }
+        }
+        features
+    }
+
+    /// The chosen add-ons that go into the build: those in the catalog
+    /// that fit the chosen firmware. Only ZMK takes add-ons.
+    pub fn active_addons(&self, board: &Board) -> Vec<Addon> {
+        let Some(profile) = board.profile(&self.profile) else {
+            return Vec::new();
+        };
+        if profile.family != Family::Zmk {
+            return Vec::new();
+        }
+        let catalog = kc_zmk::addons::catalog();
+        self.addons
+            .iter()
+            .filter_map(|id| catalog.addon(id))
+            .filter(|addon| addon.fits(&profile.zephyr, &board.id))
+            .cloned()
+            .collect()
+    }
+
+    /// The chosen add-ons that are left out of the build, because the
+    /// catalog no longer has them or they do not fit the chosen firmware.
+    pub fn inactive_addons(&self, board: &Board) -> Vec<String> {
+        let active = self.active_addons(board);
+        self.addons
+            .iter()
+            .filter(|id| !active.iter().any(|a| a.id == **id))
+            .cloned()
+            .collect()
     }
 
     /// The firmware family; ZMK when the board does not have the profile.

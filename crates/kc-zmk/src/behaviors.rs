@@ -401,6 +401,17 @@ pub const BUILT_IN: &[Behavior] = &[
         &[LAYER],
         Group::Layers,
     ),
+    // From the zmk-auto-layer add-on, when a board's build includes it.
+    Behavior {
+        requires: Some(Feature::AutoLayer),
+        ..behavior(
+            "num_word",
+            "Num word",
+            "Turn a layer on until something that is not a number is typed",
+            &[LAYER],
+            Group::Layers,
+        )
+    },
     behavior(
         "sl",
         "Sticky layer",

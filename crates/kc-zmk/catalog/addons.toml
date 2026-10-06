@@ -1,0 +1,183 @@
+# ZMK add-ons the firmware builder offers: west modules that can be added to
+# a board's ZMK build. This file is curated by hand. Descriptions and notes
+# are written from each add-on's own documentation.
+#
+# `addons-meta.json` beside it is generated: ci/refresh-addons.py resolves
+# each `ref` to a commit, records stars and activity, and lists new
+# repositories worth reviewing. The app builds with the commit from the
+# metadata, falling back to `ref`.
+#
+# `zephyr` lists the Zephyr generations of ZMK an add-on is pinned for.
+# `provides` names features the app knows how to offer once the add-on is
+# in the build (see kc_zmk::Feature); names this version does not know are
+# ignored, so a newer catalog still loads.
+
+format = 1
+
+# Repositories the refresh job should stop suggesting: looked at, and not
+# add-ons (keyboards, configs, lists), or not wanted.
+ignore = [
+  "mctechnology17/zmk-config",
+  "mctechnology17/awesome-zmk",
+  "ctranstrum/lintilla",
+  "ctranstrum/chuck",
+  "whoop-t/nice-shield-collection",
+  "whoop-t/nice-shield-base",
+  "electronicmaterialsoffice/firmware-altar-i",
+]
+
+[[addon]]
+id = "zmk-auto-layer"
+name = "Auto layers and Num word"
+author = "urob"
+url = "https://github.com/urob/zmk-auto-layer"
+module = "zmk-auto-layer"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "Behaviors"
+provides = ["auto-layer"]
+includes = ["<behaviors/num_word.dtsi>"]
+summary = "Layers that switch themselves off. Num word turns a number layer on and leaves it as soon as you type something that is not a number, the way Caps Word does for capitals."
+uses = "Typing a number or two without holding a layer key, and one-handed navigation layers that end by themselves."
+notes = [
+  "Adds a Num Word key to the key picker's Layers group; choose the layer it turns on.",
+  "Other auto layers, such as one for arrow keys, are defined in Custom Behaviors. Insert the starter and adjust its list of keys that keep the layer on.",
+]
+snippet = """
+nav_word: nav_word {
+    compatible = "zmk,behavior-auto-layer";
+    #binding-cells = <1>;
+    continue-list = <LEFT DOWN UP RIGHT PG_DN PG_UP>;
+    ignore-modifiers;
+};
+"""
+
+[[addon]]
+id = "zmk-tri-state"
+name = "Tri-state (window swapper)"
+author = "urob"
+url = "https://github.com/urob/zmk-tri-state"
+module = "zmk-tri-state"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "Behaviors"
+summary = "A key that does one thing when first pressed, another on each further press, and a third when you move on to a different key."
+uses = "An Alt-Tab or Cmd-Tab window swapper on one key: the modifier is held for you until you press something else."
+notes = [
+  "There is no ready-made key: each tri-state is defined in Custom Behaviors. Insert the starter, then assign &swapper from the picker's Custom group.",
+  "The starter holds Alt; change LALT to LGUI for macOS.",
+]
+snippet = """
+swapper: swapper {
+    compatible = "zmk,behavior-tri-state";
+    #binding-cells = <0>;
+    bindings = <&kt LALT>, <&kp TAB>, <&kt LALT>;
+};
+"""
+
+[[addon]]
+id = "zmk-smart-toggle"
+name = "Smart toggle"
+author = "caksoylar"
+url = "https://github.com/caksoylar/zmk-smart-toggle"
+module = "zmk-smart-toggle"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "Behaviors"
+summary = "Holds one binding down while you keep tapping a second, and lets go when you press any other key."
+uses = "Another way to build a window swapper, or to keep a modifier or layer held across several taps."
+notes = [
+  "Each smart toggle is defined in Custom Behaviors. Insert the starter, then assign &smart_swapper from the picker's Custom group.",
+]
+snippet = """
+smart_swapper: smart_swapper {
+    compatible = "zmk,behavior-smart-toggle";
+    #binding-cells = <0>;
+    bindings = <&kp LALT>, <&kp TAB>;
+};
+"""
+
+[[addon]]
+id = "zmk-leader-key"
+name = "Leader key"
+author = "urob"
+url = "https://github.com/urob/zmk-leader-key"
+module = "zmk-leader-key"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "Behaviors"
+provides = ["leader-key"]
+summary = "Press a leader key, then type a short sequence of keys to trigger something, with no time limit and nothing to hold."
+uses = "Rarely used actions that do not deserve a key of their own: switching Bluetooth profiles, entering the bootloader, typing snippets."
+notes = [
+  "Each leader key and its sequences are defined in Custom Behaviors. Insert the starter, then assign &leader from the picker's Custom group.",
+  "Its documentation warns that the build can fail on ZMK's own Zephyr with a 'POST_KERNEL' priority error, depending on what else the keymap defines.",
+]
+snippet = """
+leader: leader {
+    compatible = "zmk,behavior-leader-key";
+    #binding-cells = <0>;
+    usb { sequence = <U S B>; bindings = <&out OUT_USB>; };
+    ble { sequence = <B L E>; bindings = <&out OUT_BLE>; };
+    boot { sequence = <B O O T>; bindings = <&bootloader>; };
+};
+"""
+
+[[addon]]
+id = "zmk-adaptive-key"
+name = "Adaptive keys"
+author = "urob"
+url = "https://github.com/urob/zmk-adaptive-key"
+module = "zmk-adaptive-key"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "Behaviors"
+provides = ["adaptive-key"]
+summary = "A key whose output depends on the key typed just before it."
+uses = "Alternative-layout tricks such as turning an awkward same-finger pair into an easier one, magic repeat keys, and dead keys for accents."
+notes = [
+  "Each adaptive key is defined in Custom Behaviors. Insert the starter, then assign &ak_h from the picker's Custom group.",
+  "Its documentation warns that the build can fail on ZMK's own Zephyr with a 'POST_KERNEL' priority error, depending on what else the keymap defines.",
+]
+snippet = """
+ak_h: ak_h {
+    compatible = "zmk,behavior-adaptive-key";
+    #binding-cells = <0>;
+    bindings = <&kp H>;
+
+    after_a { trigger-keys = <A>; max-prior-idle-ms = <300>; bindings = <&kp U>; };
+};
+"""
+
+[[addon]]
+id = "zmk-unicode"
+name = "Unicode characters"
+author = "urob"
+url = "https://github.com/urob/zmk-unicode"
+module = "zmk-unicode"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "Behaviors"
+includes = ["<behaviors/unicode.dtsi>", "<zmk-unicode/keys-extra.h>"]
+summary = "Types characters that are not on any keyboard layout, by sending the operating system's Unicode input sequence."
+uses = "Accented letters, symbols and emoji on a US layout without changing the system's keyboard language."
+notes = [
+  "Assign a character by typing a binding such as &uc UC_WINKING_FACE into the key's binding field. Character names are listed on the add-on's page.",
+  "The computer must have a Unicode input method switched on, and the add-on has to be told which one in Custom Devicetree (its default-mode property). See the add-on's page for each operating system.",
+]
+
+[[addon]]
+id = "zmk-helpers"
+name = "Helper macros"
+author = "urob"
+url = "https://github.com/urob/zmk-helpers"
+module = "zmk-helpers"
+ref = "v0.3"
+zephyr = ["3.5"]
+category = "For custom devicetree"
+includes = ["\"zmk-helpers/helper.h\""]
+summary = "Shorthand macros for writing behaviors, combos and layers in devicetree with far less boilerplate."
+uses = "Hand-written additions in Custom Behaviors and Custom Devicetree, and pasting in snippets from other people's keymaps that are written with these macros."
+notes = [
+  "Only useful if you write devicetree yourself; it adds nothing to the editor's own controls.",
+]

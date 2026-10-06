@@ -32,6 +32,17 @@ pub enum BuildError {
     Io(#[from] std::io::Error),
 }
 
+/// Fetches a small text file over HTTPS, for data the app keeps current
+/// between releases.
+pub fn fetch_text(url: &str) -> Result<String, BuildError> {
+    ureq::get(url)
+        .timeout(std::time::Duration::from_secs(15))
+        .call()
+        .map_err(|e| BuildError::Network(e.to_string()))?
+        .into_string()
+        .map_err(BuildError::Io)
+}
+
 /// One built firmware image.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Firmware {

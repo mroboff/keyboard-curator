@@ -4,6 +4,7 @@
 
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use kc_model::features::ConditionalLayer;
 
@@ -38,6 +39,19 @@ impl Workspace {
         let _ = self.editor.edit("Change Custom Devicetree", |p| {
             p.raw.behaviors = behaviors;
             p.raw.devicetree = devicetree;
+            Ok(())
+        });
+    }
+
+    /// Adds an add-on's starter to Custom Behaviors, as one undo step.
+    fn insert_starter(&mut self, snippet: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_advanced_inputs(cx);
+        self.change("Insert Add-on Starter", window, cx, |p| {
+            if !p.raw.behaviors.trim().is_empty() {
+                p.raw.behaviors.push_str("\n\n");
+            }
+            p.raw.behaviors.push_str(&snippet);
+            p.raw.behaviors.push('\n');
             Ok(())
         });
     }
@@ -189,6 +203,34 @@ impl Workspace {
                 .child(div().text_xs().text_color(muted).child(help))
                 .child(Textarea::new(state).h(px(140.)))
         };
+        // Starters for the board's add-ons whose behaviors the user defines.
+        let behaviors = self.project().raw.behaviors.clone();
+        let starters = self
+            .config
+            .active_addons(&self.board)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, addon)| {
+                let snippet = addon.snippet?;
+                // The label a starter defines; one already there is not
+                // offered again.
+                let label = snippet.split(':').next()?.trim().to_string();
+                if behaviors.contains(&format!("{label}:")) {
+                    return None;
+                }
+                Some(
+                    chip(
+                        ("starter", index),
+                        format!("Insert {} Starter", addon.name),
+                        false,
+                        cx,
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.insert_starter(snippet.clone(), window, cx);
+                    })),
+                )
+            })
+            .collect::<Vec<_>>();
         let page = div()
             .w(px(760.))
             .flex()
@@ -199,6 +241,12 @@ impl Workspace {
             .child(div().text_sm().text_color(muted).child(
                 "Text added here is written into the keymap file as it is, for anything the editor does not cover. Behaviors defined here appear in the key picker's Custom tab. Firmware settings are on the board's page.",
             ))
+            .when(!starters.is_empty(), |page| {
+                page.child(div().text_xs().text_color(muted).child(
+                    "This board's firmware has add-ons whose behaviors you define here. A starter gives you a working example to change; the behavior then appears in the key picker's Custom tab.",
+                ))
+                .child(div().flex().flex_wrap().gap_1().children(starters))
+            })
             .child(area("CUSTOM BEHAVIORS", "Devicetree nodes placed inside the keymap's behaviors section.", &self.raw_behaviors, cx))
             .child(area("CUSTOM DEVICETREE", "Devicetree placed at the end of the keymap file.", &self.raw_devicetree, cx));
         div()

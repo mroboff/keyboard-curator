@@ -30,7 +30,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fixture: [cyboard-imprint, cyboard-imprint-factory, moergo-go60, moergo-go60-factory, moergo-go60-lighting, cyboard-imprint-lighting]
+        fixture:
+          - cyboard-imprint
+          - cyboard-imprint-factory
+          - cyboard-imprint-lighting
+          - cyboard-imprint-addons
+          - cyboard-imprint-addons-sequences
+          - moergo-go60
+          - moergo-go60-factory
+          - moergo-go60-lighting
+          - moergo-go60-addons
+          - moergo-go60-addons-sequences
     steps:
       - name: Checkout
         uses: actions/checkout@v4

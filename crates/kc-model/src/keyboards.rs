@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
+use kc_boards::board::Source;
 use kc_boards::Board;
 use kc_zmk::Feature;
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,8 @@ pub enum KeyboardError {
     NoSuchFirmware { board: String, firmware: String },
     #[error("that device is already linked to another keyboard")]
     DeviceTaken { by: KeyboardId },
+    #[error("that source cannot be used: {0}")]
+    BadSource(&'static str),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -220,6 +223,52 @@ impl Keyboards {
             Some(value) => settings.insert(key.to_string(), value),
             None => settings.remove(key),
         };
+        Ok(())
+    }
+
+    /// Adds an add-on to the keyboard's firmware, or takes it out.
+    pub fn set_addon(
+        &mut self,
+        id: KeyboardId,
+        addon: &str,
+        on: bool,
+    ) -> Result<(), KeyboardError> {
+        let addons = &mut self.get_mut(id)?.firmware.addons;
+        addons.retain(|a| a != addon);
+        if on {
+            addons.push(addon.to_string());
+        }
+        Ok(())
+    }
+
+    /// Builds the keyboard's firmware from another ZMK repository and
+    /// revision, or with `None` from the profile's own again. Both go into
+    /// a generated manifest, so anything but a plain HTTPS URL and a plain
+    /// revision is refused.
+    pub fn set_source(
+        &mut self,
+        id: KeyboardId,
+        source: Option<Source>,
+    ) -> Result<(), KeyboardError> {
+        if let Some(source) = &source {
+            let plain = |text: &str, extra: &str| {
+                !text.is_empty()
+                    && text
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || extra.contains(c))
+            };
+            if !source.url.starts_with("https://") || !plain(&source.url, ":/._-~") {
+                return Err(KeyboardError::BadSource(
+                    "the URL must be a plain https:// address",
+                ));
+            }
+            if !plain(&source.revision, "/._-+") {
+                return Err(KeyboardError::BadSource(
+                    "the revision must be a branch, tag or commit",
+                ));
+            }
+        }
+        self.get_mut(id)?.firmware.source = source;
         Ok(())
     }
 

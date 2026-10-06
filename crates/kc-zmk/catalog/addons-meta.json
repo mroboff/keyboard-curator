@@ -1,0 +1,164 @@
+{
+  "addons": {
+    "zmk-adaptive-key": {
+      "archived": false,
+      "pushed": "2026-09-09",
+      "revision": "01ccc22889714f276c930dc960a989f80c9e0680",
+      "stars": 31
+    },
+    "zmk-auto-layer": {
+      "archived": false,
+      "pushed": "2026-09-10",
+      "revision": "b31aa0a357343535a56d535edd0c2ad64d3d7230",
+      "stars": 83
+    },
+    "zmk-helpers": {
+      "archived": false,
+      "pushed": "2026-09-10",
+      "revision": "b1548efd28d2cc64b9506654e6883695c258190f",
+      "stars": 421
+    },
+    "zmk-leader-key": {
+      "archived": false,
+      "pushed": "2026-09-10",
+      "revision": "99ba80034b44dcad233b2c4bbe97757d9d26d3fd",
+      "stars": 52
+    },
+    "zmk-smart-toggle": {
+      "archived": false,
+      "pushed": "2026-03-04",
+      "revision": "46e178221cccef965a511b772d7bc62800f1542e",
+      "stars": 22
+    },
+    "zmk-tri-state": {
+      "archived": false,
+      "pushed": "2026-09-10",
+      "revision": "9b7e1ac25f6dc733f62989fd064c6c5927e5e469",
+      "stars": 14
+    },
+    "zmk-unicode": {
+      "archived": false,
+      "pushed": "2026-09-09",
+      "revision": "3e8ca744e5c3b6f430b3713f3e45b806ce89be7b",
+      "stars": 41
+    }
+  },
+  "candidates": [
+    {
+      "description": "vertical widgets for oled and niceview screens using zmk (for split and non-split keyboards)",
+      "name": "mctechnology17/zmk-nice-oled",
+      "stars": 493,
+      "url": "https://github.com/mctechnology17/zmk-nice-oled"
+    },
+    {
+      "description": "A sleek customization for the nice!view shield",
+      "name": "M165437/nice-view-gem",
+      "stars": 390,
+      "url": "https://github.com/M165437/nice-view-gem"
+    },
+    {
+      "description": "Custom status screen for zmk dongles",
+      "name": "englmaxi/zmk-dongle-display",
+      "stars": 268,
+      "url": "https://github.com/englmaxi/zmk-dongle-display"
+    },
+    {
+      "description": "YADS  - Yet another Dongle Screen for ZMK",
+      "name": "janpfischer/zmk-dongle-screen",
+      "stars": 264,
+      "url": "https://github.com/janpfischer/zmk-dongle-screen"
+    },
+    {
+      "description": "A PS/2 mouse & trackpoint driver module for keyboards running the zmk firmware",
+      "name": "infused-kim/kb_zmk_ps2_mouse_trackpoint_driver",
+      "stars": 241,
+      "url": "https://github.com/infused-kim/kb_zmk_ps2_mouse_trackpoint_driver"
+    },
+    {
+      "description": "A ZMK module to add battery/BT/layer indicators using an RGB LED (like in Xiao BLEs)",
+      "name": "caksoylar/zmk-rgbled-widget",
+      "stars": 235,
+      "url": "https://github.com/caksoylar/zmk-rgbled-widget"
+    },
+    {
+      "description": "A clean customization for the nice!view displays",
+      "name": "infely/nice-view-battery",
+      "stars": 102,
+      "url": "https://github.com/infely/nice-view-battery"
+    },
+    {
+      "description": "A bold while minimalistic interface for your keyboard's display",
+      "name": "kevinpastor/nice-view-elemental",
+      "stars": 90,
+      "url": "https://github.com/kevinpastor/nice-view-elemental"
+    },
+    {
+      "description": "ZMK module for Raw HID communication",
+      "name": "zzeneg/zmk-raw-hid",
+      "stars": 47,
+      "url": "https://github.com/zzeneg/zmk-raw-hid"
+    },
+    {
+      "description": "ZMK module to support hall-effect switches and features",
+      "name": "cr3eperall/zmk-feature-hall-effect",
+      "stars": 38,
+      "url": "https://github.com/cr3eperall/zmk-feature-hall-effect"
+    },
+    {
+      "description": "horizontal widgets for keyboards with dongles, splits and non-splits  using the nice!view (bongocat, wpm, caps, batt, etc.)",
+      "name": "mctechnology17/zmk-dongle-display-view",
+      "stars": 38,
+      "url": "https://github.com/mctechnology17/zmk-dongle-display-view"
+    },
+    {
+      "description": "ZMK module to support the Raytac MDBT50Q-RX USB key as a dongle",
+      "name": "rschenk/zmk-component-raytac-dongle",
+      "stars": 36,
+      "url": "https://github.com/rschenk/zmk-component-raytac-dongle"
+    },
+    {
+      "description": "",
+      "name": "englmaxi/zmk-hid-trackball-interface",
+      "stars": 35,
+      "url": "https://github.com/englmaxi/zmk-hid-trackball-interface"
+    },
+    {
+      "description": "Helpers for localizing ZMK keymaps",
+      "name": "joelspadin/zmk-locales",
+      "stars": 32,
+      "url": "https://github.com/joelspadin/zmk-locales"
+    },
+    {
+      "description": "A ZMK module that converts combinations of 4-direction mouse strokes into key presses",
+      "name": "kot149/zmk-mouse-gesture",
+      "stars": 27,
+      "url": "https://github.com/kot149/zmk-mouse-gesture"
+    },
+    {
+      "description": "use different OLED screen sizes without modifying code (for 128x32, 128x64 and 128x128 OLED screens)",
+      "name": "mctechnology17/zmk-oled-adapter",
+      "stars": 24,
+      "url": "https://github.com/mctechnology17/zmk-oled-adapter"
+    },
+    {
+      "description": "ZMK module to invoke behaviors on certain events.",
+      "name": "ssbb/zmk-listeners",
+      "stars": 21,
+      "url": "https://github.com/ssbb/zmk-listeners"
+    },
+    {
+      "description": "ZMK module for nice!view widget with Raw HID functionality",
+      "name": "zzeneg/zmk-nice-view-hid",
+      "stars": 20,
+      "url": "https://github.com/zzeneg/zmk-nice-view-hid"
+    },
+    {
+      "description": "ZMK module to dynamically shift keyboard layouts at runtime",
+      "name": "kot149/zmk-layout-shift",
+      "stars": 17,
+      "url": "https://github.com/kot149/zmk-layout-shift"
+    }
+  ],
+  "checked": "2026-10-06",
+  "format": 1
+}

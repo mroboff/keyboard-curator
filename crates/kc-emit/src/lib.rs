@@ -75,9 +75,12 @@ pub fn generate(
         ),
         file(
             format!("config/{name}.conf"),
-            config::conf(project, config, profile),
+            config::conf(project, config, profile, &config.features(board)),
         ),
-        file("config/west.yml".into(), config::west(profile)),
+        file(
+            "config/west.yml".into(),
+            config::west(profile, config, &config.active_addons(board)),
+        ),
         file("build.yaml".into(), config::build(profile)),
         file(
             ".github/workflows/build.yml".into(),

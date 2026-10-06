@@ -257,9 +257,15 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
             format!("the board has no physical layout `{}`", project.layout),
         ),
     }
+    for addon in config.inactive_addons(board) {
+        c.warning(
+            &root,
+            format!("the add-on `{addon}` does not fit this firmware and is left out of the build"),
+        );
+    }
     let profile = board.profile(&config.profile);
     match profile {
-        Some(profile) => c.features = profile.features(),
+        Some(_) => c.features = config.features(board),
         None => c.error(
             &root,
             format!("the board has no firmware profile `{}`", config.profile),
