@@ -436,7 +436,7 @@ impl Workspace {
             card = card.child(div().text_sm().text_color(muted).child(if device.mouse_keys {
                 "Uses the speed and direction built into the firmware. Choose an option to change it."
             } else {
-                "Uses the behaviour built into the board's firmware. Choose an option to change it."
+                "Uses the behavior built into the board's firmware. Choose an option to change it."
             }));
         }
         card = card.child(self.render_pointing_controls(key(0), device, Target::Device, own, cx));

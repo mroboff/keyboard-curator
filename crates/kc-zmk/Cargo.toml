@@ -1,6 +1,6 @@
 [package]
 name = "kc-zmk"
-description = "ZMK knowledge as data: keycodes, behaviours and Kconfig options"
+description = "ZMK knowledge as data: keycodes, behaviors and Kconfig options"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

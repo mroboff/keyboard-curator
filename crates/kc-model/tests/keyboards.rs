@@ -246,7 +246,7 @@ fn retargeting_hides_what_the_firmware_lacks_and_loses_nothing() {
     assert!(preview.hidden.lighting);
     assert_eq!(
         preview.summary(),
-        "Per-key colours will be hidden. Hidden parts stay in the project and return with a firmware that has them."
+        "Per-key colors will be hidden. Hidden parts stay in the project and return with a firmware that has them."
     );
     assert!(!preview.hidden.pointing);
     assert_eq!(preview.flagged, 0);
@@ -261,7 +261,7 @@ fn retargeting_hides_what_the_firmware_lacks_and_loses_nothing() {
         .iter()
         .all(|p| p.severity != Severity::Error));
 
-    // Going back shows the colours again, with nothing hidden.
+    // Going back shows the colors again, with nothing hidden.
     let back = preview_retarget(&project, &go60, GO60_PERKEY).unwrap();
     assert!(back.hidden.is_empty());
     assert_eq!(
@@ -307,7 +307,7 @@ fn retargeting_flags_keys_the_firmware_cannot_build() {
     assert_eq!(preview.flagged, 1);
     assert_eq!(
         preview.summary(),
-        "One key or behaviour uses a feature this firmware lacks and will be flagged."
+        "One key or behavior uses a feature this firmware lacks and will be flagged."
     );
     assert!(preview.hidden.is_empty());
 }

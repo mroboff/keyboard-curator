@@ -354,7 +354,7 @@ impl Shell {
             PromptLevel::Info,
             &format!("Add “{name}” to My Boards?"),
             Some(&format!(
-                "“{}” is for a {} {} with {}, and none of your saved keyboards is one. Projects are opened under a saved keyboard; you can rename it or change its firmware afterwards.",
+                "“{}” is for a {} {} with {}, and none of your saved keyboards is one. Projects are opened under a saved keyboard; you can rename it or change its firmware afterward.",
                 pending.project.name,
                 board.vendor,
                 board.name,
@@ -657,7 +657,7 @@ impl Shell {
                     );
                 }
                 if found.usb.link().is_none() {
-                    notes.push("It reports no serial number, so it cannot be linked and will not be recognised later.");
+                    notes.push("It reports no serial number, so it cannot be linked and will not be recognized later.");
                 }
                 let form = KeyboardForm {
                     editing: None,
@@ -1145,7 +1145,7 @@ impl Shell {
                 device.serial
             )),
             (None, _) => div().text_sm().text_color(muted).child(
-                "Not linked to a device. Linking lets the app recognise this keyboard when it is connected.",
+                "Not linked to a device. Linking lets the app recognize this keyboard when it is connected.",
             ),
         };
         let link = if keyboard.device.is_some() {

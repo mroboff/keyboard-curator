@@ -28,7 +28,7 @@ pub enum StudioError {
     Io(#[from] std::io::Error),
 }
 
-/// A behaviour the keyboard's firmware has, by the ID it uses on the wire.
+/// A behavior the keyboard's firmware has, by the ID it uses on the wire.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceBehavior {
     pub id: u32,
@@ -175,7 +175,7 @@ impl<T: Read + Write> Client<T> {
         }
     }
 
-    /// Every behaviour the firmware has, with its display name.
+    /// Every behavior the firmware has, with its display name.
     pub fn list_behaviors(&mut self) -> Result<Vec<DeviceBehavior>, StudioError> {
         let ids = match self.behaviors(behaviors::request::RequestType::ListAllBehaviors(true))? {
             behaviors::response::ResponseType::ListAllBehaviors(list) => list.behaviors,
@@ -228,7 +228,7 @@ impl<T: Read + Write> Client<T> {
                     Ok(keymap::SetLayerBindingResponse::Ok) => Ok(()),
                     Ok(keymap::SetLayerBindingResponse::InvalidLocation) => refused("no such key"),
                     Ok(keymap::SetLayerBindingResponse::InvalidBehavior) => {
-                        refused("unknown behaviour")
+                        refused("unknown behavior")
                     }
                     _ => refused("invalid parameters"),
                 }

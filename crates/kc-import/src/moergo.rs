@@ -3,7 +3,7 @@
 //! The export is turned into keymap and `.conf` text and passed through the
 //! keymap importer, so both paths understand exactly the same things. The
 //! editor has a few shorthands of its own, which are written out as the
-//! behaviours they stand for.
+//! behaviors they stand for.
 
 use kc_boards::Board;
 use kc_model::Project;
@@ -13,7 +13,7 @@ use crate::dts;
 use crate::keymap::{import_conf, import_keymap};
 use crate::{ImportError, Report};
 
-/// Behaviours the editor provides without listing them in an export, as
+/// Behaviors the editor provides without listing them in an export, as
 /// MoErgo's factory keymap defines them.
 const BUILT_IN_BEHAVIORS: &str = r#"
 magic: magic {
@@ -331,7 +331,7 @@ fn convert(export: &Value) -> (String, String, Vec<String>) {
         "/ {{\n    behaviors {{\n{behaviors}    }};\n    combos {{\n        compatible = \"zmk,combos\";\n{combos}    }};\n    keymap {{\n        compatible = \"zmk,keymap\";\n{layers}    }};\n}};\n{listeners}\n{custom_behaviors}\n{custom_devicetree}\n"
     );
 
-    // Add the editor's own behaviours that the layout uses but does not
+    // Add the editor's own behaviors that the layout uses but does not
     // define, and anything those build on.
     if let Ok(built_in) = dts::parse(&format!("/ {{ {BUILT_IN_BEHAVIORS} }};")) {
         let nodes = &built_in.nodes[0].children;

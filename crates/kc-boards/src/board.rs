@@ -23,7 +23,7 @@ pub struct Board {
     /// the default layout; an empty name leaves the key transparent.
     #[serde(default)]
     pub starter_keys: Vec<String>,
-    /// How the keyboard identifies itself over USB, for recognising one
+    /// How the keyboard identifies itself over USB, for recognizing one
     /// that is connected.
     #[serde(default)]
     pub usb: Vec<UsbId>,
@@ -106,7 +106,7 @@ pub struct PointingDevice {
     pub side: Side,
     /// The devicetree label of the device's input listener.
     pub listener: String,
-    /// Where to draw the device on the canvas: its centre and its width, in
+    /// Where to draw the device on the canvas: its center and its width, in
     /// layout units. Schematic, like the key layout itself.
     pub x: i32,
     pub y: i32,
@@ -190,7 +190,7 @@ pub struct FirmwareProfile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LightingBackend {
-    /// Whether `&trans` shows the colour from the layer below. Without
+    /// Whether `&trans` shows the color from the layer below. Without
     /// it, a key that inherits is written as unlit.
     pub transparent: bool,
     /// The number of the per-key effect, when the firmware lets the

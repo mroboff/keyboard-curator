@@ -1,7 +1,7 @@
-//! The keycode catalogue, built from ZMK's own `keys.h`.
+//! The keycode catalog, built from ZMK's own `keys.h`.
 //!
 //! Names, aliases, usages and descriptions come straight from the vendored
-//! header, so the catalogue cannot drift from what the firmware accepts.
+//! header, so the catalog cannot drift from what the firmware accepts.
 //! Picker categories and short keycap legends are derived here.
 
 use std::collections::HashMap;
@@ -104,10 +104,10 @@ impl Keycodes {
     }
 }
 
-/// The catalogue for ZMK v0.3.0, parsed once on first use.
+/// The catalog for ZMK v0.3.0, parsed once on first use.
 pub fn keycodes() -> &'static Keycodes {
-    static CATALOGUE: OnceLock<Keycodes> = OnceLock::new();
-    CATALOGUE.get_or_init(|| parse(KEYS_H, HID_USAGE_H))
+    static CATALOG: OnceLock<Keycodes> = OnceLock::new();
+    CATALOG.get_or_init(|| parse(KEYS_H, HID_USAGE_H))
 }
 
 /// `#define NAME (0x1234)` entries of `hid_usage.h`.
@@ -528,7 +528,7 @@ mod tests {
         assert_eq!(codes.get("K_PLAY_PAUSE").unwrap().usage, 0xE8);
     }
 
-    /// Every name `keys.h` defines must be in the catalogue.
+    /// Every name `keys.h` defines must be in the catalog.
     #[test]
     fn covers_every_define_in_the_header() {
         let codes = keycodes();
@@ -542,7 +542,7 @@ mod tests {
             defined.len()
         );
         let missing: Vec<&&str> = defined.iter().filter(|n| codes.get(n).is_none()).collect();
-        assert!(missing.is_empty(), "not in catalogue: {missing:?}");
+        assert!(missing.is_empty(), "not in catalog: {missing:?}");
 
         // Short names are what the emitter writes, so they must be unique.
         let mut short: Vec<&str> = codes.all().iter().map(Keycode::short_name).collect();

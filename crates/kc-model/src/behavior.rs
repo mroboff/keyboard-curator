@@ -1,4 +1,4 @@
-//! Behaviours a user defines in their project: hold-taps, tap-dances,
+//! Behaviors a user defines in their project: hold-taps, tap-dances,
 //! mod-morphs, sticky keys and macros.
 
 use kc_zmk::Modifier;
@@ -14,7 +14,7 @@ pub struct BehaviorDef {
     pub label: String,
     /// The name shown in the app.
     pub name: String,
-    /// What the behaviour is for, in the user's words. Written above it in
+    /// What the behavior is for, in the user's words. Written above it in
     /// the generated keymap as a comment.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
@@ -32,7 +32,7 @@ pub enum BehaviorKind {
 }
 
 impl BehaviorKind {
-    /// How many parameters a binding to this behaviour takes.
+    /// How many parameters a binding to this behavior takes.
     pub fn param_count(&self) -> usize {
         match self {
             BehaviorKind::HoldTap(_) => 2,
@@ -42,7 +42,7 @@ impl BehaviorKind {
         }
     }
 
-    /// The bindings held inside this behaviour.
+    /// The bindings held inside this behavior.
     pub fn bindings_mut(&mut self) -> Vec<&mut Binding> {
         match self {
             BehaviorKind::HoldTap(_) | BehaviorKind::StickyKey(_) => vec![],
@@ -79,7 +79,7 @@ impl BehaviorKind {
         }
     }
 
-    /// The behaviours this one is built from, such as a hold-tap's two sides.
+    /// The behaviors this one is built from, such as a hold-tap's two sides.
     pub fn behavior_refs(&self) -> Vec<&BehaviorRef> {
         match self {
             BehaviorKind::HoldTap(h) => vec![&h.hold, &h.tap],
@@ -152,7 +152,7 @@ pub struct ModMorph {
 /// A sticky key or sticky layer with non-default timing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StickyKey {
-    /// The behaviour made sticky: `kp` for keys, `mo` for layers.
+    /// The behavior made sticky: `kp` for keys, `mo` for layers.
     pub behavior: BehaviorRef,
     pub release_after_ms: u32,
     pub quick_release: bool,

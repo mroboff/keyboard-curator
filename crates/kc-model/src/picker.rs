@@ -148,7 +148,7 @@ fn behavior_items(
             label,
         )),
         [param] => match param.kind {
-            // Plain keys come from the keycode catalogue; `kt` and `sk` are
+            // Plain keys come from the keycode catalog; `kt` and `sk` are
             // variations chosen in the inspector.
             ParamKind::Keycode => {}
             ParamKind::Layer => {
@@ -211,14 +211,14 @@ fn behavior_items(
                 }
             }
         },
-        // Two-parameter behaviours (`mt`, `lt`) are built in the inspector.
+        // Two-parameter behaviors (`mt`, `lt`) are built in the inspector.
         _ => {}
     }
 }
 
-/// Behaviours declared in the project's raw devicetree, as label and
+/// Behaviors declared in the project's raw devicetree, as label and
 /// parameter count. Found by their `label: name {` header and
-/// `#binding-cells`, which every behaviour node has.
+/// `#binding-cells`, which every behavior node has.
 pub fn raw_behaviors(devicetree: &str) -> Vec<(String, usize)> {
     let mut found: Vec<(String, usize)> = Vec::new();
     let mut open: Option<String> = None;
@@ -241,8 +241,8 @@ pub fn raw_behaviors(devicetree: &str) -> Vec<(String, usize)> {
     found
 }
 
-/// Starting parameters for a binding to a user-defined behaviour, chosen
-/// from what the behaviours it wraps expect. They are adjusted afterwards
+/// Starting parameters for a binding to a user-defined behavior, chosen
+/// from what the behaviors it wraps expect. They are adjusted afterward
 /// in the inspector.
 fn default_params(project: &Project, kind: &BehaviorKind) -> Vec<Param> {
     let for_behavior = |behavior: &BehaviorRef| -> Param {
@@ -303,7 +303,7 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
         items.push(PickerItem::new(
             PickerGroup::Custom,
             label.clone(),
-            format!("Custom behaviour &{label}"),
+            format!("Custom behavior &{label}"),
             Binding::Raw {
                 raw: format!("&{label}{}", " 0".repeat(cells)),
             },

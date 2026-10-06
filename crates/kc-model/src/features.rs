@@ -117,7 +117,7 @@ impl Default for PointingProfile {
 }
 
 impl PointingProfile {
-    /// The input processors that give this behaviour. `native_scroll` says
+    /// The input processors that give this behavior. `native_scroll` says
     /// that the device reports scrolling itself, as the mouse scroll keys
     /// do, so its speed and direction are those of scrolling.
     pub fn to_processors(self, native_scroll: bool) -> Vec<InputProcessor> {
@@ -207,8 +207,8 @@ impl PointingProfile {
     }
 }
 
-/// A colour at full range, written `#RRGGBB`. Brightness limits are applied
-/// by firmware settings, never by altering stored colours.
+/// A color at full range, written `#RRGGBB`. Brightness limits are applied
+/// by firmware settings, never by altering stored colors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
@@ -219,7 +219,7 @@ impl fmt::Display for Rgb {
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
-#[error("`{0}` is not a #RRGGBB colour")]
+#[error("`{0}` is not a #RRGGBB color")]
 pub struct RgbError(pub String);
 
 impl FromStr for Rgb {
@@ -267,13 +267,13 @@ pub enum KeyLight {
     Inherit,
     Off,
     Color(Rgb),
-    /// One colour while a lock is off, another while it is on.
+    /// One color while a lock is off, another while it is on.
     Lock {
         lock: LockKind,
         off: Rgb,
         on: Rgb,
     },
-    /// One colour below a battery percentage, another at or above it.
+    /// One color below a battery percentage, another at or above it.
     Battery {
         percent: u8,
         below: Rgb,
@@ -281,7 +281,7 @@ pub enum KeyLight {
     },
 }
 
-/// Per-key colours for one layer.
+/// Per-key colors for one layer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LayerLighting {
     pub layer: LayerId,
@@ -305,7 +305,7 @@ pub enum SettingValue {
 /// not represent.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RawBlocks {
-    /// Behaviour definitions, emitted inside the `behaviors` node.
+    /// Behavior definitions, emitted inside the `behaviors` node.
     pub behaviors: String,
     /// General devicetree, emitted at the end of the keymap file.
     pub devicetree: String,
@@ -318,7 +318,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn colours_round_trip_as_hex() {
+    fn colors_round_trip_as_hex() {
         let c: Rgb = "#ff8000".parse().unwrap();
         assert_eq!(c, Rgb(255, 128, 0));
         assert_eq!(c.to_string(), "#FF8000");

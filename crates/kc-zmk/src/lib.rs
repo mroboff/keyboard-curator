@@ -1,4 +1,4 @@
-//! ZMK knowledge as data: keycodes and legends, the behaviour catalogue with typed parameters, and the Kconfig option catalogue.
+//! ZMK knowledge as data: keycodes and legends, the behavior catalog with typed parameters, and the Kconfig option catalog.
 
 pub mod behaviors;
 pub mod feature;

@@ -51,7 +51,7 @@ const MODIFIERS: [(Modifier, &str); 4] = [
     (Modifier::LGui, "⌘"),
 ];
 
-/// Colour tags a layer can be given in the layer list.
+/// Color tags a layer can be given in the layer list.
 const LAYER_TAGS: [Rgb; 6] = [
     Rgb(0xE5, 0x48, 0x4D),
     Rgb(0xF7, 0x9A, 0x3E),
@@ -160,7 +160,7 @@ impl Render for DraggedLayer {
     }
 }
 
-/// Which layer, behaviour and combo the name fields currently show, so
+/// Which layer, behavior and combo the name fields currently show, so
 /// that text typed into them is applied to the right thing even when the
 /// selection has just moved on.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -187,10 +187,10 @@ pub struct Workspace {
     keyboard: KeyboardId,
     build: BuildStatus,
     live: LiveStatus,
-    /// The binding inside a behaviour or combo that the picker assigns to,
+    /// The binding inside a behavior or combo that the picker assigns to,
     /// in the Behaviors and Combos modes.
     slot: Option<Slot>,
-    /// The behaviour and combo being edited.
+    /// The behavior and combo being edited.
     behavior: Option<BehaviorId>,
     combo: Option<ComboId>,
     /// Where the small keyboard for choosing key positions was laid out.
@@ -203,7 +203,7 @@ pub struct Workspace {
     raw_behaviors: Entity<TextareaState>,
     raw_devicetree: Entity<TextareaState>,
     raw_conf: Entity<TextareaState>,
-    /// What painting does in the Lighting mode, and with which colour.
+    /// What painting does in the Lighting mode, and with which color.
     brush: lighting::Brush,
     paint_color: kc_model::features::Rgb,
     /// True while the pointer is held down painting.
@@ -525,7 +525,7 @@ impl Workspace {
         self.commit_settings_inputs(cx);
     }
 
-    /// Shows the edited behaviour's and combo's names in their fields.
+    /// Shows the edited behavior's and combo's names in their fields.
     fn sync_editor_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (name, label) = self
             .behavior
@@ -914,7 +914,7 @@ impl Workspace {
     }
 
     /// Sets the binding of every selected key. With a single key selected,
-    /// `advance` moves on to the next key afterwards.
+    /// `advance` moves on to the next key afterward.
     fn apply_binding(
         &mut self,
         binding: Binding,
@@ -1440,7 +1440,7 @@ impl Workspace {
     }
 
     /// The picker with a binding field beside it, for the modes where it
-    /// assigns to a slot inside a behaviour or combo.
+    /// assigns to a slot inside a behavior or combo.
     fn render_slot_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
         div()

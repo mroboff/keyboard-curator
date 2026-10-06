@@ -360,7 +360,7 @@ fn bindings_round_trip_through_the_protocol_numbers() {
         encode(&project, &table, &Binding::Raw { raw: "&x".into() }),
         None
     );
-    // A colour takes three numbers, which the protocol has no room for.
+    // A color takes three numbers, which the protocol has no room for.
     assert_eq!(
         encode(
             &project,
@@ -390,7 +390,7 @@ fn a_session_reads_compares_changes_and_saves() {
     let device = client.get_keymap().unwrap();
     let same = compare(&project, &table, &device);
     assert!(same.changes.is_empty() && same.mismatch.is_none());
-    // The simulated firmware has only a few behaviours, so keys using the
+    // The simulated firmware has only a few behaviors, so keys using the
     // rest already count as needing a build.
     let baseline = same.needs_build;
 
@@ -477,7 +477,7 @@ fn refusals_and_locks_are_reported() {
     assert!(matches!(
         client.set_binding(0, 0, unknown),
         Err(StudioError::Refused {
-            reason: "unknown behaviour",
+            reason: "unknown behavior",
             ..
         })
     ));

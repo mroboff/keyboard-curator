@@ -220,7 +220,7 @@ pub mod behaviors {
     }
 
     /// The parameter metadata (field 3) is not read; the client knows
-    /// each behaviour's parameters from its own catalogue.
+    /// each behavior's parameters from its own catalog.
     #[derive(Clone, PartialEq, prost::Message)]
     pub struct GetBehaviorDetailsResponse {
         #[prost(uint32, tag = "1")]

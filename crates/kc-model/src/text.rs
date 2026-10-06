@@ -71,7 +71,7 @@ pub fn format_binding(project: &Project, binding: &Binding, style: LayerStyle) -
     text
 }
 
-/// The commands of a built-in behaviour that are written `NAME(a,b)`.
+/// The commands of a built-in behavior that are written `NAME(a,b)`.
 fn function_commands(label: &str) -> Vec<&'static str> {
     let Some(def) = behaviors::built_in(label) else {
         return Vec::new();
@@ -168,7 +168,7 @@ fn parse_built_in(
     args.next().is_none().then_some(params)
 }
 
-/// Reads binding text such as `&mt LSHFT A`. Text that names a behaviour and
+/// Reads binding text such as `&mt LSHFT A`. Text that names a behavior and
 /// parameters the model understands becomes a structured binding; anything
 /// else is kept verbatim as a raw binding, so nothing typed is ever lost.
 pub fn parse_binding(project: &Project, text: &str) -> Binding {
@@ -192,8 +192,8 @@ pub fn parse_binding(project: &Project, text: &str) -> Binding {
     if args.len() != def.kind.param_count() {
         return raw();
     }
-    // A user behaviour's parameters take their meaning from the behaviours
-    // it wraps: a hold-tap's first parameter goes to its hold behaviour, and
+    // A user behavior's parameters take their meaning from the behaviors
+    // it wraps: a hold-tap's first parameter goes to its hold behavior, and
     // so on. Where that says nothing, read each as the most specific thing
     // it could be.
     let wrapped: Vec<&BehaviorRef> = match &def.kind {

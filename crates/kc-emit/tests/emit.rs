@@ -215,7 +215,7 @@ fn rich_go60() -> (Project, Board) {
         SettingValue::Text("My \"Go60\"".into()),
     );
     p.raw.conf = "CONFIG_CUSTOM=y".into();
-    p.raw.behaviors = "/* custom behaviours */".into();
+    p.raw.behaviors = "/* custom behaviors */".into();
     p.raw.devicetree = "/* custom devicetree */".into();
     (p, go60)
 }
@@ -236,7 +236,7 @@ fn every_construct_is_written_in_zmk_syntax() {
     has("            bindings = <&kp BSPC>, <&kp DEL>;\n            mods = <(MOD_LSFT|MOD_RSFT)>;\n            keep-mods = <(MOD_RSFT)>;");
     has("            compatible = \"zmk,behavior-sticky-key\";\n            #binding-cells = <1>;\n            bindings = <&kp>;\n            release-after-ms = <800>;\n            quick-release;\n            ignore-modifiers;");
     has("    macros {\n        hello: hello {\n            compatible = \"zmk,behavior-macro\";\n            #binding-cells = <0>;\n            wait-ms = <30>;\n            bindings\n                = <&macro_press &kp LSHFT>\n                , <&macro_tap &kp H>\n                , <&macro_release &kp LSHFT>\n                , <&macro_tap &kp I>\n                , <&macro_pause_for_release>\n                ;");
-    has("        /* custom behaviours */");
+    has("        /* custom behaviors */");
 
     has("    combos {\n        compatible = \"zmk,combos\";\n        combo_caps_word_");
     has("            timeout-ms = <40>;\n            key-positions = <40 43>;\n            bindings = <&caps_word>;\n            layers = <LAYER_Base>;");
@@ -355,7 +355,7 @@ fn per_key_lighting_is_written_for_firmware_that_has_it() {
     project.lighting_mut(nav).unwrap().keys[12] = KeyLight::Color(Rgb(0, 0, 255));
     project.lighting_mut(nav).unwrap().fade_delay = Some(15);
 
-    // The stock firmware has no per-key lighting, so the colours stay in
+    // The stock firmware has no per-key lighting, so the colors stay in
     // the project and out of the generated files.
     let stock = generate(&project, &go60).unwrap();
     assert!(!file(&stock, "config/go60.keymap").contains("underglow-layer"));

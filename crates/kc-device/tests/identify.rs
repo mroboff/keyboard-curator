@@ -1,4 +1,4 @@
-//! Recognising boards from what USB devices report.
+//! Recognizing boards from what USB devices report.
 
 use kc_device::{identify, is_connected, UsbDevice};
 
@@ -12,7 +12,7 @@ fn usb(vendor: u16, product: u16, name: Option<&str>, serial: Option<&str>) -> U
 }
 
 #[test]
-fn boards_are_recognised_by_ids_and_name() {
+fn boards_are_recognized_by_ids_and_name() {
     let boards = kc_boards::built_in().unwrap();
     let index = |id: &str| boards.iter().position(|b| b.id == id).unwrap();
     let devices = [
@@ -79,7 +79,7 @@ fn only_devices_with_a_serial_number_can_be_linked() {
 }
 
 #[test]
-fn devices_are_labelled_by_name_or_ids() {
+fn devices_are_labeled_by_name_or_ids() {
     assert_eq!(usb(1, 2, Some(" Go60 Left "), None).label(), "Go60 Left");
     assert_eq!(
         usb(0x16c0, 0x27db, None, None).label(),

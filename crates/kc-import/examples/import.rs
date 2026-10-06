@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         kc_import::import_keymap("Imported", &text, board)?
     };
     println!(
-        "{} layers, {} behaviours, {} combos, {} raw bindings",
+        "{} layers, {} behaviors, {} combos, {} raw bindings",
         report.layers, report.behaviors, report.combos, report.raw_bindings
     );
     println!("kept as text: {:?}", report.raw_blocks);

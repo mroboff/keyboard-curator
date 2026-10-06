@@ -73,11 +73,11 @@ impl Checker<'_> {
         match behavior {
             BehaviorRef::BuiltIn(label) => match behaviors::built_in(label) {
                 Some(def) => self.feature(location, &format!("&{label}"), def.requires),
-                None => self.error(location, format!("&{label} is not a ZMK behaviour")),
+                None => self.error(location, format!("&{label} is not a ZMK behavior")),
             },
             BehaviorRef::User { user } => {
                 if self.project.behavior(*user).is_none() {
-                    self.error(location, "uses a behaviour that no longer exists");
+                    self.error(location, "uses a behavior that no longer exists");
                 }
             }
         }
@@ -393,7 +393,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
     for lighting in &project.lighting {
         let location = Location::Lighting(lighting.layer);
         c.layer(&location, lighting.layer);
-        // Colours for firmware without per-key lighting are kept in the
+        // Colors for firmware without per-key lighting are kept in the
         // project but not generated.
         if !c.features.contains(&Feature::PerKeyLighting) {
             continue;
@@ -429,7 +429,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         }
     }
 
-    // Per-key colours are one of the lighting effects. Unless the firmware
+    // Per-key colors are one of the lighting effects. Unless the firmware
     // starts in it, a key has to cycle to it once.
     let lit = c.features.contains(&Feature::PerKeyLighting)
         && project
@@ -463,14 +463,14 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         } else if maps.iter().any(|m| !m.verified) {
             c.warning(
                 &root,
-                "the LED positions for this keyboard have not been confirmed on hardware, so colours may land on the wrong keys",
+                "the LED positions for this keyboard have not been confirmed on hardware, so colors may land on the wrong keys",
             );
         }
     }
     if lit && !starts_lit && !cycles {
         c.warning(
             &root,
-            "per-key colours show once the lighting effect is switched to them, but no key changes the lighting effect",
+            "per-key colors show once the lighting effect is switched to them, but no key changes the lighting effect",
         );
     }
 

@@ -1,7 +1,7 @@
 /*
  * A cut-down keymap in the form MoErgo's Layout Editor writes for the Go60:
- * its helper macros, its conditional Bluetooth behaviours, its input
- * listeners and a few behaviours with their descriptions.
+ * its helper macros, its conditional Bluetooth behaviors, its input
+ * listeners and a few behaviors with their descriptions.
  */
 
 #include <behaviors.dtsi>

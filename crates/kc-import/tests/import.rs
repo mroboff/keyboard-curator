@@ -81,7 +81,7 @@ fn the_go60_factory_keymap_imports_to_the_factory_template() {
     assert_eq!(report.layers, 5);
     assert_eq!(report.behaviors, 12);
     assert_eq!(report.raw_bindings, 0);
-    // Everything in it is modelled, the tap-to-right-click processor too.
+    // Everything in it is modeled, the tap-to-right-click processor too.
     assert_eq!(report.raw_blocks, [] as [&str; 0]);
     assert_eq!(report.notes, [] as [&str; 0]);
 
@@ -188,7 +188,7 @@ fn what_cannot_be_read_is_kept_and_reported() {
         project.layers[0].bindings[0],
         Binding::kp("LC(A)".parse().unwrap())
     );
-    // The unknown behaviour, and the tap-dance that needs it, stay as text.
+    // The unknown behavior, and the tap-dance that needs it, stay as text.
     assert_eq!(report.behaviors, 0);
     assert!(project.raw.behaviors.contains("zmk,behavior-something-new"));
     assert!(project.raw.behaviors.contains("td: td {"));
@@ -234,7 +234,7 @@ fn unusable_files_explain_why() {
 }
 
 #[test]
-fn imprint_variants_are_recognised_by_key_count() {
+fn imprint_variants_are_recognized_by_key_count() {
     let imprint = board("cyboard-imprint");
     let keymap = format!(
         "/ {{ keymap {{ compatible = \"zmk,keymap\"; base {{ bindings = <{}>; }}; }}; }};",
@@ -336,7 +336,7 @@ fn moergo_layout_editor_exports_import_with_their_shorthands_written_out() {
     let show =
         |position: usize| format_binding(&project, &base.bindings[position], LayerStyle::Index);
     assert_eq!(show(0), "&kp LG(LA(K))");
-    // The editor's shorthands become the behaviours they stand for.
+    // The editor's shorthands become the behaviors they stand for.
     assert_eq!(show(1), "&magic 1 0");
     assert_eq!(show(2), "&layer_td_1");
     assert_eq!(show(3), "&sys_reset");
@@ -458,7 +458,7 @@ fn files_find_their_board() {
         board_of("x.keymap", &keymap(60, "&cirque_lh_listener { };")),
         "moergo-go60"
     );
-    // A Layout Editor export is recognised by being JSON.
+    // A Layout Editor export is recognized by being JSON.
     assert_eq!(board_of("layout.json", &moergo_export()), "moergo-go60");
 
     let (project, _, report) = import_file(
@@ -480,8 +480,8 @@ fn files_find_their_board() {
 }
 
 /// A keymap downloaded from MoErgo's Layout Editor: helper macros with
-/// arguments, behaviours chosen by `#ifdef`, mouse-key listeners, a
-/// right-click processor and described behaviours. All of it is read into
+/// arguments, behaviors chosen by `#ifdef`, mouse-key listeners, a
+/// right-click processor and described behaviors. All of it is read into
 /// the model, and nothing is left as text.
 #[test]
 fn moergo_layout_editor_keymaps_import_completely() {
@@ -515,7 +515,7 @@ fn moergo_layout_editor_keymaps_import_completely() {
         ]
     );
     // ZMK's `bt.h` defines `BT_DISC_CMD`, so the `#ifdef` branch is the one
-    // read, and each behaviour is defined once.
+    // read, and each behavior is defined once.
     assert!(matches!(behavior("bt_0").kind, BehaviorKind::TapDance(_)));
     assert!(matches!(
         behavior("bt_select_0").kind,
@@ -523,7 +523,7 @@ fn moergo_layout_editor_keymaps_import_completely() {
     ));
     assert_eq!(report.behaviors, 8);
     assert_eq!(project.behaviors.len(), 8);
-    // The comment above a behaviour is its description.
+    // The comment above a behavior is its description.
     assert_eq!(
         behavior("AS_HT_v2_TKZ").description,
         "AutoShift Helper - &AS main macro is chained to &AS_HT hold tap and &AS_Shifted macro. More: https://github.com/nickcoutsos/keymap-editor/wiki/Autoshift-using-ZMK-behaviors"
@@ -574,7 +574,7 @@ fn moergo_layout_editor_keymaps_import_completely() {
     assert_eq!(problems, []);
 
     // The keymap written from it defines the right-click processor and
-    // each behaviour once, keeps the descriptions, and reads back the same.
+    // each behavior once, keeps the descriptions, and reads back the same.
     let keymap = kc_emit::keymap(&project, &go60).unwrap();
     for once in [
         "bt_0: bt_0 {",

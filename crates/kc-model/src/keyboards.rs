@@ -409,7 +409,7 @@ fn check_firmware(board: &Board, firmware: &str) -> Result<(), KeyboardError> {
 /// project is opened with a firmware that has the feature.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Hidden {
-    /// Per-key colours, when the firmware has no per-key lighting.
+    /// Per-key colors, when the firmware has no per-key lighting.
     pub lighting: bool,
     /// Pointing-device configuration, when the firmware has no pointing.
     pub pointing: bool,
@@ -448,7 +448,7 @@ pub fn hidden(project: &Project, features: &[Feature]) -> Hidden {
 pub struct Retarget {
     /// What the new firmware hides that the current one shows.
     pub hidden: Hidden,
-    /// How many new problems the switch causes: keys and behaviours that
+    /// How many new problems the switch causes: keys and behaviors that
     /// use something the new firmware lacks. These are flagged, not hidden,
     /// because a key cannot be left out of a keymap.
     pub flagged: usize,
@@ -459,7 +459,7 @@ impl Retarget {
     pub fn summary(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
         if self.hidden.lighting {
-            parts.push("Per-key colours will be hidden.".into());
+            parts.push("Per-key colors will be hidden.".into());
         }
         if self.hidden.pointing {
             parts.push("Pointing device configuration will be hidden.".into());
@@ -481,11 +481,11 @@ impl Retarget {
         match self.flagged {
             0 => {}
             1 => parts.push(
-                "One key or behaviour uses a feature this firmware lacks and will be flagged."
+                "One key or behavior uses a feature this firmware lacks and will be flagged."
                     .into(),
             ),
             n => parts.push(format!(
-                "{n} keys or behaviours use features this firmware lacks and will be flagged."
+                "{n} keys or behaviors use features this firmware lacks and will be flagged."
             )),
         }
         if parts.is_empty() {

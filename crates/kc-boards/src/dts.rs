@@ -18,11 +18,11 @@ pub enum DtsError {
     WrongFieldCount { line: usize, found: usize },
     #[error("line {line}: `{text}` is not an integer")]
     NotAnInteger { line: usize, text: String },
-    #[error("line {line}: key_physical_attrs outside a labelled node")]
+    #[error("line {line}: key_physical_attrs outside a labeled node")]
     KeyOutsideNode { line: usize },
 }
 
-/// Extracts every labelled node that carries `key_physical_attrs` entries.
+/// Extracts every labeled node that carries `key_physical_attrs` entries.
 ///
 /// This is a line-oriented scan, not a devicetree parser: it expects one
 /// `<&key_physical_attrs w h x y rot rx ry>` per line, which is how ZMK and
@@ -41,7 +41,7 @@ pub fn parse_physical_layouts(src: &str) -> Result<Vec<DtsLayout>, DtsError> {
             });
             in_layout = true;
         } else if text.ends_with('{') {
-            // An unlabelled node (such as the root) cannot be a layout.
+            // An unlabeled node (such as the root) cannot be a layout.
             in_layout = false;
         }
         if let Some(rest) = text.strip_prefix("display-name") {

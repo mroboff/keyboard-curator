@@ -24,7 +24,7 @@ pub const MAX_LAYERS: usize = 32;
 pub struct Layer {
     pub id: LayerId,
     pub name: String,
-    /// A colour tag for the layer list. Not sent to the keyboard.
+    /// A color tag for the layer list. Not sent to the keyboard.
     pub color: Option<Rgb>,
     /// One binding per key position of the project's physical layout.
     pub bindings: Vec<Binding>,
@@ -48,7 +48,7 @@ pub enum Location {
     Setting(String),
 }
 
-/// A binding that lives inside a behaviour or combo rather than on a key,
+/// A binding that lives inside a behavior or combo rather than on a key,
 /// so that editors can point the key picker at it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Slot {
@@ -77,7 +77,7 @@ pub enum ModelError {
     NoSuchSlot,
     #[error("no layer with id {0:?}")]
     NoSuchLayer(LayerId),
-    #[error("no behaviour with id {0:?}")]
+    #[error("no behavior with id {0:?}")]
     NoSuchBehavior(BehaviorId),
     #[error("no combo with id {0:?}")]
     NoSuchCombo(ComboId),
@@ -89,9 +89,9 @@ pub enum ModelError {
     LastLayer,
     #[error("the layer is still referred to from {} place(s)", .0.len())]
     LayerInUse(Vec<Location>),
-    #[error("the behaviour is still referred to from {} place(s)", .0.len())]
+    #[error("the behavior is still referred to from {} place(s)", .0.len())]
     BehaviorInUse(Vec<Location>),
-    #[error("`{0}` is not a valid behaviour label: use letters, digits and underscores, not starting with a digit")]
+    #[error("`{0}` is not a valid behavior label: use letters, digits and underscores, not starting with a digit")]
     InvalidLabel(String),
     #[error("the label `{0}` is already taken")]
     LabelTaken(String),
@@ -141,7 +141,7 @@ const TEMPLATES: &[(&str, &str)] = &[
 
 impl Project {
     /// A new project that starts as the board's factory layout: every
-    /// layer, behaviour and pointing setting the keyboard ships with.
+    /// layer, behavior and pointing setting the keyboard ships with.
     /// Boards without a template start from [`Project::new`].
     pub fn from_template(name: impl Into<String>, board: &Board) -> Self {
         let template = TEMPLATES
@@ -407,7 +407,7 @@ impl Project {
         Ok(&mut self.lighting[index])
     }
 
-    // User-defined behaviours
+    // User-defined behaviors
 
     pub fn behavior(&self, id: BehaviorId) -> Option<&BehaviorDef> {
         self.behaviors.iter().find(|b| b.id == id)
@@ -470,7 +470,7 @@ impl Project {
         Ok(())
     }
 
-    /// Everywhere that uses a user-defined behaviour.
+    /// Everywhere that uses a user-defined behavior.
     pub fn behavior_references(&self, id: BehaviorId) -> Vec<Location> {
         let wanted = BehaviorRef::User { user: id };
         let mut found: Vec<Location> = self

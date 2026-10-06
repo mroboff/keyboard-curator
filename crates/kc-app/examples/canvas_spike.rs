@@ -2,7 +2,7 @@
 //!
 //! Draws the Imprint 82-key layout (including the rotated thumb arcs), with
 //! hover, click-to-select, drag-to-swap, a native menu, a text input for the
-//! selected key's legend and a colour picker for its colour. Throwaway code:
+//! selected key's legend and a color picker for its color. Throwaway code:
 //! the real geometry lives in `kc-boards` and the real canvas in `kc-app`.
 
 use std::cell::Cell;
@@ -258,7 +258,7 @@ impl Render for Spike {
                     if legend.is_empty() {
                         continue;
                     }
-                    // Readable legend colour against the key's own fill.
+                    // Readable legend color against the key's own fill.
                     let color = if keys[ix].color.is_some_and(|c| c.l < 0.5) {
                         gpui_kit::white()
                     } else if keys[ix].color.is_some() {

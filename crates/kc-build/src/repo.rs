@@ -140,7 +140,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn github_remotes_are_recognised_in_every_form() {
+    fn github_remotes_are_recognized_in_every_form() {
         let expected = Some(("mroboff".to_string(), "zmk-config".to_string()));
         for url in [
             "https://github.com/mroboff/zmk-config.git",

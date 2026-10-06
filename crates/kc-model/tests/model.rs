@@ -1,4 +1,4 @@
-//! Behaviour of the project model against the real board definitions.
+//! Behavior of the project model against the real board definitions.
 
 use kc_boards::Board;
 use kc_model::behavior::{BehaviorKind, HoldTap, Macro, MacroStep, TapDance};
@@ -245,7 +245,7 @@ fn duplicating_a_layer_copies_bindings_and_lighting() {
 }
 
 #[test]
-fn behaviour_labels_and_references_are_protected() {
+fn behavior_labels_and_references_are_protected() {
     let (mut p, _) = rich_project();
     let magic = p.behaviors[0].id;
     let kind = p.behaviors[0].kind.clone();
@@ -305,11 +305,11 @@ fn validation_reports_what_the_firmware_would_reject() {
     assert!(found("BT_SEL profile must be between 0 and 4, found 9"));
     assert!(found("&kp takes 1 parameter(s), found 0"));
     assert!(found("&mo has the wrong kind of value"));
-    assert!(found("&nope is not a ZMK behaviour"));
+    assert!(found("&nope is not a ZMK behavior"));
     assert!(found("refers to a layer that no longer exists"));
     assert!(found("&bl is not supported"));
     assert!(found("brightness 80 is above this board's limit of 50"));
-    // Colours on firmware without per-key lighting are kept but hidden.
+    // Colors on firmware without per-key lighting are kept but hidden.
     assert!(!found("per-key lighting"));
     assert!(found("a combo needs at least two keys"));
     assert!(found("uses key position 200"));
@@ -351,7 +351,7 @@ fn mouse_keys_are_pointing_devices_on_every_board() {
 fn custom_devicetree_may_not_define_a_label_twice() {
     let (mut p, go60) = rich_project();
     assert!(errors(&p, &go60).is_empty());
-    // A behaviour the project already has.
+    // A behavior the project already has.
     p.raw.behaviors =
         "hello: hello {\n    compatible = \"zmk,behavior-macro\";\n    bindings = <&kp A>;\n};"
             .into();
@@ -742,7 +742,7 @@ fn the_picker_offers_what_the_firmware_supports() {
     // MoErgo's status command is offered on the Go60; backlight is not.
     assert!(find("RGB STATUS").is_some());
     assert!(find("BL TOG").is_none());
-    // Multi-argument commands and parameterised behaviours start from
+    // Multi-argument commands and parameterized behaviors start from
     // defaults and are tuned in the inspector.
     assert_eq!(
         find("RGB COLOR HSB").unwrap().binding,
@@ -840,7 +840,7 @@ fn keys_and_layers_copy_and_paste_as_text() {
 }
 
 #[test]
-fn slots_reach_bindings_inside_behaviours_and_combos() {
+fn slots_reach_bindings_inside_behaviors_and_combos() {
     use kc_model::Slot;
 
     let (mut p, go60) = rich_project();
@@ -923,7 +923,7 @@ fn slots_reach_bindings_inside_behaviours_and_combos() {
 }
 
 #[test]
-fn raw_behaviours_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
+fn raw_behaviors_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
     use kc_model::picker::{picker_items, raw_behaviors};
 
     let (mut p, go60) = rich_project();
@@ -966,7 +966,7 @@ fn raw_behaviours_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
 fn factory_templates_reproduce_the_vendor_layouts_without_raw_bindings() {
     use kc_model::keycap::keycap;
 
-    for (id, layers, behaviours, reserved) in
+    for (id, layers, behaviors, reserved) in
         [("cyboard-imprint", 5, 0, 27), ("moergo-go60", 5, 12, 0)]
     {
         let board = board(id);
@@ -974,7 +974,7 @@ fn factory_templates_reproduce_the_vendor_layouts_without_raw_bindings() {
         assert_eq!(p.name, "Mine");
         assert_eq!(
             (p.layers.len(), p.behaviors.len(), p.reserved_layers),
-            (layers, behaviours, reserved),
+            (layers, behaviors, reserved),
             "{id}"
         );
         // Everything the vendor ships is expressed in the model itself.
@@ -1066,14 +1066,14 @@ fn led_check_patterns_and_unverified_maps() {
     // The first twelve keys are one row; the thirteenth starts the next.
     assert!(rows[..12].iter().all(|l| *l == rows[0]));
     assert_ne!(rows[12], rows[0]);
-    // Keys in the same physical column share a colour down the board.
+    // Keys in the same physical column share a color down the board.
     assert_eq!(columns[0], columns[12]);
     assert_ne!(columns[0], columns[1]);
 
     let mut p = Project::from_template("Check", &imprint);
     let base = p.layers[0].id;
     p.lighting_mut(base).unwrap().keys = rows;
-    // The stock firmware has no per-key lighting; the colours are kept
+    // The stock firmware has no per-key lighting; the colors are kept
     // out of sight rather than reported.
     assert!(errors(&p, &imprint).is_empty());
     p.firmware = "kc-zmk-0.3-perkey".into();

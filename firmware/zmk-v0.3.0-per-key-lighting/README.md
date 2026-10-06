@@ -27,9 +27,9 @@ All of it is MIT-licensed, like ZMK. Each patch keeps its original author.
 ## What it adds
 
 - A `zmk,underglow-layer` node: one child per layer, each with a `bindings`
-  list of one lighting behaviour per key and a `layer-id`. The board supplies
+  list of one lighting behavior per key and a `layer-id`. The board supplies
   `pixel-lookup`, the key position under each LED.
-- Lighting behaviours: `&ug <0xRRGGBB>`; `&ug_cl`, `&ug_nl` and `&ug_sl`
+- Lighting behaviors: `&ug <0xRRGGBB>`; `&ug_cl`, `&ug_nl` and `&ug_sl`
   `<off> <on>` for lock indicators; `&ug_b2`, `&ug_b4`, `&ug_b6` and `&ug_b8`
   `<below> <above>` for battery level; and `&trans` to show the layer below.
 - The active layers are sent to the peripheral half so it can light too.

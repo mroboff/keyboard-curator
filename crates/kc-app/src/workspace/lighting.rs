@@ -1,4 +1,4 @@
-//! The Lighting mode: paint a colour onto each key, layer by layer.
+//! The Lighting mode: paint a color onto each key, layer by layer.
 
 use gpui_kit::component::color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState};
 use gpui_kit::component::ActiveTheme as _;
@@ -66,7 +66,7 @@ impl Workspace {
         self.features().contains(&Feature::PerKeyLighting)
     }
 
-    /// Whether the firmware shows per-key colours from power-up.
+    /// Whether the firmware shows per-key colors from power-up.
     fn starts_lit(&self) -> bool {
         self.board
             .profile(&self.project().firmware)
@@ -193,7 +193,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(section_title("COLOUR", cx))
+                    .child(section_title("COLOR", cx))
                     .children(swatches)
                     .child(ColorPicker::new(&self.color_picker))
                     .child(
@@ -213,7 +213,7 @@ impl Workspace {
                     .items_center()
                     .gap_1()
                     .child(section_title("PAINT WITH", cx))
-                    .child(brush("brush-color", "Colour", Brush::Color, cx))
+                    .child(brush("brush-color", "Color", Brush::Color, cx))
                     .child(brush("brush-off", "Off", Brush::Off, cx))
                     .child(brush("brush-inherit", "Same as layer below", Brush::Inherit, cx))
                     .child(brush("brush-caps", "Caps Lock light", Brush::Lock(LockKind::Caps), cx))
@@ -242,21 +242,21 @@ impl Workspace {
                             this.set_layer_lights("Clear Lighting", vec![KeyLight::Inherit; keys], window, cx);
                         },
                     )))
-                    .child(chip("lights-by-type", "Colour by what keys do", false, cx).on_click(
+                    .child(chip("lights-by-type", "Color by what keys do", false, cx).on_click(
                         cx.listener(|this, _, window, cx| {
                             let lights = by_key_type(this.project(), this.layer);
-                            this.set_layer_lights("Colour by Key Type", lights, window, cx);
+                            this.set_layer_lights("Color by Key Type", lights, window, cx);
                         }),
                     ))
                     .children(others),
             )
             .child(div().text_xs().text_color(muted).child(format!(
-                "Click or drag across keys to paint. Lock lights show the chosen colour while the lock is on; battery lights turn red below the level. Colours are shown at full strength; the keyboard limits brightness to {}%.{}",
+                "Click or drag across keys to paint. Lock lights show the chosen color while the lock is on; battery lights turn red below the level. Colors are shown at full strength; the keyboard limits brightness to {}%.{}",
                 self.board.brightness_cap,
                 if self.starts_lit() {
                     ""
                 } else {
-                    " After flashing, press the key that changes the lighting effect until these colours appear; the keyboard remembers."
+                    " After flashing, press the key that changes the lighting effect until these colors appear; the keyboard remembers."
                 }
             )))
     }
@@ -278,7 +278,7 @@ impl Workspace {
                 .p_6()
                 .child(div().text_lg().child("Per-key lighting"))
                 .child(div().max_w(px(560.)).text_sm().text_color(muted).child(
-                    "This keyboard's firmware has no per-key colours. The firmware is chosen in Settings.",
+                    "This keyboard's firmware has no per-key colors. The firmware is chosen in Settings.",
                 ));
         }
 

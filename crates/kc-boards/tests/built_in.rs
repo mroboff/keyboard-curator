@@ -13,7 +13,7 @@ fn board(id: &str) -> Board {
 
 /// No two keys may sit on top of each other once rotation is applied.
 /// Vendor thumb fans overlap slightly at their inner corners, so this
-/// compares centres rather than outlines.
+/// compares centers rather than outlines.
 fn assert_keys_distinct(board: &Board) {
     for layout in &board.layouts {
         let centers: Vec<_> = layout.keys.iter().map(|k| k.center()).collect();
@@ -100,7 +100,7 @@ fn go60_layout_and_binding_order() {
     // Bottom rows come before the thumbs, left hand first.
     assert!(keys[48..=50].iter().all(|k| k.y == 400 && k.x < 600));
     assert!(keys[51..=53].iter().all(|k| k.y == 400 && k.x > 1100));
-    // Thumbs: left T1..T3 turn clockwise, right T3..T1 anticlockwise.
+    // Thumbs: left T1..T3 turn clockwise, right T3..T1 counterclockwise.
     assert!(keys[54..=56].iter().all(|k| k.rot > 0));
     assert!(keys[57..=59].iter().all(|k| k.rot < 0));
     assert_eq!(keys[57].rot, -3700);

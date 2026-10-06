@@ -229,13 +229,13 @@ pub const SETTINGS: &[Setting] = &[
     rgb(
         "CONFIG_ZMK_RGB_UNDERGLOW_HUE_START",
         "Starting hue",
-        "Colour at power-up, in degrees around the colour wheel.",
+        "Color at power-up, in degrees around the color wheel.",
         int(0, 359, 5),
     ),
     rgb(
         "CONFIG_ZMK_RGB_UNDERGLOW_SAT_START",
         "Starting saturation (%)",
-        "Colour intensity at power-up.",
+        "Color intensity at power-up.",
         int(0, 100, 5),
     ),
     rgb(

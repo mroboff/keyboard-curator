@@ -1,7 +1,7 @@
-//! ZMK's built-in behaviours and the parameters each one takes.
+//! ZMK's built-in behaviors and the parameters each one takes.
 //!
 //! The key picker, the key inspector and the emitter are all driven by this
-//! table. User-defined behaviours (hold-taps, macros and so on) live in the
+//! table. User-defined behaviors (hold-taps, macros and so on) live in the
 //! project model, not here.
 
 use crate::feature::Feature;
@@ -30,14 +30,14 @@ pub enum CallStyle {
     Function,
 }
 
-/// One command of a command-style behaviour such as `&bt` or `&rgb_ug`.
+/// One command of a command-style behavior such as `&bt` or `&rgb_ug`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Command {
     pub name: &'static str,
     pub description: &'static str,
     pub args: &'static [Arg],
     pub style: CallStyle,
-    /// The firmware feature this command needs beyond its behaviour's own.
+    /// The firmware feature this command needs beyond its behavior's own.
     pub requires: Option<Feature>,
 }
 
@@ -59,7 +59,7 @@ pub struct Param {
     pub kind: ParamKind,
 }
 
-/// Where a behaviour appears in the key picker.
+/// Where a behavior appears in the key picker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Group {
     Keys,
@@ -225,7 +225,7 @@ const RGB_COMMANDS: &[Command] = &[
             },
         ],
         style: CallStyle::Function,
-        ..command("RGB_COLOR_HSB", "Set a specific colour")
+        ..command("RGB_COLOR_HSB", "Set a specific color")
     },
     Command {
         requires: Some(Feature::RgbStatus),
@@ -290,7 +290,7 @@ const fn constants(name: &'static str, kind: &'static [Constant]) -> [Param; 1] 
     }]
 }
 
-/// Every behaviour ZMK v0.3.0 defines out of the box.
+/// Every behavior ZMK v0.3.0 defines out of the box.
 pub const BUILT_IN: &[Behavior] = &[
     behavior(
         "kp",
@@ -339,7 +339,7 @@ pub const BUILT_IN: &[Behavior] = &[
     behavior(
         "caps_word",
         "Caps word",
-        "Capitalise letters until a non-word key is pressed",
+        "Capitalize letters until a non-word key is pressed",
         &[],
         Group::Keys,
     ),
@@ -515,13 +515,13 @@ pub const BUILT_IN: &[Behavior] = &[
     },
 ];
 
-/// Looks a built-in behaviour up by its label (without the `&`).
+/// Looks a built-in behavior up by its label (without the `&`).
 pub fn built_in(label: &str) -> Option<&'static Behavior> {
     BUILT_IN.iter().find(|b| b.label == label)
 }
 
 impl Behavior {
-    /// Whether a firmware with `features` can use this behaviour.
+    /// Whether a firmware with `features` can use this behavior.
     pub fn available(&self, features: &[Feature]) -> bool {
         self.requires.is_none_or(|f| features.contains(&f))
     }
@@ -537,7 +537,7 @@ impl Command {
 mod tests {
     use super::*;
 
-    /// Names ZMK v0.3.0 defines in the headers behaviours take constants from.
+    /// Names ZMK v0.3.0 defines in the headers behaviors take constants from.
     fn header_defines() -> Vec<&'static str> {
         [
             include_str!("../vendor/zmk-v0.3.0/bt.h"),

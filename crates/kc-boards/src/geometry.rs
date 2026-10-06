@@ -89,7 +89,7 @@ impl Key {
         ]
     }
 
-    /// The key's centre after rotation.
+    /// The key's center after rotation.
     pub fn center(&self) -> Point {
         self.rotate(
             self.x as f32 + self.w as f32 / 2.,
@@ -144,8 +144,8 @@ pub enum Direction {
     Down,
 }
 
-/// The key that is the natural neighbour of `from` in `direction`, judged by
-/// key centres: the nearest key that way, preferring ones in line.
+/// The key that is the natural neighbor of `from` in `direction`, judged by
+/// key centers: the nearest key that way, preferring ones in line.
 pub fn neighbor(keys: &[Key], from: usize, direction: Direction) -> Option<usize> {
     let origin = keys.get(from)?.center();
     let (dx, dy) = match direction {
@@ -174,7 +174,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn neighbours_follow_the_physical_grid() {
+    fn neighbors_follow_the_physical_grid() {
         // A 3x2 grid with the middle column dropped by a quarter key.
         let keys: Vec<Key> = [
             (0, 0),

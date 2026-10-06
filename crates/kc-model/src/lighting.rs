@@ -29,7 +29,7 @@ pub fn effective(project: &Project, layer: LayerId, position: usize) -> (KeyLigh
     (KeyLight::Inherit, false)
 }
 
-/// The colour a light shows in its ordinary state: lock lights as when the
+/// The color a light shows in its ordinary state: lock lights as when the
 /// lock is on, battery lights as when the battery is charged.
 pub fn display_color(light: KeyLight) -> Option<Rgb> {
     match light {
@@ -40,16 +40,16 @@ pub fn display_color(light: KeyLight) -> Option<Rgb> {
     }
 }
 
-/// Colours for [`by_key_type`].
+/// Colors for [`by_key_type`].
 pub const KEY_COLOR: Rgb = Rgb(0x30, 0xA0, 0xA0);
 pub const MODIFIER_COLOR: Rgb = Rgb(0xF7, 0x9A, 0x3E);
 pub const LAYER_COLOR: Rgb = Rgb(0x8E, 0x4E, 0xC6);
 pub const SYSTEM_COLOR: Rgb = Rgb(0xE5, 0x48, 0x4D);
 pub const NAVIGATION_COLOR: Rgb = Rgb(0x46, 0xA7, 0x58);
 
-/// A lighting scheme for a layer that colours keys by what they do, as a
+/// A lighting scheme for a layer that colors keys by what they do, as a
 /// starting point: modifiers, layer keys, navigation and system keys each
-/// get a colour, transparent keys inherit and unused keys are unlit.
+/// get a color, transparent keys inherit and unused keys are unlit.
 pub fn by_key_type(project: &Project, layer: LayerId) -> Vec<KeyLight> {
     let Some(layer) = project.layer(layer) else {
         return Vec::new();
@@ -77,7 +77,7 @@ pub fn by_key_type(project: &Project, layer: LayerId) -> Vec<KeyLight> {
         .collect()
 }
 
-/// Six colours that are easy to tell apart on LEDs.
+/// Six colors that are easy to tell apart on LEDs.
 const CHECK_COLORS: [Rgb; 6] = [
     Rgb(0xFF, 0x00, 0x00),
     Rgb(0xFF, 0xA0, 0x00),
@@ -88,9 +88,9 @@ const CHECK_COLORS: [Rgb; 6] = [
 ];
 
 /// Two lighting patterns for checking that LEDs are mapped to the right
-/// keys: one colour per row of the keymap, and one colour per column.
-/// With a correct map each row, then each column, is a single colour, and
-/// a key in the wrong colour is a key whose LED is mapped wrongly.
+/// keys: one color per row of the keymap, and one color per column.
+/// With a correct map each row, then each column, is a single color, and
+/// a key in the wrong color is a key whose LED is mapped wrongly.
 pub fn led_check(keys: &[kc_boards::geometry::Key]) -> (Vec<KeyLight>, Vec<KeyLight>) {
     let mut row = 0;
     let mut last_x = i32::MIN;

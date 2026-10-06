@@ -94,7 +94,7 @@ pub fn assign(current: &Binding, picked: &Binding) -> Binding {
 }
 
 /// The numeric arguments of a command binding such as `&bt BT_SEL 2`, with
-/// the catalogue's description of each.
+/// the catalog's description of each.
 pub fn command_args(binding: &Binding) -> Vec<(&'static kc_zmk::behaviors::Arg, u32)> {
     let Some((label, [Param::Command { name, args }])) = built_in(binding) else {
         return Vec::new();
@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn mod_tap_holds_are_recognised_by_any_alias() {
+    fn mod_tap_holds_are_recognized_by_any_alias() {
         let binding = Binding::new(
             "mt",
             vec![

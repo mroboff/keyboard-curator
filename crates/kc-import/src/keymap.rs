@@ -102,7 +102,7 @@ impl Importer<'_> {
             .collect()
     }
 
-    /// Reads a behaviour node, or `None` if it uses something not yet
+    /// Reads a behavior node, or `None` if it uses something not yet
     /// defined or not understood.
     fn behavior_kind(&mut self, node: &Node) -> Option<BehaviorKind> {
         let compatible = node.string("compatible")?;
@@ -278,7 +278,7 @@ impl Importer<'_> {
         Some(steps)
     }
 
-    /// Imports behaviour nodes, in whatever order lets each find the ones
+    /// Imports behavior nodes, in whatever order lets each find the ones
     /// it builds on. Nodes that never resolve are kept as raw devicetree.
     fn behaviors(&mut self, nodes: Vec<&Node>) {
         let mut pending = nodes;
@@ -623,7 +623,7 @@ pub fn import_keymap(
         .chain(section("macros"))
         .flat_map(|n| n.children.iter())
         .collect();
-    // Behaviours are created in dependency order, then put back in the
+    // Behaviors are created in dependency order, then put back in the
     // order the file has them.
     let order: Vec<String> = behavior_nodes
         .iter()

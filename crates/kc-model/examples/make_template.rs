@@ -5,7 +5,7 @@
 //!
 //! `cargo run -p kc-model --example make_template -- <board-id> <vendor.keymap> <out.kcproj>`
 //!
-//! Layers are read from the vendor file. The behaviours and pointing setup
+//! Layers are read from the vendor file. The behaviors and pointing setup
 //! around them are written out below per board, because reading those from
 //! devicetree is the importer's job.
 
@@ -89,7 +89,7 @@ fn command(label: &str, name: &str, args: &[u32]) -> Binding {
     )
 }
 
-/// The Go60's factory behaviours. Layers must exist first, by name.
+/// The Go60's factory behaviors. Layers must exist first, by name.
 fn go60_behaviors(p: &mut Project) -> Result<(), Error> {
     let plain = |steps| {
         BehaviorKind::Macro(Macro {
@@ -262,7 +262,7 @@ fn main() -> Result<(), Error> {
     let project = build(board, &std::fs::read_to_string(vendor)?)?;
     file::save(&project, out.as_ref())?;
     println!(
-        "{}: {} layers, {} behaviours",
+        "{}: {} layers, {} behaviors",
         out,
         project.layers.len(),
         project.behaviors.len()

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Something a firmware profile may or may not support. Catalogue entries
+/// Something a firmware profile may or may not support. Catalog entries
 /// name the feature they need; the UI offers only what the selected profile
 /// has, and the emitter refuses anything else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,7 +14,7 @@ pub enum Feature {
     RgbUnderglow,
     /// MoErgo's `RGB_STATUS` command and `zmk,underglow-indicators` node.
     RgbStatus,
-    /// Per-key, per-layer colours through `zmk,underglow-layer`.
+    /// Per-key, per-layer colors through `zmk,underglow-layer`.
     PerKeyLighting,
     /// Single-channel backlight (`&bl`).
     Backlight,

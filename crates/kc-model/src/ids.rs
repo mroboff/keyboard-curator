@@ -18,7 +18,7 @@ id!(
     LayerId
 );
 id!(
-    /// Identifies a user-defined behaviour such as a hold-tap or macro.
+    /// Identifies a user-defined behavior such as a hold-tap or macro.
     BehaviorId
 );
 id!(

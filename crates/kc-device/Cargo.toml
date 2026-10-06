@@ -1,6 +1,6 @@
 [package]
 name = "kc-device"
-description = "Finds connected keyboards over USB and recognises their board"
+description = "Finds connected keyboards over USB and recognizes their board"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

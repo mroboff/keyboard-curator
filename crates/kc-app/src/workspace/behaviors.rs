@@ -17,7 +17,7 @@ use kc_zmk::Modifier;
 use super::{chip, section_title, Workspace};
 use crate::canvas::{self, Frame, Palette};
 
-/// The built-in behaviours a hold-tap or sticky key can wrap.
+/// The built-in behaviors a hold-tap or sticky key can wrap.
 const WRAPPABLE: [(&str, &str); 5] = [
     ("kp", "Key"),
     ("mo", "Layer while held"),
@@ -93,7 +93,7 @@ pub(super) fn subscribe(
 }
 
 impl Workspace {
-    /// Changes the behaviour being edited.
+    /// Changes the behavior being edited.
     pub(super) fn edit_behavior(
         &mut self,
         label: &str,
@@ -146,7 +146,7 @@ impl Workspace {
         self.after_change(window, cx);
     }
 
-    /// Key positions on one hand, judged by the layout's centre line.
+    /// Key positions on one hand, judged by the layout's center line.
     fn hand_positions(&self, right: bool) -> Vec<usize> {
         let keys = self.layout_keys();
         let Some(bounds) = kc_boards::geometry::bounds(keys) else {

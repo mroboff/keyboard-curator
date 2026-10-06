@@ -530,7 +530,7 @@ fn substitute(
                     .find(|t| !matches!(t, Token::Space(_)))
                     .is_some_and(|t| matches!(t, Token::Paste));
                 match argument(word) {
-                    // An argument joined to its neighbour is used as written.
+                    // An argument joined to its neighbor is used as written.
                     Some(raw) if pasting || pasted_next => out.push_str(raw),
                     Some(raw) => out.push_str(&expand_all(raw, defines, depth + 1, line)?),
                     None => out.push_str(word),

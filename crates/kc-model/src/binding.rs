@@ -1,4 +1,4 @@
-//! What a key does: a behaviour plus its parameters.
+//! What a key does: a behavior plus its parameters.
 
 use std::fmt;
 use std::str::FromStr;
@@ -14,7 +14,7 @@ pub struct KeyExpr {
     /// Outermost wrapper first.
     pub mods: Vec<Modifier>,
     /// A keycode name. Not checked here, so names from locale headers work;
-    /// validation warns about names the catalogue does not know.
+    /// validation warns about names the catalog does not know.
     pub key: String,
 }
 
@@ -82,13 +82,13 @@ impl<'de> Deserialize<'de> for KeyExpr {
     }
 }
 
-/// The behaviour a binding invokes.
+/// The behavior a binding invokes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BehaviorRef {
     /// A ZMK built-in, by label (`kp`, `mo`, ...).
     BuiltIn(String),
-    /// A behaviour defined in this project.
+    /// A behavior defined in this project.
     User { user: BehaviorId },
 }
 
@@ -155,7 +155,7 @@ impl Binding {
         Binding::new("kp", vec![Param::Key(key)])
     }
 
-    /// A single-layer behaviour such as `&mo` or `&to`.
+    /// A single-layer behavior such as `&mo` or `&to`.
     pub fn layer(label: &str, layer: LayerId) -> Self {
         Binding::new(label, vec![Param::Layer(layer)])
     }

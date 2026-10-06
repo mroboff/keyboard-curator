@@ -7,7 +7,7 @@ use kc_model::keycap::{Keycap, KeycapKind};
 
 /// Space kept clear around the keyboard, in pixels.
 const PADDING: f32 = 28.;
-/// Gap between neighbouring keys, in layout units.
+/// Gap between neighboring keys, in layout units.
 const GAP: f32 = 4.;
 /// Corner rounding of a keycap, in layout units.
 const RADIUS: f32 = 12.;
@@ -80,7 +80,7 @@ pub fn key_at(
     geometry::key_at(keys, view.to_layout(position))
 }
 
-/// The keys whose centres lie inside the rectangle spanned by two pointer
+/// The keys whose centers lie inside the rectangle spanned by two pointer
 /// positions.
 pub fn keys_in_band(
     keys: &[Key],
@@ -104,7 +104,7 @@ pub fn keys_in_band(
         .collect()
 }
 
-/// Colours the canvas draws with, taken from the active theme.
+/// Colors the canvas draws with, taken from the active theme.
 #[derive(Debug, Clone, Copy)]
 pub struct Palette {
     pub key: Hsla,
@@ -127,12 +127,12 @@ pub struct Frame {
     /// A selection rectangle being dragged out.
     pub band: Option<(Point<Pixels>, Point<Pixels>)>,
     pub palette: Palette,
-    /// A colour tag per key, when the layer view wants one.
+    /// A color tag per key, when the layer view wants one.
     pub tint: Option<Hsla>,
     /// Groups of keys to join with a line, such as combos, and whether
     /// each is the one being edited.
     pub links: Vec<(Vec<usize>, bool)>,
-    /// The colour each key is lit, for the lighting view. Empty elsewhere.
+    /// The color each key is lit, for the lighting view. Empty elsewhere.
     pub colors: Vec<Option<Hsla>>,
 }
 
@@ -173,7 +173,7 @@ fn key_path(key: &Key, view: Viewport, stroke: Option<Pixels>) -> Option<Path<Pi
     builder.build().ok()
 }
 
-/// Paints `text` centred on `center`, shrinking it to fit `max_width`.
+/// Paints `text` centered on `center`, shrinking it to fit `max_width`.
 fn paint_text(
     text: &str,
     center: Point<Pixels>,
@@ -251,7 +251,7 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             _ if ghost => palette.key.opacity(0.35),
             _ => palette.key,
         };
-        // In the lighting view a key is drawn in the colour it is lit, and
+        // In the lighting view a key is drawn in the color it is lit, and
         // unlit keys are drawn dark.
         let lit = frame.colors.get(index).copied();
         let fill = match lit {

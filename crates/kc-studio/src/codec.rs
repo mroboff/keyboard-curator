@@ -1,5 +1,5 @@
 //! Converts between the project's bindings and the three numbers the
-//! Studio protocol uses for one: a behaviour ID and two parameters.
+//! Studio protocol uses for one: a behavior ID and two parameters.
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use kc_zmk::Modifier;
 use crate::client::DeviceBehavior;
 use crate::proto::keymap::{BehaviorBinding, Keymap};
 
-/// The display names ZMK gives its built-in behaviours, which is how the
+/// The display names ZMK gives its built-in behaviors, which is how the
 /// keyboard identifies them.
 const DISPLAY_NAMES: [(&str, &str); 21] = [
     ("kp", "Key Press"),
@@ -117,7 +117,7 @@ pub fn decode_key(value: u32) -> Option<KeyExpr> {
     })
 }
 
-/// Which of the keyboard's behaviour IDs is which behaviour of the project.
+/// Which of the keyboard's behavior IDs is which behavior of the project.
 #[derive(Debug, Clone, Default)]
 pub struct BehaviorTable {
     to_device: HashMap<BehaviorRef, u32>,
@@ -125,7 +125,7 @@ pub struct BehaviorTable {
 }
 
 impl BehaviorTable {
-    /// Matches the keyboard's behaviours to the project's: built-ins by
+    /// Matches the keyboard's behaviors to the project's: built-ins by
     /// ZMK's display names, the project's own by their label.
     pub fn new(project: &Project, device: &[DeviceBehavior]) -> Self {
         let mut table = Self::default();
@@ -151,7 +151,7 @@ impl BehaviorTable {
     }
 }
 
-/// What kind of value each parameter of a behaviour is, as far as the
+/// What kind of value each parameter of a behavior is, as far as the
 /// protocol needs to know.
 fn param_kinds(project: &Project, behavior: &BehaviorRef) -> Option<Vec<Option<ParamKind>>> {
     match behavior {
