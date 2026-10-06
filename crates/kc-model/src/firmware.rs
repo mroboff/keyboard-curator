@@ -5,7 +5,8 @@
 
 use std::collections::BTreeMap;
 
-use kc_boards::Board;
+use kc_boards::board::FirmwareProfile;
+use kc_boards::{Board, Family};
 use kc_zmk::settings::setting_for;
 use kc_zmk::Feature;
 use serde::{Deserialize, Serialize};
@@ -42,10 +43,18 @@ impl FirmwareConfig {
 
     /// What the chosen firmware can do; nothing when the board does not
     /// have it.
-    pub fn features<'a>(&self, board: &'a Board) -> &'a [Feature] {
+    pub fn features(&self, board: &Board) -> Vec<Feature> {
         board
             .profile(&self.profile)
-            .map_or(&[], |p| p.capabilities.as_slice())
+            .map(FirmwareProfile::features)
+            .unwrap_or_default()
+    }
+
+    /// The firmware family; ZMK when the board does not have the profile.
+    pub fn family(&self, board: &Board) -> Family {
+        board
+            .profile(&self.profile)
+            .map_or(Family::Zmk, |p| p.family)
     }
 
     /// Whether the firmware has the feature a setting needs. Settings the

@@ -481,6 +481,6 @@ fn a_layout_builds_with_any_firmware_of_its_board() {
     let project = Project::from_template("Shared", &go60);
     for profile in &go60.firmware {
         let files = generate(&project, &go60, &FirmwareConfig::new(profile.id.clone())).unwrap();
-        assert!(file(&files, "config/west.yml").contains(&profile.zmk.url));
+        assert!(file(&files, "config/west.yml").contains(&profile.zmk.as_ref().unwrap().url));
     }
 }

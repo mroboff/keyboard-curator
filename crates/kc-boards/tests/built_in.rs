@@ -82,10 +82,14 @@ fn imprint_halves_and_firmware() {
     assert!(lit.capabilities.contains(&Capability::PerKeyLighting));
     let backend = lit.lighting.as_ref().unwrap();
     assert!(backend.led_map_overlay && backend.start_effect == Some(4));
-    assert_eq!(lit.zmk.revision.len(), 40, "pinned to a commit");
+    assert_eq!(
+        lit.zmk.as_ref().unwrap().revision.len(),
+        40,
+        "pinned to a commit"
+    );
 
     let profile = imprint.profile("cyboard-zmk-0.3").unwrap();
-    assert_eq!(profile.zmk.revision, "v0.3.0");
+    assert_eq!(profile.zmk.as_ref().unwrap().revision, "v0.3.0");
     assert!(profile.capabilities.contains(&Capability::Studio));
     assert!(!profile.capabilities.contains(&Capability::PerKeyLighting));
     assert_eq!(profile.builds[0].shield.as_deref(), Some("imprint_left"));
@@ -126,7 +130,11 @@ fn go60_halves_and_firmware() {
     let lit = go60.profile("moergo-zmk-perkey").unwrap();
     assert!(lit.capabilities.contains(&Capability::PerKeyLighting));
     assert!(!lit.capabilities.contains(&Capability::Studio));
-    assert_eq!(lit.zmk.revision.len(), 40, "pinned to a commit");
+    assert_eq!(
+        lit.zmk.as_ref().unwrap().revision.len(),
+        40,
+        "pinned to a commit"
+    );
     assert!(lit
         .lighting
         .as_ref()
@@ -173,4 +181,32 @@ fn validation_rejects_broken_definitions() {
         Board::from_toml(&too_bright),
         Err(BoardError::BrightnessCap(140))
     );
+}
+
+#[test]
+fn every_firmware_belongs_to_a_family_with_base_features() {
+    use kc_boards::{Delivery, Family};
+
+    for board in kc_boards::built_in().unwrap() {
+        assert!(!board.families().is_empty(), "{}", board.id);
+        for profile in &board.firmware {
+            let features = profile.features();
+            // A profile's own capabilities sit on top of its family's.
+            for feature in profile.family.base_features() {
+                assert!(features.contains(feature), "{}", profile.id);
+            }
+            for feature in &profile.capabilities {
+                assert!(features.contains(feature), "{}", profile.id);
+            }
+        }
+    }
+    assert_eq!(Family::Zmk.delivery(), Delivery::Build);
+    assert_eq!(Family::Rmk.delivery(), Delivery::Build);
+    assert_eq!(Family::Dygma.delivery(), Delivery::Live);
+    // ZMK is built from devicetree and has combos; Dygma has neither.
+    assert!(Family::Zmk.base_features().contains(&Capability::Combos));
+    assert!(!Family::Dygma.base_features().contains(&Capability::Combos));
+    assert!(!Family::Dygma
+        .base_features()
+        .contains(&Capability::Devicetree));
 }

@@ -345,7 +345,7 @@ pub fn keymap(
     config: &FirmwareConfig,
 ) -> Result<String, EmitError> {
     let profile = profile(config, board)?;
-    let features = &profile.capabilities;
+    let features = profile.features();
     let layout = board
         .layout(&project.layout)
         .ok_or_else(|| EmitError::NoLayout(project.layout.clone()))?;

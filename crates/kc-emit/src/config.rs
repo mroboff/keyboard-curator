@@ -1,7 +1,7 @@
 //! The files around the keymap: `.conf`, `west.yml`, `build.yaml` and the
 //! build workflow.
 
-use kc_boards::board::{FirmwareProfile, Side};
+use kc_boards::board::{FirmwareProfile, Side, Source};
 use kc_model::features::SettingValue;
 use kc_model::{FirmwareConfig, Project};
 
@@ -43,7 +43,7 @@ pub fn conf(project: &Project, config: &FirmwareConfig, profile: &FirmwareProfil
         // but is not generated.
         let unsupported = kc_zmk::settings::setting_for(key)
             .and_then(|setting| setting.requires)
-            .is_some_and(|feature| !profile.capabilities.contains(&feature));
+            .is_some_and(|feature| !profile.features().contains(&feature));
         if unsupported {
             continue;
         }
@@ -64,11 +64,21 @@ pub fn conf(project: &Project, config: &FirmwareConfig, profile: &FirmwareProfil
     out
 }
 
+/// Where a ZMK profile's ZMK comes from. Board definitions are checked to
+/// have one for every ZMK profile.
+fn source(profile: &FirmwareProfile) -> &Source {
+    profile
+        .zmk
+        .as_ref()
+        .expect("a ZMK firmware profile names its ZMK source")
+}
+
 pub fn west(profile: &FirmwareProfile) -> String {
     let mut out = format!("# {NOTICE}\nmanifest:\n  projects:\n");
     out.push_str(&format!(
         "    - name: zmk\n      url: {}\n      revision: {}\n      import: app/west.yml\n",
-        profile.zmk.url, profile.zmk.revision
+        source(profile).url,
+        source(profile).revision
     ));
     for module in &profile.modules {
         out.push_str(&format!(

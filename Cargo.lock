@@ -3639,6 +3639,7 @@ dependencies = [
  "kc-build",
  "kc-device",
  "kc-emit",
+ "kc-firmware",
  "kc-flash",
  "kc-import",
  "kc-model",
@@ -3685,6 +3686,16 @@ dependencies = [
  "kc-boards",
  "kc-model",
  "kc-zmk",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "kc-firmware"
+version = "0.1.0"
+dependencies = [
+ "kc-boards",
+ "kc-emit",
+ "kc-model",
  "thiserror 2.0.21",
 ]
 

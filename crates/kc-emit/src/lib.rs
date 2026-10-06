@@ -28,6 +28,8 @@ pub enum EmitError {
     Invalid(Vec<Problem>),
     #[error("the board has no firmware profile `{0}`")]
     NoProfile(String),
+    #[error("`{0}` is not ZMK firmware, so no ZMK config can be generated for it")]
+    NotZmk(String),
     #[error("the board has no layout `{0}`")]
     NoLayout(String),
 }
@@ -40,9 +42,13 @@ fn profile<'a>(
     config: &FirmwareConfig,
     board: &'a Board,
 ) -> Result<&'a FirmwareProfile, EmitError> {
-    board
+    let profile = board
         .profile(&config.profile)
-        .ok_or_else(|| EmitError::NoProfile(config.profile.clone()))
+        .ok_or_else(|| EmitError::NoProfile(config.profile.clone()))?;
+    if profile.family != kc_boards::Family::Zmk {
+        return Err(EmitError::NotZmk(profile.name.clone()));
+    }
+    Ok(profile)
 }
 
 /// Every file of the zmk-config repository: the layout `project` built

@@ -33,7 +33,7 @@ fn command(label: &str, name: &str, args: &[u32]) -> Binding {
 /// A project that uses every construct the emitter can write, limited to
 /// what the board's firmware supports.
 fn fixture(board: &Board) -> (Project, FirmwareConfig) {
-    let features = &board.firmware[0].capabilities;
+    let features = &board.firmware[0].features();
     let mut p = Project::new(format!("{} fixture", board.name), board);
     let base = p.layers[0].id;
     let nav = p.add_layer("Nav").unwrap();

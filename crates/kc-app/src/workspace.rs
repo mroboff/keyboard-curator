@@ -27,8 +27,8 @@ use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::picker::{picker_items, PickerGroup};
 use kc_model::text::{format_binding, parse_binding, LayerStyle};
 use kc_model::{
-    file, validate, BehaviorId, Binding, ComboId, Editor, FirmwareConfig, KeyExpr, Keyboard,
-    KeyboardId, LayerId, ModelError, Project, Severity, Slot,
+    file, BehaviorId, Binding, ComboId, Editor, FirmwareConfig, KeyExpr, Keyboard, KeyboardId,
+    LayerId, ModelError, Project, Severity, Slot,
 };
 use kc_zmk::{Feature, Modifier};
 
@@ -95,6 +95,10 @@ impl Mode {
         match self {
             Mode::Lighting => Some(Feature::PerKeyLighting),
             Mode::Pointing => Some(Feature::Pointing),
+            Mode::Combos => Some(Feature::Combos),
+            // Layer rules and custom devicetree both need a firmware built
+            // from devicetree.
+            Mode::Advanced => Some(Feature::Devicetree),
             _ => None,
         }
     }
@@ -610,7 +614,7 @@ impl Workspace {
     }
 
     fn features(&self) -> Vec<Feature> {
-        self.config.features(&self.board).to_vec()
+        self.config.features(&self.board)
     }
 
     fn layout_keys(&self) -> &[kc_boards::geometry::Key] {
@@ -1962,7 +1966,7 @@ impl Workspace {
         );
         let page = div().flex_1().min_h_0().flex().flex_col().gap_2().p_3();
 
-        let problems = validate(self.project(), &self.board, &self.config);
+        let problems = kc_firmware::check(self.project(), &self.board, &self.config);
         let problem_rows = problems
             .iter()
             .enumerate()
@@ -2002,7 +2006,7 @@ impl Workspace {
                 .child(div().flex().flex_col().children(problem_rows))
         });
 
-        let files = match kc_emit::generate(self.project(), &self.board, &self.config) {
+        let files = match kc_firmware::generate(self.project(), &self.board, &self.config) {
             Ok(files) => files,
             Err(_) => {
                 return page.child(div().text_sm().text_color(muted).child(
@@ -2055,7 +2059,7 @@ impl Workspace {
     fn render_status(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted) = (theme.border, theme.muted_foreground);
-        let problems = validate(self.project(), &self.board, &self.config);
+        let problems = kc_firmware::check(self.project(), &self.board, &self.config);
         let errors = problems
             .iter()
             .filter(|p| p.severity == Severity::Error)
@@ -2217,7 +2221,7 @@ mod tests {
     fn tabs(board: &str, firmware: &str) -> Vec<&'static str> {
         let boards = kc_boards::built_in().unwrap();
         let board = boards.iter().find(|b| b.id == board).unwrap();
-        let features = &board.profile(firmware).unwrap().capabilities;
+        let features = &board.profile(firmware).unwrap().features();
         Mode::TABS
             .into_iter()
             .filter(|(mode, _, _)| mode.available(features))
@@ -2251,6 +2255,8 @@ mod tests {
         // A firmware with nothing optional keeps the modes every ZMK has.
         assert!(!Mode::Lighting.available(&[]));
         assert!(!Mode::Pointing.available(&[]));
+        assert!(!Mode::Combos.available(&[]));
+        assert!(!Mode::Advanced.available(&[]));
         assert!(Mode::Keyboard.available(&[]));
         assert!(Mode::Apply.available(&[]));
     }

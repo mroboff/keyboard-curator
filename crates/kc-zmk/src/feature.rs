@@ -24,4 +24,20 @@ pub enum Feature {
     Pointing,
     /// `&out OUT_NONE`, added after ZMK v0.3.
     OutNone,
+    /// Combos: several keys pressed together doing something else.
+    Combos,
+    /// Layers that switch on while a set of other layers is active.
+    LayerRules,
+    /// Macros defined by the user.
+    Macros,
+    /// Tap-dances: a key that does different things by tap count.
+    TapDance,
+    /// Mod-morphs: a key that changes while modifiers are held.
+    ModMorph,
+    /// Hold-taps with their own timing and flavor.
+    HoldTaps,
+    /// Sticky keys and layers with their own settings.
+    StickyKeys,
+    /// Devicetree text carried into the generated keymap as it is.
+    Devicetree,
 }

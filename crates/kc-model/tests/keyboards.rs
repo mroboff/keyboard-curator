@@ -378,13 +378,13 @@ fn a_layout_keeps_what_a_firmware_lacks_out_of_sight() {
             .all(|p| p.severity != Severity::Error));
     }
 
-    let with_stock = hidden(&project, stock.features(&go60));
+    let with_stock = hidden(&project, &stock.features(&go60));
     assert!(with_stock.lighting && !with_stock.pointing);
     assert_eq!(
         with_stock.summary().unwrap(),
         "Per-key colors in this layout are hidden, because this board's firmware does not have the feature. Nothing is removed from the file."
     );
-    let with_lit = hidden(&project, lit.features(&go60));
+    let with_lit = hidden(&project, &lit.features(&go60));
     assert!(with_lit.is_empty());
     assert_eq!(with_lit.summary(), None);
 
@@ -393,6 +393,18 @@ fn a_layout_keeps_what_a_firmware_lacks_out_of_sight() {
     assert!(!pointing.pointing.is_empty());
     assert!(hidden(&pointing, &[Feature::Pointing]).is_empty());
     assert!(hidden(&pointing, &[]).pointing);
+
+    // A firmware family without combos or devicetree hides those too.
+    let mut rich = Project::new("Rich", &go60);
+    rich.add_combo("Esc", vec![0, 1], kc_model::Binding::trans());
+    rich.raw.devicetree = "/* custom */".into();
+    let bare = hidden(&rich, &[]);
+    assert!(bare.combos && bare.devicetree && !bare.layer_rules);
+    assert_eq!(
+        bare.summary().unwrap(),
+        "Combos and custom devicetree in this layout are hidden, because this board's firmware does not have the feature. Nothing is removed from the file."
+    );
+    assert!(hidden(&rich, &stock.features(&go60)).is_empty());
 }
 
 #[test]

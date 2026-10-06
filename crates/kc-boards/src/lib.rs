@@ -7,7 +7,7 @@ pub mod board;
 pub mod dts;
 pub mod geometry;
 
-pub use board::{Board, BoardError};
+pub use board::{Board, BoardError, Delivery, Family};
 
 const BUILT_IN: &[&str] = &[
     include_str!("../boards/cyboard-imprint.toml"),

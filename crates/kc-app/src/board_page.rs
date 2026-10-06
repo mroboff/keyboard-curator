@@ -11,7 +11,7 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use kc_boards::Board;
-use kc_emit::{EmitError, GeneratedFile};
+use kc_firmware::{Delivery, Family, FirmwareError, GeneratedFile};
 use kc_model::features::SettingValue;
 use kc_model::{file, FirmwareConfig, Keyboard, KeyboardId, Project};
 use kc_zmk::settings::{Setting, SettingKind, BRIGHTNESS_SETTINGS, SETTINGS};
@@ -27,8 +27,13 @@ const KEYBOARD_NAME: &str = "CONFIG_ZMK_KEYBOARD_NAME";
 /// The parts of a board's page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
+    /// Which firmware the board runs. First, because it decides what the
+    /// other sections offer.
     Firmware,
+    Settings,
     Layouts,
+    /// Building and flashing, or for firmware configured live, reading
+    /// from and applying to the keyboard.
     Build,
 }
 
@@ -358,9 +363,9 @@ impl BoardPage {
     /// that layout.
     fn generate(&self, cx: &App) -> Result<(Vec<GeneratedFile>, Project), String> {
         let layout = self.layout(cx)?;
-        match kc_emit::generate(&layout, &self.board, &self.config(cx)) {
+        match kc_firmware::generate(&layout, &self.board, &self.config(cx)) {
             Ok(files) => Ok((files, layout)),
-            Err(EmitError::Invalid(problems)) => {
+            Err(FirmwareError::Invalid(problems)) => {
                 let first: Vec<&str> = problems
                     .iter()
                     .take(4)
@@ -743,37 +748,106 @@ impl BoardPage {
             .child(controls)
     }
 
-    /// The firmware the board runs and every setting of it.
+    /// Which firmware the board runs, family by family.
     fn render_firmware(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
-        let features = config.features(&self.board);
-        let profiles = self
-            .board
-            .firmware
-            .iter()
-            .enumerate()
-            .map(|(index, profile)| {
-                let id = profile.id.clone();
-                chip(
-                    ("firmware", index),
-                    profile.name.clone(),
-                    profile.id == config.profile,
-                    cx,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.set_firmware(id.clone(), cx);
-                }))
-            })
-            .collect::<Vec<_>>();
+        let theme = cx.theme();
+        let (muted, border, accent, warning) = (
+            theme.muted_foreground,
+            theme.border,
+            theme.primary,
+            theme.warning,
+        );
         let mut page = div()
             .flex()
             .flex_col()
             .gap_3()
             .child(div().text_lg().child("Firmware"))
             .child(div().text_xs().text_color(muted).child(
-                "The firmware this board runs, or will be built with. Layouts are not changed by it: a layout shows only what the firmware supports, and keeps the rest out of sight. Settings a firmware lacks are kept the same way.",
-            ))
-            .child(div().flex().flex_col().items_start().gap_1().children(profiles));
+                "The firmware this board runs, or will be built with. It decides which settings the board has and what the layout editor offers. Layouts are not changed by it: what a firmware lacks is kept out of sight, and settings a firmware lacks are kept the same way.",
+            ));
+        for family in self.board.families() {
+            page = page.child(
+                div()
+                    .pt_2()
+                    .text_sm()
+                    .text_color(muted)
+                    .child(family.name()),
+            );
+            for (index, profile) in self
+                .board
+                .firmware
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.family == family)
+            {
+                let chosen = profile.id == config.profile;
+                let id = profile.id.clone();
+                let notes = profile
+                    .notes
+                    .iter()
+                    .map(|note| div().text_xs().text_color(muted).child(note.clone()))
+                    .collect::<Vec<_>>();
+                page = page.child(
+                    div()
+                        .id(("firmware", index))
+                        .px_3()
+                        .py_2()
+                        .rounded_md()
+                        .border_1()
+                        .border_color(if chosen { accent } else { border })
+                        .cursor_pointer()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(div().text_sm().child(profile.name.clone()))
+                                .when(chosen, |row| {
+                                    row.child(div().text_xs().text_color(accent).child("Selected"))
+                                })
+                                .when(profile.experimental, |row| {
+                                    row.child(
+                                        div().text_xs().text_color(warning).child("Experimental"),
+                                    )
+                                }),
+                        )
+                        .children(notes)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.set_firmware(id.clone(), cx);
+                        })),
+                );
+            }
+        }
+        page
+    }
+
+    /// Every setting of the board's firmware.
+    fn render_settings(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
+        let features = config.features(&self.board);
+        let firmware = self
+            .board
+            .profile(&config.profile)
+            .map_or_else(|| config.profile.clone(), |p| p.name.clone());
+        let mut page = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(div().text_lg().child("Settings"))
+            .child(div().text_xs().text_color(muted).child(format!(
+                "Settings of {firmware}, the firmware chosen under Firmware. They belong to the board, and apply whichever layout it is built with."
+            )));
+        if config.family(&self.board) != Family::Zmk {
+            return page.child(
+                div()
+                    .text_sm()
+                    .text_color(muted)
+                    .child("This firmware has no settings to adjust here yet."),
+            );
+        }
         let mut group = "";
         for setting in SETTINGS {
             if setting.requires.is_some_and(|f| !features.contains(&f)) {
@@ -1067,7 +1141,7 @@ impl BoardPage {
                         "This builds {firmware} with {settings} and {layout}."
                     )))
                     .child(div().text_xs().text_color(muted).child(
-                        "Change the firmware and its settings under Firmware, and which layout is built in under Layouts.",
+                        "Change the firmware under Firmware, its settings under Settings, and which layout is built in under Layouts.",
                     ))
                     .child(
                         div().flex().child(
@@ -1125,6 +1199,12 @@ impl Render for BoardPage {
             chip("link", "Link Connected Keyboard", false, cx)
                 .on_click(cx.listener(|this, _, window, cx| this.link_connected(window, cx)))
         };
+        // Firmware configured live has no build; its last tab is the
+        // keyboard itself.
+        let build_label = match config.family(&self.board).delivery() {
+            Delivery::Build => "Build & Flash",
+            Delivery::Live => "Keyboard",
+        };
         let tab =
             |id: &'static str, label: &'static str, section: Section, cx: &mut Context<Self>| {
                 chip(id, label, self.section == section, cx)
@@ -1132,6 +1212,7 @@ impl Render for BoardPage {
             };
         let content = match self.section {
             Section::Firmware => self.render_firmware(&config, cx),
+            Section::Settings => self.render_settings(&config, cx),
             Section::Layouts => self.render_layouts(&saved, cx),
             Section::Build => self.render_build_section(&saved, &config, cx),
         };
@@ -1183,8 +1264,9 @@ impl Render for BoardPage {
                     .border_b_1()
                     .border_color(border)
                     .child(tab("section-firmware", "Firmware", Section::Firmware, cx))
+                    .child(tab("section-settings", "Settings", Section::Settings, cx))
                     .child(tab("section-layouts", "Layouts", Section::Layouts, cx))
-                    .child(tab("section-build", "Build & Flash", Section::Build, cx))
+                    .child(tab("section-build", build_label, Section::Build, cx))
                     .child(
                         div()
                             .flex_1()

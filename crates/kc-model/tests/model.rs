@@ -730,7 +730,7 @@ fn the_picker_offers_what_the_firmware_supports() {
     use kc_model::picker::{picker_items, PickerGroup};
 
     let (p, go60) = rich_project();
-    let features = stock(&go60).features(&go60);
+    let features = &stock(&go60).features(&go60);
     let items = picker_items(&p, features);
     let find = |label: &str| items.iter().find(|i| i.label == label);
 
@@ -766,7 +766,7 @@ fn the_picker_offers_what_the_firmware_supports() {
 
     let imprint = board("cyboard-imprint");
     let plain = Project::new("Plain", &imprint);
-    let imprint_items = picker_items(&plain, &imprint.firmware[0].capabilities);
+    let imprint_items = picker_items(&plain, &imprint.firmware[0].features());
     assert!(!imprint_items.iter().any(|i| i.label == "RGB STATUS"));
 
     // Search matches names, aliases and descriptions, in any order.
@@ -949,7 +949,7 @@ fn raw_behaviors_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
         raw_behaviors(&p.raw.behaviors),
         [("td_q".to_string(), 0), ("scaled".to_string(), 2)]
     );
-    let items = picker_items(&p, &go60.firmware[0].capabilities);
+    let items = picker_items(&p, &go60.firmware[0].features());
     let scaled = items.iter().find(|i| i.label == "scaled").unwrap();
     assert_eq!(
         scaled.binding,

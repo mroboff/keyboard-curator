@@ -450,32 +450,53 @@ fn check_firmware(board: &Board, firmware: &str) -> Result<(), KeyboardError> {
 }
 
 /// What a layout holds that a firmware cannot use. It stays in the layout
-/// file, out of sight and out of the generated config, and returns when the
-/// layout is used with a firmware that has the feature.
+/// file, out of sight and out of what is generated or written, and returns
+/// when the layout is used with a firmware that has the feature.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Hidden {
     /// Per-key colors, when the firmware has no per-key lighting.
     pub lighting: bool,
     /// Pointing-device configuration, when the firmware has no pointing.
     pub pointing: bool,
+    /// Combos, when the firmware has none.
+    pub combos: bool,
+    /// Layer rules, when the firmware has none.
+    pub layer_rules: bool,
+    /// Custom devicetree, when the firmware is not built from devicetree.
+    pub devicetree: bool,
 }
 
 impl Hidden {
     pub fn is_empty(&self) -> bool {
-        !self.lighting && !self.pointing
+        *self == Self::default()
     }
 
     /// A sentence for the user about what is hidden; `None` when nothing
     /// is.
     pub fn summary(&self) -> Option<String> {
-        let what = match (self.lighting, self.pointing) {
-            (false, false) => return None,
-            (true, false) => "Per-key colors in this layout are",
-            (false, true) => "Pointing configuration in this layout is",
-            (true, true) => "Per-key colors and pointing configuration in this layout are",
+        // Each part with whether its name is plural.
+        let parts: Vec<(&str, bool)> = [
+            (self.lighting, "per-key colors", true),
+            (self.pointing, "pointing configuration", false),
+            (self.combos, "combos", true),
+            (self.layer_rules, "layer rules", true),
+            (self.devicetree, "custom devicetree", false),
+        ]
+        .into_iter()
+        .filter_map(|(hidden, what, plural)| hidden.then_some((what, plural)))
+        .collect();
+        let names: Vec<&str> = parts.iter().map(|(what, _)| *what).collect();
+        let (mut list, verb) = match names.as_slice() {
+            [] => return None,
+            [one] => ((*one).to_string(), if parts[0].1 { "are" } else { "is" }),
+            [most @ .., last] => (format!("{} and {last}", most.join(", ")), "are"),
         };
+        // Start the sentence with a capital.
+        if let Some(first) = list.get_mut(0..1) {
+            first.make_ascii_uppercase();
+        }
         Some(format!(
-            "{what} hidden, because this board's firmware does not have the feature. Nothing is removed from the file."
+            "{list} in this layout {verb} hidden, because this board's firmware does not have the feature. Nothing is removed from the file."
         ))
     }
 }
@@ -490,5 +511,10 @@ pub fn hidden(project: &Project, features: &[Feature]) -> Hidden {
                 .iter()
                 .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit)),
         pointing: lacks(Feature::Pointing) && !project.pointing.is_empty(),
+        combos: lacks(Feature::Combos) && !project.combos.is_empty(),
+        layer_rules: lacks(Feature::LayerRules) && !project.conditional_layers.is_empty(),
+        devicetree: lacks(Feature::Devicetree)
+            && !(project.raw.behaviors.trim().is_empty()
+                && project.raw.devicetree.trim().is_empty()),
     }
 }

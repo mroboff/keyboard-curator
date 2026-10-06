@@ -1,0 +1,18 @@
+[package]
+name = "kc-firmware"
+description = "One front door to the firmware families: what each can check, generate and deliver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+kc-boards = { version = "0.1.0", path = "../kc-boards" }
+kc-emit = { version = "0.1.0", path = "../kc-emit" }
+kc-model = { version = "0.1.0", path = "../kc-model" }
+thiserror = "2.0.21"

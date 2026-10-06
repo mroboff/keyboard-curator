@@ -161,27 +161,115 @@ pub struct BuildTarget {
     pub cmake_args: Vec<String>,
 }
 
-/// A firmware a board can run: where ZMK comes from and what it can do.
-/// Firmware differences are expressed here as data, never as code branches.
+/// A firmware family: one way of putting a layout on a keyboard, with its
+/// own vocabulary, settings and tools. A family is code; the firmwares
+/// within it are data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Family {
+    #[default]
+    Zmk,
+    Rmk,
+    Dygma,
+}
+
+/// How a layout gets onto a keyboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delivery {
+    /// Config files are generated, built into firmware and flashed.
+    Build,
+    /// The configuration is written to the running keyboard; there is no
+    /// build.
+    Live,
+}
+
+impl Family {
+    pub fn name(self) -> &'static str {
+        match self {
+            Family::Zmk => "ZMK",
+            Family::Rmk => "RMK",
+            Family::Dygma => "Dygma",
+        }
+    }
+
+    pub fn delivery(self) -> Delivery {
+        match self {
+            Family::Zmk | Family::Rmk => Delivery::Build,
+            Family::Dygma => Delivery::Live,
+        }
+    }
+
+    /// What every firmware of the family can do, before a profile adds
+    /// its own capabilities.
+    pub fn base_features(self) -> &'static [Capability] {
+        use Capability::{
+            Combos, Devicetree, HoldTaps, LayerRules, Macros, ModMorph, StickyKeys, TapDance,
+        };
+        match self {
+            Family::Zmk => &[
+                Combos, LayerRules, Macros, TapDance, ModMorph, HoldTaps, StickyKeys, Devicetree,
+            ],
+            Family::Rmk => &[Combos, Macros, TapDance],
+            Family::Dygma => &[Macros, TapDance],
+        }
+    }
+}
+
+/// A firmware a board can run: where it comes from and what it can do.
+/// Firmware differences within a family are expressed here as data, never
+/// as code branches.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FirmwareProfile {
     pub id: String,
     pub name: String,
-    /// Zephyr generation, for example `3.5`.
+    #[serde(default)]
+    pub family: Family,
+    /// Not yet proven on hardware, or missing things the board's usual
+    /// firmware has. The app says so wherever the firmware is chosen.
+    #[serde(default)]
+    pub experimental: bool,
+    /// What the user should know before choosing this firmware: what it
+    /// lacks on this board, and any risk.
+    #[serde(default)]
+    pub notes: Vec<String>,
+    /// Zephyr generation, for example `3.5`. ZMK only.
+    #[serde(default)]
     pub zephyr: String,
     /// The base name of the keymap and `.conf` files in a zmk-config
-    /// repository, which ZMK matches to the board or shield.
+    /// repository, which ZMK matches to the board or shield. For other
+    /// build families, the base name of the firmware files.
+    #[serde(default)]
     pub config_name: String,
     /// The reusable GitHub Actions workflow that builds this firmware.
+    /// ZMK only.
+    #[serde(default)]
     pub workflow: String,
-    pub zmk: Source,
+    /// Where ZMK comes from. ZMK only, and required for it.
+    pub zmk: Option<Source>,
     #[serde(default)]
     pub modules: Vec<Module>,
+    /// What this firmware can do beyond its family's base.
+    #[serde(default)]
     pub capabilities: Vec<Capability>,
     /// How per-key lighting is written for this firmware, when it has it.
     pub lighting: Option<LightingBackend>,
+    #[serde(default)]
     pub builds: Vec<BuildTarget>,
+}
+
+impl FirmwareProfile {
+    /// Everything this firmware can do: its family's base and its own
+    /// capabilities.
+    pub fn features(&self) -> Vec<Capability> {
+        let mut features = self.family.base_features().to_vec();
+        for capability in &self.capabilities {
+            if !features.contains(capability) {
+                features.push(*capability);
+            }
+        }
+        features
+    }
 }
 
 /// The `zmk,underglow-layer` implementation a firmware carries. Versions
@@ -237,6 +325,10 @@ pub enum BoardError {
     NoProfiles,
     #[error("firmware profile `{0}` must have both the per-key-lighting capability and a lighting section, or neither")]
     LightingMismatch(String),
+    #[error(
+        "ZMK firmware profile `{0}` needs `zmk`, `config_name`, `workflow` and at least one build"
+    )]
+    IncompleteZmk(String),
     #[error("starter_keys has {found} entries, but the default layout has {keys} keys")]
     StarterKeyCount { found: usize, keys: usize },
     #[error("starter key `{0}` is not a ZMK keycode")]
@@ -261,6 +353,18 @@ impl Board {
 
     pub fn profile(&self, id: &str) -> Option<&FirmwareProfile> {
         self.firmware.iter().find(|p| p.id == id)
+    }
+
+    /// The families this board has firmware for, in the order they first
+    /// appear.
+    pub fn families(&self) -> Vec<Family> {
+        let mut families = Vec::new();
+        for profile in &self.firmware {
+            if !families.contains(&profile.family) {
+                families.push(profile.family);
+            }
+        }
+        families
     }
 
     fn validate(&self) -> Result<(), BoardError> {
@@ -361,8 +465,18 @@ impl Board {
                 return Err(BoardError::DuplicateProfile(profile.id.clone()));
             }
             let capable = profile.capabilities.contains(&Capability::PerKeyLighting);
-            if capable != profile.lighting.is_some() {
+            // ZMK lighting needs its back end described; other families
+            // carry their own lighting model.
+            if profile.family == Family::Zmk && capable != profile.lighting.is_some() {
                 return Err(BoardError::LightingMismatch(profile.id.clone()));
+            }
+            if profile.family == Family::Zmk
+                && (profile.zmk.is_none()
+                    || profile.config_name.is_empty()
+                    || profile.workflow.is_empty()
+                    || profile.builds.is_empty())
+            {
+                return Err(BoardError::IncompleteZmk(profile.id.clone()));
             }
             for build in &profile.builds {
                 if !has(build.side) {

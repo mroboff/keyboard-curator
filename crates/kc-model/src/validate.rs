@@ -35,7 +35,7 @@ pub struct Problem {
 
 struct Checker<'a> {
     project: &'a Project,
-    features: &'a [Feature],
+    features: Vec<Feature>,
     problems: Vec<Problem>,
 }
 
@@ -227,7 +227,7 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
     let root = Location::Project;
     let mut c = Checker {
         project,
-        features: &[],
+        features: Vec::new(),
         problems: Vec::new(),
     };
 
@@ -259,7 +259,7 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
     }
     let profile = board.profile(&config.profile);
     match profile {
-        Some(profile) => c.features = &profile.capabilities,
+        Some(profile) => c.features = profile.features(),
         None => c.error(
             &root,
             format!("the board has no firmware profile `{}`", config.profile),
@@ -345,7 +345,14 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
         }
     }
 
-    for combo in &project.combos {
+    // Combos and layer rules a firmware lacks are kept in the layout but
+    // not used, so there is nothing to check.
+    let combos: &[_] = if c.features.contains(&Feature::Combos) {
+        &project.combos
+    } else {
+        &[]
+    };
+    for combo in combos {
         let location = Location::Combo(combo.id);
         if combo.key_positions.len() < 2 {
             c.error(&location, "a combo needs at least two keys");
@@ -356,7 +363,12 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
         }
     }
 
-    for (index, rule) in project.conditional_layers.iter().enumerate() {
+    let rules: &[_] = if c.features.contains(&Feature::LayerRules) {
+        &project.conditional_layers
+    } else {
+        &[]
+    };
+    for (index, rule) in rules.iter().enumerate() {
         let location = Location::ConditionalLayer(index);
         for layer in rule.if_layers.iter().chain([&rule.then_layer]) {
             c.layer(&location, *layer);

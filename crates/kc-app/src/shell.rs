@@ -346,7 +346,7 @@ impl Shell {
         }
 
         // Say what this board's firmware keeps out of sight.
-        let unseen = hidden(&project, saved.firmware.features(&board)).summary();
+        let unseen = hidden(&project, &saved.firmware.features(&board)).summary();
         let notice = match (notice, unseen) {
             (Some(notice), Some(unseen)) => Some(format!("{notice} {unseen}")),
             (notice, unseen) => notice.or(unseen),
