@@ -282,14 +282,7 @@ impl Workspace {
                 ));
         }
 
-        let palette = Palette {
-            key: theme.secondary,
-            key_border: theme.border,
-            text: theme.foreground,
-            muted_text: theme.muted_foreground,
-            accent: theme.primary,
-            layer_key: theme.secondary,
-        };
+        let palette = Palette::plain(cx);
         let keys = self.layout_keys().to_vec();
         let blank = Keycap {
             legend: String::new(),

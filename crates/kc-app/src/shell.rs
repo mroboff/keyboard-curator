@@ -13,12 +13,14 @@ use kc_boards::board::Side;
 use kc_boards::Board;
 use kc_device::UsbDevice;
 use kc_model::keyboards::{hidden, Placement};
+use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::{file, Carried, Keyboard, KeyboardId, Project};
 
 use crate::board_page::{BoardEvent, BoardPage, Section};
+use crate::canvas::{self, Frame, Palette};
 use crate::library::Library;
-use crate::state::{default_project_dir, AppState, Appearance, WindowFrame};
-use crate::workspace::{chip, Workspace, WorkspaceEvent};
+use crate::state::{default_project_dir, AppState, Appearance, ThemeId, WindowFrame};
+use crate::workspace::{chip, display, plinth, Workspace, WorkspaceEvent};
 use crate::{
     CloseProject, ExportConfig, ImportProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo,
 };
@@ -66,7 +68,23 @@ pub struct Shell {
     notice: Option<String>,
     /// True while a layout is being saved so that it can be applied.
     applying: bool,
+    /// The board the welcome screen is showing off: the last one pointed
+    /// at.
+    shown: Option<KeyboardId>,
+    /// That board's keyboard as it is drawn, kept so that its layout is
+    /// read from disk once and not on every frame.
+    exhibit: Option<Exhibit>,
     focus: FocusHandle,
+}
+
+/// A board's keyboard, drawn on the welcome screen with the keys of its
+/// current layout.
+struct Exhibit {
+    keyboard: KeyboardId,
+    /// The layout it was read from, to notice when the board's current
+    /// layout changes.
+    current: Option<PathBuf>,
+    layout: Project,
 }
 
 fn firmware_name(board: &Board, id: &str) -> String {
@@ -115,7 +133,7 @@ impl Shell {
         })
         .detach();
         cx.observe_window_appearance(window, |_, window, cx| {
-            crate::appearance::follow(window, cx);
+            crate::theme::follow(window, cx);
         })
         .detach();
         let library = cx.new(Library::new);
@@ -142,6 +160,8 @@ impl Shell {
             error: None,
             notice: None,
             applying: false,
+            shown: None,
+            exhibit: None,
             focus,
         }
     }
@@ -806,9 +826,20 @@ impl Shell {
     /// View menu, and remembers it.
     fn set_appearance(&mut self, appearance: Appearance, cx: &mut Context<Self>) {
         self.state.appearance = appearance;
+        self.restyle(cx);
+    }
+
+    /// Chooses the app's theme, from the View menu, and remembers it.
+    fn set_theme(&mut self, theme: ThemeId, cx: &mut Context<Self>) {
+        self.state.theme = theme;
+        self.restyle(cx);
+    }
+
+    fn restyle(&mut self, cx: &mut Context<Self>) {
         self.state.save();
-        crate::appearance::apply(appearance, cx);
-        cx.set_menus(crate::menus(appearance));
+        let (theme, appearance) = (self.state.theme, self.state.appearance);
+        crate::theme::apply(theme, appearance, cx);
+        cx.set_menus(crate::menus(theme, appearance));
         cx.notify();
     }
 
@@ -1015,19 +1046,71 @@ impl Shell {
     }
 
     /// The list of boards, and the ways to add one.
+    /// The board the welcome screen shows off: the one last pointed at,
+    /// else the one last opened, else the first.
+    fn shown_keyboard(&self, cx: &App) -> Option<KeyboardId> {
+        let keyboards = self.library.read(cx).keyboards();
+        [self.shown, self.state.keyboard]
+            .into_iter()
+            .flatten()
+            .find(|id| keyboards.get(*id).is_some())
+            .or_else(|| keyboards.iter().next().map(|k| k.id))
+    }
+
+    /// Reads the shown board's current layout, when the board shown or its
+    /// current layout has changed.
+    fn prepare_exhibit(&mut self, cx: &App) {
+        let shown = self
+            .shown_keyboard(cx)
+            .and_then(|id| self.library.read(cx).keyboards().get(id).cloned());
+        let Some(keyboard) = shown else {
+            self.exhibit = None;
+            return;
+        };
+        let fresh = self.exhibit.as_ref().is_some_and(|exhibit| {
+            exhibit.keyboard == keyboard.id && exhibit.current == keyboard.current
+        });
+        if fresh {
+            return;
+        }
+        let Some(board) = self.boards.iter().find(|b| b.id == keyboard.board) else {
+            self.exhibit = None;
+            return;
+        };
+        // A board with no layout of its own is shown with the keys it
+        // ships with.
+        let layout = keyboard
+            .current
+            .as_ref()
+            .and_then(|path| file::load(path).ok())
+            .filter(|layout| layout.board == board.id)
+            .unwrap_or_else(|| Project::from_template(board.name.clone(), board));
+        self.exhibit = Some(Exhibit {
+            keyboard: keyboard.id,
+            current: keyboard.current,
+            layout,
+        });
+    }
+
+    /// The list of boards: an index, with the one being shown marked.
     fn render_boards(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (muted, hover, border, success) = (
+        let (muted, text, border, accent, accent_text, success) = (
             theme.muted_foreground,
-            theme.secondary,
+            theme.foreground,
             theme.border,
+            theme.primary,
+            theme.primary_foreground,
             theme.success,
         );
+        let shown = self.shown_keyboard(cx);
         let library = self.library.read(cx);
+        let count = library.keyboards().iter().count();
         let rows = library
             .keyboards()
             .iter()
-            .map(|keyboard| {
+            .enumerate()
+            .map(|(index, keyboard)| {
                 let id = keyboard.id;
                 let board = self.boards.iter().find(|b| b.id == keyboard.board);
                 let detail = match board {
@@ -1039,52 +1122,94 @@ impl Shell {
                     ),
                     None => format!("Unknown board `{}`", keyboard.board),
                 };
-                let layouts = match keyboard.layouts.len() {
-                    0 => "No layouts yet".to_string(),
-                    1 => "1 layout".to_string(),
-                    n => format!("{n} layouts"),
-                };
-                let connected = library.is_connected(keyboard);
+                let (current, connected) = (shown == Some(id), library.is_connected(keyboard));
                 div()
                     .id(("keyboard", id.0 as usize))
-                    .px_3()
-                    .py_2()
-                    .rounded_md()
-                    .border_1()
+                    .flex()
+                    .items_center()
+                    .gap_4()
+                    .py_3()
+                    .border_b_1()
                     .border_color(border)
                     .cursor_pointer()
-                    .hover(|row| row.bg(hover))
+                    .child(
+                        display(format!("{:02}", index + 1), 14., cx)
+                            .w_7()
+                            .text_color(if current { accent } else { muted }),
+                    )
                     .child(
                         div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(div().flex_1().min_w_0().child(keyboard.name.clone()))
-                            .when(connected, |row| {
-                                row.child(div().text_xs().text_color(success).child("Connected"))
-                            }),
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                display(keyboard.name.clone(), 26., cx)
+                                    .when(!current, |name| name.text_color(muted)),
+                            )
+                            .child(div().text_sm().text_color(muted).child(detail)),
                     )
-                    .child(div().text_xs().text_color(muted).child(detail))
-                    .child(div().text_xs().text_color(muted).child(layouts))
+                    .when(connected, |row| {
+                        row.child(div().size_2().rounded_full().bg(success))
+                    })
+                    .when(current, |row| {
+                        row.child(
+                            div()
+                                .size_9()
+                                .flex_shrink_0()
+                                .rounded_full()
+                                .bg(accent)
+                                .text_color(accent_text)
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child("→"),
+                        )
+                    })
+                    // Pointing at a board shows it off; clicking opens it.
+                    .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                        if *hovered && this.shown != Some(id) {
+                            this.shown = Some(id);
+                            cx.notify();
+                        }
+                    }))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open_board(id, Section::Firmware, window, cx);
                     }))
             })
             .collect::<Vec<_>>();
         div()
-            .w_80()
+            .w(px(400.))
+            .flex_shrink_0()
+            .h_full()
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().px_1().text_xs().text_color(muted).child("MY BOARDS"))
+            .child(
+                div()
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(muted)
+                    .child(match count {
+                        0 => "COLLECTION".to_string(),
+                        1 => "COLLECTION · 1 BOARD".to_string(),
+                        n => format!("COLLECTION · {n} BOARDS"),
+                    }),
+            )
+            .child(
+                div()
+                    .pb_4()
+                    .child(display("My", 76., cx).line_height(relative(0.95)))
+                    .child(display("Boards", 76., cx).line_height(relative(0.95))),
+            )
             .child(
                 div()
                     .id("keyboard-list")
-                    .max_h_96()
+                    .flex_1()
+                    .min_h_0()
                     .overflow_y_scroll()
+                    .border_t_1()
+                    .border_color(text)
                     .flex()
                     .flex_col()
-                    .gap_1()
                     .children(rows),
             )
             .child(
@@ -1108,6 +1233,172 @@ impl Shell {
                             })),
                     ),
             )
+    }
+
+    /// The shown board, set out like an exhibit: its keyboard on a plinth,
+    /// and under it what there is to know about it.
+    fn render_exhibit(&self, exhibit: &Exhibit, cx: &mut Context<Self>) -> Option<Div> {
+        let theme = cx.theme();
+        let (muted, text, success) = (theme.muted_foreground, theme.foreground, theme.success);
+        let library = self.library.read(cx);
+        let keyboard = library.keyboards().get(exhibit.keyboard)?;
+        let board = self.boards.iter().find(|b| b.id == keyboard.board)?;
+        let keys = board.layout(&exhibit.layout.layout)?.keys.clone();
+        let blank = Keycap {
+            legend: String::new(),
+            hold: None,
+            kind: KeycapKind::None,
+        };
+        let first = exhibit.layout.layers.first().map(|l| l.id);
+        let frame = Frame {
+            keycaps: (0..keys.len())
+                .map(|position| {
+                    first
+                        .and_then(|layer| keycap(&exhibit.layout, layer, position))
+                        .unwrap_or(blank.clone())
+                })
+                .collect(),
+            keys,
+            devices: Vec::new(),
+            selected: Vec::new(),
+            hovered: None,
+            drag: None,
+            band: None,
+            palette: Palette::themed(cx),
+            tint: None,
+            links: Vec::new(),
+            colors: Vec::new(),
+        };
+
+        let connected = library.is_connected(keyboard);
+        let fact = |label: &'static str, value: String, detail: String, strong: Option<Hsla>| {
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(muted)
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .pt_1()
+                        .font_weight(FontWeight::MEDIUM)
+                        .when_some(strong, |value, color| value.text_color(color))
+                        .child(value),
+                )
+                .child(div().text_sm().text_color(muted).child(detail))
+        };
+        let (layout_name, layout_detail) = match &keyboard.current {
+            Some(_) => (
+                exhibit.layout.name.clone(),
+                match exhibit.layout.layers.len() {
+                    1 => "1 layer".to_string(),
+                    n => format!("{n} layers"),
+                },
+            ),
+            None => (
+                "None yet".to_string(),
+                "Shown with its factory keys".to_string(),
+            ),
+        };
+        let others = keyboard.layouts.len().saturating_sub(1);
+        let (id, current) = (keyboard.id, keyboard.current.clone());
+        Some(
+            div()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .flex()
+                .flex_col()
+                .gap_5()
+                .child(
+                    plinth(cx)
+                        .flex_1()
+                        .min_h(px(200.))
+                        .child(canvas::keyboard(frame, |_| {})),
+                )
+                .child(
+                    div()
+                        .pt_4()
+                        .border_t_1()
+                        .border_color(text)
+                        .flex()
+                        .gap_5()
+                        .child(fact(
+                            "MODEL",
+                            format!("{} {}", board.vendor, board.name),
+                            match board.layout(&exhibit.layout.layout) {
+                                Some(layout) => format!("{} keys", layout.keys.len()),
+                                None => String::new(),
+                            },
+                            None,
+                        ))
+                        .child(fact(
+                            "FIRMWARE",
+                            firmware_name(board, &keyboard.firmware.profile),
+                            match keyboard.firmware.addons.len() {
+                                0 => String::new(),
+                                1 => "1 add-on".to_string(),
+                                n => format!("{n} add-ons"),
+                            },
+                            None,
+                        ))
+                        .child(fact("CURRENT LAYOUT", layout_name, layout_detail, None))
+                        .child(match (&keyboard.device, connected) {
+                            (Some(_), true) => fact(
+                                "CONNECTION",
+                                "Connected".to_string(),
+                                "USB, linked".to_string(),
+                                Some(success),
+                            ),
+                            (Some(_), false) => fact(
+                                "CONNECTION",
+                                "Not connected".to_string(),
+                                "Linked to a device".to_string(),
+                                None,
+                            ),
+                            (None, _) => fact(
+                                "CONNECTION",
+                                "Not linked".to_string(),
+                                "Link it on its page".to_string(),
+                                None,
+                            ),
+                        }),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            Button::new("open-shown")
+                                .primary()
+                                .label("Open Board")
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.open_board(id, Section::Firmware, window, cx);
+                                })),
+                        )
+                        .when_some(current, |row, path| {
+                            row.child(
+                                Button::new("edit-shown")
+                                    .label(format!("Edit {}", exhibit.layout.name))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.open_path(path.clone(), window, cx);
+                                    })),
+                            )
+                        })
+                        .child(div().flex_1())
+                        .when(others > 0, |row| {
+                            row.child(div().text_sm().text_color(muted).child(match others {
+                                1 => "1 other layout".to_string(),
+                                n => format!("{n} other layouts"),
+                            }))
+                        }),
+                ),
+        )
     }
 
     /// The form for adding a board.
@@ -1218,77 +1509,97 @@ impl Shell {
 
     fn render_welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let border = cx.theme().border;
+        let look = crate::theme::look(cx);
+        let (wash, figures) = (look.colors.wash, look.figures);
         let empty = self.library.read(cx).keyboards().is_empty();
-        let detail = match &self.form {
-            Some(form) => self.render_form(form, cx),
-            None => div()
+        let shown = self.shown_keyboard(cx);
+        // The figure behind the page is the shown board's place in the list.
+        let place = shown.and_then(|id| {
+            self.library
+                .read(cx)
+                .keyboards()
+                .iter()
+                .position(|k| k.id == id)
+        });
+        let earlier =
+            (self.form.is_none() && !self.state.recent.is_empty()).then(|| self.render_earlier(cx));
+        let exhibit = match (&self.form, &self.exhibit) {
+            (None, Some(exhibit)) => self.render_exhibit(exhibit, cx),
+            _ => None,
+        };
+        let detail = match (&self.form, exhibit) {
+            (Some(form), _) => div()
+                .id("welcome-detail")
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .overflow_y_scroll()
+                .child(div().max_w(px(520.)).child(self.render_form(form, cx)))
+                .into_any_element(),
+            (None, Some(exhibit)) => exhibit.into_any_element(),
+            (None, None) => div()
+                .flex_1()
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap_3()
-                .child(div().text_xl().child(if empty {
-                    "Add your first board"
-                } else {
-                    "Choose a board"
-                }))
+                .child(display(
+                    if empty {
+                        "Add your first board"
+                    } else {
+                        "Choose a board"
+                    },
+                    30.,
+                    cx,
+                ))
                 .child(div().max_w_96().text_sm().text_color(muted).child(
                     "A board is one of your keyboards: its firmware and that firmware's settings. Open one to set up its firmware, build and flash it, and create the layouts used with it. A board does not need to be connected, or even one you own.",
-                )),
+                ))
+                .into_any_element(),
         };
-        let earlier =
-            (self.form.is_none() && !self.state.recent.is_empty()).then(|| self.render_earlier(cx));
 
         div()
             .size_full()
+            .relative()
+            .overflow_hidden()
             .flex()
             .flex_col()
-            .items_center()
-            .justify_center()
-            .gap_6()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_1()
-                    .child(div().text_2xl().child("Keyboard Curator"))
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(muted)
-                            .child("Keymaps, layers and lighting for ZMK keyboards"),
-                    ),
-            )
+            .px_12()
+            .pt_10()
+            .pb_8()
+            .gap_4()
+            // A theme may set the shown board's number, very large and
+            // barely there, behind everything.
+            .when_some(place.filter(|_| figures), |page, place| {
+                page.child(
+                    display(format!("{:02}", place + 1), 340., cx)
+                        .absolute()
+                        .top(px(-70.))
+                        .right(px(24.))
+                        .text_color(wash),
+                )
+            })
             .when_some(self.notice.clone(), |page, notice| {
-                page.child(div().max_w(px(760.)).text_sm().child(notice))
+                page.child(div().text_sm().child(notice))
             })
             .child(
                 div()
+                    .flex_1()
+                    .min_h_0()
                     .flex()
-                    .items_start()
-                    .gap_6()
+                    .gap_12()
                     .child(self.render_boards(cx))
-                    .child(
-                        div()
-                            .id("welcome-detail")
-                            .w(px(460.))
-                            .max_h(px(520.))
-                            .overflow_y_scroll()
-                            .pl_6()
-                            .border_l_1()
-                            .border_color(border)
-                            .flex()
-                            .flex_col()
-                            .gap_4()
-                            .child(detail)
-                            .when_some(earlier, |pane, earlier| pane.child(earlier)),
-                    ),
+                    .child(detail),
             )
+            .when_some(earlier, |page, earlier| page.child(earlier))
     }
 }
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.workspace.is_none() && self.page.is_none() {
+            self.prepare_exhibit(cx);
+        }
         let board_name = self
             .page
             .as_ref()
@@ -1324,6 +1635,9 @@ impl Render for Shell {
             .on_action(cx.listener(Self::close))
             .on_action(cx.listener(Self::new_action))
             .on_action(cx.listener(Self::export))
+            .on_action(cx.listener(|this, _: &crate::ThemeGallery, _, cx| {
+                this.set_theme(ThemeId::Gallery, cx);
+            }))
             .on_action(cx.listener(|this, _: &crate::AppearanceSystem, _, cx| {
                 this.set_appearance(Appearance::System, cx);
             }))

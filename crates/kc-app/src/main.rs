@@ -1,7 +1,6 @@
 //! The Keyboard Curator desktop application. This is the only crate allowed
 //! to depend on the GUI framework; everything else stays UI-independent.
 
-mod appearance;
 mod board_page;
 mod canvas;
 mod catalog;
@@ -10,6 +9,7 @@ mod library;
 mod shell;
 mod state;
 mod tester;
+mod theme;
 mod workspace;
 
 use std::rc::Rc;
@@ -17,7 +17,7 @@ use std::rc::Rc;
 use gpui_kit::*;
 
 use crate::shell::Shell;
-use crate::state::{AppState, Appearance};
+use crate::state::{AppState, Appearance, ThemeId};
 
 actions!(
     keyboard_curator,
@@ -54,12 +54,17 @@ actions!(
         OpenZmkDocs,
         AppearanceSystem,
         AppearanceLight,
-        AppearanceDark
+        AppearanceDark,
+        ThemeGallery
     ]
 );
 
-/// The menu bar. The appearance in use is checked in the View menu.
-fn menus(appearance: Appearance) -> Vec<Menu> {
+/// The menu bar. The theme and appearance in use are checked in the View
+/// menu.
+fn menus(theme: ThemeId, appearance: Appearance) -> Vec<Menu> {
+    let themes = ThemeId::ALL.map(|id| match id {
+        ThemeId::Gallery => MenuItem::action(id.name(), ThemeGallery).checked(theme == id),
+    });
     vec![
         Menu::new("Keyboard Curator").items([
             MenuItem::os_submenu("Services", SystemMenuType::Services),
@@ -96,6 +101,7 @@ fn menus(appearance: Appearance) -> Vec<Menu> {
             MenuItem::action("Advance After Assigning", ToggleAutoAdvance),
             MenuItem::action("Type to Assign", ToggleTypeToAssign),
             MenuItem::separator(),
+            MenuItem::submenu(Menu::new("Theme").items(themes)),
             MenuItem::submenu(
                 Menu::new("Appearance").items([
                     MenuItem::action("Match System", AppearanceSystem)
@@ -149,8 +155,9 @@ fn main() {
             KeyBinding::new("cmd-shift-z", Redo, Some("Shell")),
         ]);
         let state = AppState::load();
-        appearance::apply(state.appearance, cx);
-        cx.set_menus(menus(state.appearance));
+        theme::init(cx);
+        theme::apply(state.theme, state.appearance, cx);
+        cx.set_menus(menus(state.theme, state.appearance));
         catalog::start(cx);
 
         let bounds = match state.window {

@@ -261,22 +261,81 @@ pub(crate) fn chip(
     );
     div()
         .id(id)
-        .px_2()
+        .px_2p5()
         .h_7()
         .min_w_8()
         .flex()
         .items_center()
         .justify_center()
-        .rounded_md()
+        .rounded(crate::theme::look(cx).control_radius)
         .border_1()
         .border_color(border)
         .text_sm()
+        .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .when(active, |chip| {
             chip.bg(accent).text_color(accent_text).border_color(accent)
         })
         .when(!active, |chip| chip.hover(|chip| chip.bg(hover)))
         .child(label.into())
+}
+
+/// A text tab, underlined when it is the one shown.
+pub(crate) fn tab(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    active: bool,
+    cx: &App,
+) -> Stateful<Div> {
+    let theme = cx.theme();
+    let (accent, text, muted) = (theme.primary, theme.foreground, theme.muted_foreground);
+    div()
+        .id(id)
+        .h_9()
+        .flex()
+        .items_center()
+        .border_b_2()
+        .text_sm()
+        .cursor_pointer()
+        .when(active, |tab| {
+            tab.border_color(accent)
+                .text_color(text)
+                .font_weight(FontWeight::SEMIBOLD)
+        })
+        .when(!active, |tab| {
+            tab.border_color(transparent_black())
+                .text_color(muted)
+                .font_weight(FontWeight::MEDIUM)
+                .hover(|tab| tab.text_color(text))
+        })
+        .child(label.into())
+}
+
+/// Text in the theme's display face, for headings and figures.
+pub(crate) fn display(text: impl Into<SharedString>, size: f32, cx: &App) -> Div {
+    div()
+        .font_family(crate::theme::look(cx).display_font.clone())
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_size(px(size))
+        .line_height(relative(1.05))
+        .child(text.into())
+}
+
+/// The surface a keyboard is shown on.
+pub(crate) fn plinth(cx: &App) -> Div {
+    let colors = crate::theme::look(cx).colors;
+    div()
+        .rounded(px(24.))
+        .bg(colors.plinth)
+        .border_1()
+        .border_color(colors.plinth_border)
+        .shadow(vec![BoxShadow {
+            color: black().opacity(0.2),
+            offset: point(px(0.), px(26.)),
+            blur_radius: px(40.),
+            spread_radius: px(-22.),
+            inset: false,
+        }])
 }
 
 /// A small outlined tag, such as the kind of a behavior.
@@ -295,6 +354,7 @@ pub(crate) fn badge(label: impl Into<SharedString>, color: Hsla) -> Div {
 fn section_title(text: &'static str, cx: &App) -> Div {
     div()
         .text_xs()
+        .font_weight(FontWeight::SEMIBOLD)
         .text_color(cx.theme().muted_foreground)
         .child(text)
 }
@@ -1145,7 +1205,7 @@ impl Workspace {
                     .on_click(cx.listener(Self::leave)),
             )
             .child(div().text_sm().text_color(muted).child("›"))
-            .child(div().px_1().text_sm().child(self.layout_name()))
+            .child(div().px_1().child(display(self.layout_name(), 17., cx)))
             .child(div().text_xs().text_color(muted).child(mark))
             .child(div().flex_1())
             .child(div().text_xs().text_color(muted).child(format!(
@@ -1156,11 +1216,10 @@ impl Workspace {
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted, accent, accent_text, hover) = (
+        let (border, muted, accent, hover) = (
             theme.border,
             theme.muted_foreground,
             theme.primary,
-            theme.primary_foreground,
             theme.secondary,
         );
         // While a layer is dragged, the list is drawn in the order a drop
@@ -1189,10 +1248,10 @@ impl Workspace {
                     .id(("layer", layer.id.0 as usize))
                     .flex()
                     .items_center()
-                    .gap_2()
+                    .gap_3()
                     .px_3()
-                    .py_1p5()
-                    .rounded_md()
+                    .h_10()
+                    .rounded_lg()
                     .border_1()
                     .border_color(transparent_black())
                     .cursor_pointer()
@@ -1202,20 +1261,21 @@ impl Workspace {
                             .border_color(accent)
                             .text_color(muted)
                     })
-                    .when(active, |row| row.bg(accent).text_color(accent_text))
+                    // The layer shown is set apart by weight and its
+                    // figure in the accent color, not by a block of color.
+                    .when(active, |row| row.bg(hover))
+                    .when(!active && !slot, |row| row.text_color(muted))
                     .when(!active && !slot && aim.is_none(), |row| {
                         row.hover(|row| row.bg(hover))
                     })
                     .child(
-                        div()
+                        display(index.to_string(), 13., cx)
                             .w_5()
-                            .text_xs()
-                            .when(!active, |d| d.text_color(muted))
-                            .child(index.to_string()),
+                            .when(active, |d| d.text_color(accent)),
                     )
-                    .child(div().flex_1().text_sm().child(layer.name.clone()))
+                    .child(display(layer.name.clone(), 17., cx).flex_1().min_w_0())
                     .when_some(layer.color, |row, tag| {
-                        row.child(div().size_2().rounded_full().bg(tag_color(tag)))
+                        row.child(div().size_2p5().rounded_full().bg(tag_color(tag)))
                     })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.select_layer(id, window, cx);
@@ -1375,15 +1435,7 @@ impl Workspace {
     }
 
     fn render_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let palette = Palette {
-            key: theme.secondary,
-            key_border: theme.border,
-            text: theme.foreground,
-            muted_text: theme.muted_foreground,
-            accent: theme.primary,
-            layer_key: theme.primary.opacity(0.22),
-        };
+        let palette = Palette::themed(cx);
         let keys = self.layout_keys().to_vec();
         let blank = Keycap {
             legend: String::new(),
@@ -1412,13 +1464,78 @@ impl Workspace {
         };
         let bounds = self.canvas_bounds.clone();
 
+        let look = crate::theme::look(cx);
+        let (wash, figures) = (look.colors.wash, look.figures);
+        let muted = cx.theme().muted_foreground;
+        let index = self.project().layer_index(self.layer).unwrap_or_default();
+        let name = self
+            .project()
+            .layer(self.layer)
+            .map(|l| l.name.clone())
+            .unwrap_or_default();
+        let held = (0..self.layout_keys().len())
+            .filter(|p| {
+                keycap(self.project(), self.layer, *p).is_some_and(|cap| cap.hold.is_some())
+            })
+            .count();
+        let count = match held {
+            0 => format!("{} keys", self.layout_keys().len()),
+            n => format!(
+                "{} keys · {n} with a second job when held",
+                self.layout_keys().len()
+            ),
+        };
+
         div()
             .id("canvas")
             .key_context("Canvas")
             .track_focus(&self.canvas_focus)
+            .relative()
+            .overflow_hidden()
             .flex_1()
             .min_h_0()
-            .child(canvas::keyboard(frame, move |b| bounds.set(b)))
+            .flex()
+            .flex_col()
+            .px_5()
+            .pt_3()
+            .pb_5()
+            .gap_3()
+            // A theme may set the layer's number, very large and barely
+            // there, behind everything.
+            .when(figures, |area| {
+                area.child(
+                    display(index.to_string(), 260., cx)
+                        .absolute()
+                        .top(px(-56.))
+                        .left(px(4.))
+                        .text_color(wash),
+                )
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_end()
+                    .gap_3()
+                    .child(
+                        div()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(muted)
+                                    .child(format!("LAYER {index}")),
+                            )
+                            .child(display(name, 34., cx)),
+                    )
+                    .child(div().flex_1())
+                    .child(div().pb_1().text_sm().text_color(muted).child(count)),
+            )
+            .child(
+                plinth(cx)
+                    .flex_1()
+                    .min_h_0()
+                    .child(canvas::keyboard(frame, move |b| bounds.set(b))),
+            )
             .on_key_down(cx.listener(Self::key_down))
             .on_mouse_down(
                 MouseButton::Left,
@@ -1447,7 +1564,7 @@ impl Workspace {
 
     fn render_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted, hover) = (theme.border, theme.muted_foreground, theme.secondary);
+        let (muted, hover) = (theme.muted_foreground, theme.secondary);
         // Only what the board's firmware has something for is offered.
         let items: Vec<_> = picker_items(self.project(), &self.features())
             .into_iter()
@@ -1463,7 +1580,7 @@ impl Workspace {
             .filter(|group| items.iter().any(|i| i.group == *group))
             .map(|group| {
                 let active = !searching && group == self.group;
-                chip(("picker-tab", group as usize), group.title(), active, cx).on_click(
+                tab(("picker-tab", group as usize), group.title(), active, cx).on_click(
                     cx.listener(move |this, _, _, cx| {
                         this.group = group;
                         cx.notify();
@@ -1473,6 +1590,9 @@ impl Workspace {
             .collect::<Vec<_>>();
 
         let enabled = self.target_binding().is_some();
+        // The keys on offer are drawn as caps, like the ones on the board.
+        let look = crate::theme::look(cx);
+        let (cap, display_font) = (look.colors, look.display_font.clone());
         let cells = items
             .into_iter()
             .filter(|item| {
@@ -1494,9 +1614,13 @@ impl Workspace {
                     .flex_col()
                     .items_center()
                     .justify_center()
-                    .rounded_md()
+                    .rounded_lg()
                     .border_1()
-                    .border_color(border)
+                    .border_color(cap.key_border)
+                    .bg(cap.key)
+                    .text_color(cap.key_text)
+                    .font_family(display_font.clone())
+                    .font_weight(FontWeight::SEMIBOLD)
                     .text_sm()
                     .when(enabled, |cell| {
                         cell.cursor_pointer().hover(|cell| cell.bg(hover))
@@ -1621,7 +1745,52 @@ impl Workspace {
             );
         };
 
+        let colors = crate::theme::look(cx).colors;
+        let shown = keycap(self.project(), self.layer, position);
+        let specimen = div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .child(
+                div()
+                    .size_12()
+                    .flex_shrink_0()
+                    .rounded_lg()
+                    .bg(colors.key_lip)
+                    .border_1()
+                    .border_color(colors.key_border)
+                    .child(
+                        div()
+                            .h_10()
+                            .rounded_lg()
+                            .bg(colors.key)
+                            .text_color(colors.key_text)
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .justify_center()
+                            .when_some(shown, |face, cap| {
+                                face.child(display(cap.legend, 14., cx)).when_some(
+                                    cap.hold,
+                                    |face, hold| {
+                                        face.child(
+                                            div().text_size(px(9.)).text_color(muted).child(hold),
+                                        )
+                                    },
+                                )
+                            }),
+                    ),
+            )
+            .child(display(
+                match self.selection.len() {
+                    1 => format!("Key {position}"),
+                    n => format!("{n} keys"),
+                },
+                20.,
+                cx,
+            ));
         let mut panel = panel
+            .child(specimen)
             .child(section_title("BINDING", cx))
             .child(Input::new(&self.binding_input))
             .child(
@@ -2062,7 +2231,7 @@ impl Workspace {
             .into_iter()
             .filter(|(mode, _, _)| mode.available(&features))
             .map(|(mode, id, label)| {
-                chip(id, label, self.mode == mode, cx).on_click(
+                tab(id, label, self.mode == mode, cx).on_click(
                     cx.listener(move |this, _, window, cx| this.set_mode(mode, window, cx)),
                 )
             })
@@ -2070,9 +2239,9 @@ impl Workspace {
         div()
             .flex()
             .items_center()
-            .gap_1()
-            .px_3()
-            .py_2()
+            .gap_5()
+            .px_4()
+            .pt_1()
             .border_b_1()
             .border_color(border)
             .children(tabs)

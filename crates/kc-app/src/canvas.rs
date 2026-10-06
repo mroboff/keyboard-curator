@@ -1,9 +1,12 @@
 //! The keyboard canvas: draws a physical layout with its keycaps and maps
 //! pointer positions back to keys.
 
+use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
 use kc_boards::geometry::{self, Key, Point as LayoutPoint};
 use kc_model::keycap::{Keycap, KeycapKind};
+
+use crate::theme::CapStyle;
 
 /// Space kept clear around the keyboard, in pixels.
 const PADDING: f32 = 28.;
@@ -11,6 +14,10 @@ const PADDING: f32 = 28.;
 const GAP: f32 = 4.;
 /// Corner rounding of a keycap, in layout units.
 const RADIUS: f32 = 12.;
+/// How much of a sculpted cap's height is its lower edge, in layout units.
+const LIP: i32 = 9;
+/// How far below a sculpted cap its shadow falls, in layout units.
+const SHADOW: i32 = 5;
 
 /// Maps layout units into canvas bounds, preserving aspect ratio.
 #[derive(Debug, Clone, Copy)]
@@ -104,15 +111,59 @@ pub fn keys_in_band(
         .collect()
 }
 
-/// Colors the canvas draws with, taken from the active theme.
+/// Colors and cap style the canvas draws with, taken from the active
+/// theme.
 #[derive(Debug, Clone, Copy)]
 pub struct Palette {
     pub key: Hsla,
     pub key_border: Hsla,
+    /// The lower edge of a sculpted cap.
+    pub lip: Hsla,
     pub text: Hsla,
     pub muted_text: Hsla,
     pub accent: Hsla,
     pub layer_key: Hsla,
+    pub layer_lip: Hsla,
+    pub layer_text: Hsla,
+    pub system_key: Hsla,
+    pub system_lip: Hsla,
+    pub caps: CapStyle,
+}
+
+impl Palette {
+    /// The active theme's keyboard colors.
+    pub fn themed(cx: &App) -> Self {
+        let look = crate::theme::look(cx);
+        let (theme, colors) = (cx.theme(), look.colors);
+        Self {
+            key: colors.key,
+            key_border: colors.key_border,
+            lip: colors.key_lip,
+            text: colors.key_text,
+            muted_text: theme.muted_foreground,
+            accent: theme.primary,
+            layer_key: colors.layer_key,
+            layer_lip: colors.layer_lip,
+            layer_text: colors.layer_text,
+            system_key: colors.system_key,
+            system_lip: colors.system_lip,
+            caps: look.caps,
+        }
+    }
+
+    /// The same, with layer keys drawn like any other: for views where the
+    /// kind of a key is beside the point.
+    pub fn plain(cx: &App) -> Self {
+        let palette = Self::themed(cx);
+        Self {
+            layer_key: palette.key,
+            layer_lip: palette.lip,
+            layer_text: palette.text,
+            system_key: palette.key,
+            system_lip: palette.lip,
+            ..palette
+        }
+    }
 }
 
 /// Everything needed to paint one frame of the keyboard.
@@ -271,19 +322,28 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             continue;
         };
         let ghost = matches!(cap.kind, KeycapKind::Transparent | KeycapKind::None);
-        let fill = match cap.kind {
-            KeycapKind::Layer => palette.layer_key,
-            _ if ghost => palette.key.opacity(0.35),
-            _ => palette.key,
+        let (fill, lip, legend) = match cap.kind {
+            KeycapKind::Layer => (palette.layer_key, palette.layer_lip, palette.layer_text),
+            KeycapKind::System => (palette.system_key, palette.system_lip, palette.text),
+            _ if ghost => (palette.key.opacity(0.35), palette.lip, palette.muted_text),
+            _ => (palette.key, palette.lip, palette.text),
         };
         // In the lighting view a key is drawn in the color it is lit, and
         // unlit keys are drawn dark.
         let lit = frame.colors.get(index).copied();
-        let fill = match lit {
-            Some(Some(color)) => color,
-            Some(None) => palette.key.opacity(0.25),
-            None => fill,
+        let (fill, lip) = match lit {
+            Some(Some(color)) => (
+                color,
+                Hsla {
+                    l: color.l * 0.78,
+                    ..color
+                },
+            ),
+            Some(None) => (palette.key.opacity(0.25), lip),
+            None => (fill, lip),
         };
+        // A key that is not really there, or not lit, lies flat.
+        let raised = palette.caps == CapStyle::Sculpted && !ghost && lit != Some(None);
         let fill = match frame.tint {
             Some(tint) if !ghost => fill.blend(tint.opacity(0.16)),
             _ => fill,
@@ -293,7 +353,27 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         } else {
             fill
         };
-        if let Some(path) = key_path(key, view, None) {
+        // A sculpted cap is a top face over a darker lower edge, with a
+        // shadow under it; the legend sits on the face.
+        let face = if raised {
+            let below = Key {
+                y: key.y + SHADOW,
+                ..*key
+            };
+            if let Some(path) = key_path(&below, view, None) {
+                window.paint_path(path, black().opacity(0.14));
+            }
+            if let Some(path) = key_path(key, view, None) {
+                window.paint_path(path, lip);
+            }
+            Key {
+                h: key.h - LIP,
+                ..*key
+            }
+        } else {
+            *key
+        };
+        if let Some(path) = key_path(&face, view, None) {
             window.paint_path(path, fill);
         }
         let selected = frame.selected.contains(&index);
@@ -306,7 +386,7 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             window.paint_path(path, color);
         }
 
-        let center = view.to_screen(key.center());
+        let center = view.to_screen(face.center());
         // A key drawn in a color of its own (a light's color, a key being
         // tested) takes whichever of black and white reads on that color;
         // the theme's text color is only right on the theme's own fills.
@@ -314,11 +394,7 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             Some(Some(color)) => Some(text_on(color, palette.key)),
             _ => None,
         };
-        let text = match own {
-            Some(text) => text,
-            None if ghost => palette.muted_text,
-            None => palette.text,
-        };
+        let text = own.unwrap_or(legend);
         let muted_text = own.map_or(palette.muted_text, |text| text.opacity(0.7));
         let max_width = unit * 0.86;
         match &cap.hold {

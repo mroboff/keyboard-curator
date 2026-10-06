@@ -22,7 +22,7 @@ use crate::library::Library;
 use crate::shell::connection_hint;
 use crate::state::AppState;
 use crate::tester::KeyTester;
-use crate::workspace::chip;
+use crate::workspace::{chip, display, tab};
 
 const KEYBOARD_NAME: &str = "CONFIG_ZMK_KEYBOARD_NAME";
 
@@ -1649,7 +1649,7 @@ impl Render for BoardPage {
         };
         let tab =
             |id: &'static str, label: &'static str, section: Section, cx: &mut Context<Self>| {
-                chip(id, label, self.section == section, cx)
+                tab(id, label, self.section == section, cx)
                     .on_click(cx.listener(move |this, _, _, cx| this.show_section(section, cx)))
             };
         // The tester starts, on the board's current layout, each time it
@@ -1715,10 +1715,11 @@ impl Render for BoardPage {
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .child(div().text_sm().child(format!(
-                                "{} {} · {firmware}",
-                                self.board.vendor, self.board.name
-                            )))
+                            .child(display(
+                                format!("{} {} · {firmware}", self.board.vendor, self.board.name),
+                                15.,
+                                cx,
+                            ))
                             .child(device),
                     )
                     .child(link)
@@ -1731,9 +1732,9 @@ impl Render for BoardPage {
                 div()
                     .flex()
                     .items_center()
-                    .gap_1()
+                    .gap_5()
                     .px_4()
-                    .py_2()
+                    .pt_1()
                     .border_b_1()
                     .border_color(border)
                     .child(tab("section-firmware", "Firmware", Section::Firmware, cx))

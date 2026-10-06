@@ -470,14 +470,7 @@ impl Workspace {
             .collect::<Vec<_>>();
         let flavor_help = FLAVORS.iter().find(|f| f.0 == h.flavor).map_or("", |f| f.2);
 
-        let palette = Palette {
-            key: cx.theme().secondary,
-            key_border: cx.theme().border,
-            text: cx.theme().foreground,
-            muted_text: muted,
-            accent: cx.theme().primary,
-            layer_key: cx.theme().primary.opacity(0.22),
-        };
+        let palette = Palette::themed(cx);
         let keys = self.layout_keys().to_vec();
         let blank = kc_model::keycap::Keycap {
             legend: String::new(),

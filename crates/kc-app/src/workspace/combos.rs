@@ -218,14 +218,7 @@ impl Workspace {
             .combo
             .and_then(|id| self.project().combos.iter().find(|c| c.id == id));
 
-        let palette = Palette {
-            key: theme.secondary,
-            key_border: theme.border,
-            text: theme.foreground,
-            muted_text: theme.muted_foreground,
-            accent: theme.primary,
-            layer_key: theme.primary.opacity(0.22),
-        };
+        let palette = Palette::themed(cx);
         let keys = self.layout_keys().to_vec();
         let blank = Keycap {
             legend: String::new(),

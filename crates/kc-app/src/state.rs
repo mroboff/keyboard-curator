@@ -26,6 +26,24 @@ pub enum Appearance {
     Dark,
 }
 
+/// The app's look. Each is a file under `assets/themes`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeId {
+    #[default]
+    Gallery,
+}
+
+impl ThemeId {
+    pub const ALL: [ThemeId; 1] = [ThemeId::Gallery];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ThemeId::Gallery => "Gallery",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppState {
@@ -36,6 +54,7 @@ pub struct AppState {
     pub recent: Vec<PathBuf>,
     pub window: Option<WindowFrame>,
     pub appearance: Appearance,
+    pub theme: ThemeId,
     /// The folder the ZMK config was last exported to.
     pub export_dir: Option<PathBuf>,
     /// Firmware repository folders from before they were kept per

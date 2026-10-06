@@ -30,7 +30,8 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
 - **The layout editor** edits one layout: keys, layers, behaviors, combos, per-key colors, pointing, layer rules. It shows only what the board's firmware supports. *Apply* makes the layout the board's current one.
 - **Key Tester**, on a board's page, lights each key as you press it on the keyboard and keeps count of the keys seen. Presses are matched against the board's current layout. Every key also plays a note: choose a sine, triangle, sawtooth or square wave and a scale, and the board becomes an instrument. `cargo run -p kc-sound --example scale` checks the sound output by itself.
 - **Import a Keymap**, on a board's page, opens an existing `.keymap` file or a MoErgo Layout Editor export as a new layout. Firmware settings found with it are offered to the board.
-- **Light and dark**: the app follows the computer's appearance. *View › Appearance* holds it to light or dark instead.
+- **Themes**: *View › Theme* chooses the app's look. Gallery, the default, sets the keyboard out like an exhibit: sculpted keycaps on a plinth, large display type, one accent color. Its typefaces (Figtree and Bricolage Grotesque, both under the SIL Open Font License) are carried in the app.
+- **Light and dark**: a theme that has both follows the computer's appearance. *View › Appearance* holds it to light or dark instead.
 
 ### Firmware families
 
