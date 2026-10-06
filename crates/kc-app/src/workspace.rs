@@ -227,6 +227,8 @@ pub struct Workspace {
     /// The layer being dragged in the layer list, and the place in the
     /// list it would take if let go of now.
     layer_drop: Option<(LayerId, usize)>,
+    /// The folded-away parts of forms that have been opened.
+    unfolded: std::collections::HashSet<&'static str>,
     /// A selection rectangle being dragged out, with the selection it adds to.
     band: Option<(Point<Pixels>, Point<Pixels>, Vec<usize>)>,
     canvas_bounds: Rc<Cell<Bounds<Pixels>>>,
@@ -376,42 +378,6 @@ pub(crate) fn field(
                 }),
         )
         .child(div().flex_shrink_0().child(control))
-}
-
-/// A setting chosen from several: its name, then the choices under it,
-/// since a row of them is too wide to sit beside the name.
-pub(crate) fn choice(
-    label: impl Into<SharedString>,
-    detail: impl Into<SharedString>,
-    choices: impl IntoElement,
-    cx: &App,
-) -> Div {
-    let theme = cx.theme();
-    let (muted, border) = (theme.muted_foreground, theme.border);
-    let detail: SharedString = detail.into();
-    div()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .py_3()
-        .border_b_1()
-        .border_color(border)
-        .child(
-            div()
-                .text_sm()
-                .font_weight(FontWeight::MEDIUM)
-                .child(label.into()),
-        )
-        .child(choices)
-        .when(!detail.is_empty(), |text| {
-            text.child(
-                div()
-                    .text_sm()
-                    .line_height(relative(1.4))
-                    .text_color(muted)
-                    .child(detail),
-            )
-        })
 }
 
 /// A titled part of a form, set apart from the part before it.
@@ -609,6 +575,7 @@ impl Workspace {
             hovered: None,
             drag: None,
             layer_drop: None,
+            unfolded: std::collections::HashSet::new(),
             band: None,
             canvas_bounds: Rc::new(Cell::new(Bounds::default())),
             canvas_focus: cx.focus_handle(),

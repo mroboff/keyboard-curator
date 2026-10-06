@@ -3,7 +3,9 @@
 
 use std::rc::Rc;
 
+use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -14,9 +16,7 @@ use kc_model::text::{format_binding, LayerStyle};
 use kc_model::{BehaviorId, BehaviorRef, Binding, KeyExpr, ModelError, Slot};
 use kc_zmk::Modifier;
 
-use super::{
-    badge, chip, choice, display, field, group, heading, help, plinth, section_title, Workspace,
-};
+use super::{badge, chip, display, field, group, heading, help, plinth, section_title, Workspace};
 use crate::canvas::{self, Frame, Palette};
 
 /// The built-in behaviors a hold-tap or sticky key can wrap.
@@ -26,6 +26,27 @@ const WRAPPABLE: [(&str, &str); 5] = [
     ("to", "Go to layer"),
     ("sl", "Sticky layer"),
     ("sk", "Sticky key"),
+];
+
+/// What choosing from a menu does.
+type Pick = Rc<dyn Fn(&mut Workspace, &mut Window, &mut Context<Workspace>)>;
+
+/// The kinds of behavior that can be made from scratch.
+#[derive(Debug, Clone, Copy)]
+enum New {
+    HoldTap,
+    TapDance,
+    ModMorph,
+    StickyKey,
+    Macro,
+}
+
+const NEW: [(&str, New); 5] = [
+    ("Hold-tap", New::HoldTap),
+    ("Tap-dance", New::TapDance),
+    ("Mod-morph", New::ModMorph),
+    ("Sticky key", New::StickyKey),
+    ("Macro", New::Macro),
 ];
 
 const FLAVORS: [(Flavor, &str, &str); 4] = [
@@ -288,17 +309,28 @@ impl Workspace {
             })
             .collect::<Vec<_>>();
 
-        let kp = || BehaviorRef::built_in("kp");
-        let new = |id: &'static str,
-                   label: &'static str,
-                   cx: &mut Context<Self>,
-                   make: fn() -> (&'static str, &'static str, BehaviorKind)| {
-            chip(id, label, false, cx).on_click(cx.listener(move |this, _, window, cx| {
-                let (base, name, kind) = make();
-                this.add_behavior(base, name, kind, window, cx);
-            }))
-        };
-        let _ = kp;
+        // Everything that can be made, in one menu beside the list's title.
+        let workspace = cx.weak_entity();
+        let new = Button::new("new-behavior")
+            .label("New")
+            .dropdown_caret(true)
+            .dropdown_menu(move |mut menu, _, _| {
+                for (label, kind) in NEW {
+                    let workspace = workspace.clone();
+                    menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| {
+                        let _ = workspace.update(cx, |this, cx| this.add_new(kind, window, cx));
+                    }));
+                }
+                menu = menu.separator().label("Home-row mods");
+                for (label, right) in [("For the left hand", false), ("For the right hand", true)] {
+                    let workspace = workspace.clone();
+                    menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| {
+                        let _ = workspace
+                            .update(cx, |this, cx| this.add_home_row_mod(right, window, cx));
+                    }));
+                }
+                menu
+            });
         div()
             .w_72()
             .flex_shrink_0()
@@ -309,10 +341,14 @@ impl Workspace {
             .border_color(border)
             .child(
                 div()
+                    .flex()
+                    .items_center()
                     .px_3()
                     .pt_3()
                     .pb_2()
-                    .child(section_title("BEHAVIORS", cx)),
+                    .child(section_title("BEHAVIORS", cx))
+                    .child(div().flex_1())
+                    .child(new),
             )
             .child(
                 div()
@@ -321,125 +357,165 @@ impl Workspace {
                     .min_h_0()
                     .overflow_y_scroll()
                     .px_2()
+                    .pb_2()
                     .flex()
                     .flex_col()
                     .gap_0p5()
                     .children(rows),
             )
-            .child(
-                div()
-                    .p_3()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .border_t_1()
-                    .border_color(border)
-                    .child(section_title("NEW BEHAVIOR", cx))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_1()
-                            .child(new("new-hold-tap", "Hold-tap", cx, || {
-                                (
-                                    "ht",
-                                    "Hold-tap",
-                                    BehaviorKind::HoldTap(HoldTap::new(
-                                        BehaviorRef::built_in("kp"),
-                                        BehaviorRef::built_in("kp"),
-                                    )),
-                                )
-                            }))
-                            .child(new("new-tap-dance", "Tap-dance", cx, || {
-                                (
-                                    "td",
-                                    "Tap-dance",
-                                    BehaviorKind::TapDance(TapDance {
-                                        tapping_term_ms: 200,
-                                        bindings: vec![Binding::none(), Binding::none()],
-                                    }),
-                                )
-                            }))
-                            .child(new("new-mod-morph", "Mod-morph", cx, || {
-                                (
-                                    "mm",
-                                    "Mod-morph",
-                                    BehaviorKind::ModMorph(ModMorph {
-                                        normal: Binding::none(),
-                                        morphed: Binding::none(),
-                                        mods: vec![Modifier::LShift, Modifier::RShift],
-                                        keep_mods: vec![],
-                                    }),
-                                )
-                            }))
-                            .child(new("new-sticky", "Sticky key", cx, || {
-                                (
-                                    "sticky",
-                                    "Sticky key",
-                                    BehaviorKind::StickyKey(StickyKey {
-                                        behavior: BehaviorRef::built_in("kp"),
-                                        release_after_ms: 1000,
-                                        quick_release: false,
-                                        lazy: false,
-                                        ignore_modifiers: true,
-                                    }),
-                                )
-                            }))
-                            .child(new("new-macro", "Macro", cx, || {
-                                (
-                                    "macro",
-                                    "Macro",
-                                    BehaviorKind::Macro(Macro {
-                                        wait_ms: None,
-                                        tap_ms: None,
-                                        params: 0,
-                                        steps: vec![],
-                                    }),
-                                )
-                            })),
-                    )
-                    .child(section_title("HOME-ROW MODS", cx))
-                    .child(
-                        div()
-                            .flex()
-                            .gap_1()
-                            .child(
-                                chip("new-hml", "Left hand", false, cx).on_click(cx.listener(
-                                    |this, _, window, cx| this.add_home_row_mod(false, window, cx),
-                                )),
-                            )
-                            .child(
-                                chip("new-hmr", "Right hand", false, cx).on_click(cx.listener(
-                                    |this, _, window, cx| this.add_home_row_mod(true, window, cx),
-                                )),
-                            ),
-                    ),
-            )
     }
 
-    /// Chips choosing which built-in a hold-tap side or sticky key wraps.
+    /// Makes a new behavior of a kind, set up the way one usually starts.
+    fn add_new(&mut self, kind: New, window: &mut Window, cx: &mut Context<Self>) {
+        let kp = || BehaviorRef::built_in("kp");
+        let (base, name, kind) = match kind {
+            New::HoldTap => (
+                "ht",
+                "Hold-tap",
+                BehaviorKind::HoldTap(HoldTap::new(kp(), kp())),
+            ),
+            New::TapDance => (
+                "td",
+                "Tap-dance",
+                BehaviorKind::TapDance(TapDance {
+                    tapping_term_ms: 200,
+                    bindings: vec![Binding::none(), Binding::none()],
+                }),
+            ),
+            New::ModMorph => (
+                "mm",
+                "Mod-morph",
+                BehaviorKind::ModMorph(ModMorph {
+                    normal: Binding::none(),
+                    morphed: Binding::none(),
+                    mods: vec![Modifier::LShift, Modifier::RShift],
+                    keep_mods: vec![],
+                }),
+            ),
+            New::StickyKey => (
+                "sticky",
+                "Sticky key",
+                BehaviorKind::StickyKey(StickyKey {
+                    behavior: kp(),
+                    release_after_ms: 1000,
+                    quick_release: false,
+                    lazy: false,
+                    ignore_modifiers: true,
+                }),
+            ),
+            New::Macro => (
+                "macro",
+                "Macro",
+                BehaviorKind::Macro(Macro {
+                    wait_ms: None,
+                    tap_ms: None,
+                    params: 0,
+                    steps: vec![],
+                }),
+            ),
+        };
+        self.add_behavior(base, name, kind, window, cx);
+    }
+
+    /// A button showing the choice made, which opens a menu of the choices.
+    fn select(
+        &self,
+        id: &'static str,
+        shown: &'static str,
+        options: Vec<(&'static str, bool, Pick)>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let workspace = cx.weak_entity();
+        Button::new(id)
+            .label(shown)
+            .dropdown_caret(true)
+            .dropdown_menu(move |mut menu, _, _| {
+                for (label, chosen, pick) in &options {
+                    let (workspace, pick) = (workspace.clone(), pick.clone());
+                    menu = menu.item(PopupMenuItem::new(*label).checked(*chosen).on_click(
+                        move |_, window, cx| {
+                            let _ = workspace.update(cx, |this, cx| pick(this, window, cx));
+                        },
+                    ));
+                }
+                menu
+            })
+    }
+
+    /// A menu choosing which built-in a hold-tap side or sticky key wraps.
     fn wrap_chips(
         &self,
         id: &'static str,
         current: &BehaviorRef,
         cx: &mut Context<Self>,
         set: fn(&mut BehaviorKind, BehaviorRef),
-    ) -> Div {
-        let chips = WRAPPABLE
+    ) -> impl IntoElement {
+        let is = |label: &str| *current == BehaviorRef::built_in(label);
+        let shown = WRAPPABLE
             .iter()
-            .enumerate()
-            .map(|(index, (label, name))| {
-                let active = *current == BehaviorRef::built_in(label);
-                chip((id, index), *name, active, cx).on_click(cx.listener(
-                    move |this, _, window, cx| {
-                        this.edit_behavior("Change Behavior", window, cx, |kind| {
-                            set(kind, BehaviorRef::built_in(label));
-                        });
-                    },
-                ))
+            .find(|(label, _)| is(label))
+            .map_or("Something else", |(_, name)| *name);
+        let options = WRAPPABLE
+            .iter()
+            .map(|(label, name)| {
+                let label = *label;
+                let pick: Pick = Rc::new(move |this, window, cx| {
+                    this.edit_behavior("Change Behavior", window, cx, |kind| {
+                        set(kind, BehaviorRef::built_in(label));
+                    });
+                });
+                (*name, is(label), pick)
             })
-            .collect::<Vec<_>>();
-        div().flex().flex_wrap().gap_1().children(chips)
+            .collect();
+        self.select(id, shown, options, cx)
+    }
+
+    /// A part of a form that starts folded away under its title, with a
+    /// line on what it holds; clicking the title opens it.
+    fn fold(
+        &self,
+        id: &'static str,
+        title: &'static str,
+        summary: String,
+        cx: &mut Context<Self>,
+        body: impl FnOnce(Div, &mut Context<Self>) -> Div,
+    ) -> Div {
+        let theme = cx.theme();
+        let (muted, border) = (theme.muted_foreground, theme.border);
+        let open = self.unfolded.contains(&id);
+        let header = div()
+            .id(id)
+            .flex()
+            .items_center()
+            .gap_3()
+            .mt_8()
+            .py_2()
+            .border_b_1()
+            .border_color(border)
+            .cursor_pointer()
+            .child(section_title(title, cx))
+            .child(div().flex_1())
+            .when(!open, |header| {
+                header.child(div().text_sm().text_color(muted).child(summary))
+            })
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(if open { "Hide" } else { "Show" }),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if !this.unfolded.remove(&id) {
+                    this.unfolded.insert(id);
+                }
+                cx.notify();
+            }));
+        let column = div().flex().flex_col().child(header);
+        if open {
+            body(column, cx)
+        } else {
+            column
+        }
     }
 
     /// A row for something that is on or off.
@@ -460,22 +536,22 @@ impl Workspace {
     }
 
     fn render_hold_tap(&self, h: &HoldTap, cx: &mut Context<Self>) -> Div {
-        let flavor = FLAVORS
+        let flavor_name = FLAVORS.iter().find(|f| f.0 == h.flavor).map_or("", |f| f.1);
+        let flavors = FLAVORS
             .iter()
-            .enumerate()
-            .map(|(index, (flavor, name, _))| {
+            .map(|(flavor, name, _)| {
                 let flavor = *flavor;
-                chip(("flavor", index), *name, h.flavor == flavor, cx).on_click(cx.listener(
-                    move |this, _, window, cx| {
-                        this.edit_behavior("Change Flavor", window, cx, |kind| {
-                            if let BehaviorKind::HoldTap(h) = kind {
-                                h.flavor = flavor;
-                            }
-                        });
-                    },
-                ))
+                let pick: Pick = Rc::new(move |this, window, cx| {
+                    this.edit_behavior("Change Flavor", window, cx, |kind| {
+                        if let BehaviorKind::HoldTap(h) = kind {
+                            h.flavor = flavor;
+                        }
+                    });
+                });
+                (*name, *name == flavor_name, pick)
             })
-            .collect::<Vec<_>>();
+            .collect();
+        let flavor = self.select("flavor", flavor_name, flavors, cx);
         let flavor_help = FLAVORS.iter().find(|f| f.0 == h.flavor).map_or("", |f| f.2);
 
         let palette = Palette::themed(cx);
@@ -511,32 +587,55 @@ impl Workspace {
                 }))
             };
 
+        let tuned = [
+            h.quick_tap_ms.is_some(),
+            h.require_prior_idle_ms.is_some(),
+            h.retro_tap,
+            h.hold_while_undecided,
+        ]
+        .into_iter()
+        .filter(|changed| *changed)
+        .count();
+        let tuned = match tuned {
+            0 => "All as they come".to_string(),
+            n => format!("{n} changed"),
+        };
+        let triggers = match h.hold_trigger_key_positions.len() {
+            0 => "Any key".to_string(),
+            1 => "1 key".to_string(),
+            n => format!("{n} keys"),
+        };
+        let tap = self.wrap_chips("tap-wrap", &h.tap, cx, |kind, behavior| {
+            if let BehaviorKind::HoldTap(h) = kind {
+                h.tap = behavior;
+            }
+        });
+        let hold = self.wrap_chips("hold-wrap", &h.hold, cx, |kind, behavior| {
+            if let BehaviorKind::HoldTap(h) = kind {
+                h.hold = behavior;
+            }
+        });
         div()
             .flex()
             .flex_col()
             .child(
                 group("WHAT IT DOES", cx)
-                    .child(choice("When tapped", "", self.wrap_chips("tap-wrap", &h.tap, cx, |kind, behavior| {
-                if let BehaviorKind::HoldTap(h) = kind {
-                    h.tap = behavior;
-                }
-            }), cx))
-                    .child(choice("When held", "", self.wrap_chips("hold-wrap", &h.hold, cx, |kind, behavior| {
-                if let BehaviorKind::HoldTap(h) = kind {
-                    h.hold = behavior;
-                }
-            }), cx)),
+                    .child(field("When tapped", "", tap, cx))
+                    .child(field("When held", "", hold, cx)),
             )
             .child(
                 group("DECIDING BETWEEN HOLD AND TAP", cx)
-                    .child(choice("How it decides", flavor_help, div().flex().flex_wrap().gap_1().children(flavor), cx))
+                    .child(field("How it decides", flavor_help, flavor, cx))
                     .child(self.stepper("tapping-term", "Tapping term", format!("{} ms", h.tapping_term_ms), cx, |this, d, window, cx| {
                 this.edit_behavior("Change Tapping Term", window, cx, |kind| {
                     if let BehaviorKind::HoldTap(h) = kind {
                         h.tapping_term_ms = h.tapping_term_ms.saturating_add_signed(d as i32 * 10).max(10);
                     }
                 });
-            }))
+            })),
+            )
+            .child(self.fold("ht-tuning", "FINE-TUNING", tuned, cx, |column, cx| {
+                column
                     .child(self.stepper("quick-tap", "Quick tap (tap again to repeat the tap)", Self::optional_ms_default(h.quick_tap_ms, "off"), cx, |this, d, window, cx| {
                 this.edit_behavior("Change Quick Tap", window, cx, |kind| {
                     if let BehaviorKind::HoldTap(h) = kind {
@@ -560,28 +659,30 @@ impl Workspace {
                         if let BehaviorKind::HoldTap(h) = kind {
                             h.hold_while_undecided = !h.hold_while_undecided;
                         }
-                    })),
-            )
-            .child(
-                group("KEYS THAT CAN TRIGGER THE HOLD", cx)
-                    .child(help("With none chosen, any key can. Click keys to choose, or pick a hand: home-row mods usually hold only for keys on the other hand.", cx).pt_1().pb_3())
-                    .child(
-                        div()
+                    }))
+            }))
+            .child(self.fold(
+                "ht-trigger",
+                "KEYS THAT CAN TRIGGER THE HOLD",
+                triggers,
+                cx,
+                |column, cx| {
+                    column
+                        .child(help("With none chosen, any key can. Click keys to choose, or pick a hand: home-row mods usually hold only for keys on the other hand.", cx).pt_1().pb_3())
+                        .child(div()
                             .flex()
                             .flex_wrap()
                             .gap_1()
                             .pb_2()
                             .child(hands("trigger-any", "Any key", None, cx))
                             .child(hands("trigger-left", "Left hand", Some(false), cx))
-                            .child(hands("trigger-right", "Right hand", Some(true), cx)),
-                    )
-                    .child(self.toggle("trigger-release", "Decide on release", h.hold_trigger_on_release, cx, |kind| {
+                            .child(hands("trigger-right", "Right hand", Some(true), cx)))
+                        .child(self.toggle("trigger-release", "Decide on release", h.hold_trigger_on_release, cx, |kind| {
                         if let BehaviorKind::HoldTap(h) = kind {
                             h.hold_trigger_on_release = !h.hold_trigger_on_release;
                         }
                     }))
-                    .child(
-                        plinth(cx)
+                        .child(plinth(cx)
                             .mt_4()
                             .h_64()
                             .child(canvas::keyboard(frame, move |b| bounds.set(b)))
@@ -600,9 +701,9 @@ impl Workspace {
                                     h.hold_trigger_key_positions.sort_unstable();
                                 }
                             });
-                        })),
-                    ),
-            )
+                        })))
+                },
+            ))
     }
 
     fn render_tap_dance(&self, id: BehaviorId, t: &TapDance, cx: &mut Context<Self>) -> Div {
@@ -719,6 +820,11 @@ impl Workspace {
             );
             field(label, "", slot, cx)
         };
+        let kept = match m.keep_mods.len() {
+            0 => "None".to_string(),
+            1 => "1 modifier".to_string(),
+            n => format!("{n} modifiers"),
+        };
         div()
             .flex()
             .flex_col()
@@ -728,38 +834,43 @@ impl Workspace {
                     .child(row("With the modifiers held", true, self, cx)),
             )
             .child(
-                group("MODIFIERS", cx)
-                    .child(choice(
-                        "Modifiers that switch it",
-                        "",
-                        self.modifier_chips("mm-mods", &m.mods, cx, false),
-                        cx,
-                    ))
-                    .child(choice(
-                        "Modifiers passed on to the second binding",
-                        "",
-                        self.modifier_chips("mm-keep", &m.keep_mods, cx, true),
-                        cx,
-                    )),
+                group("MODIFIERS THAT SWITCH IT", cx)
+                    .child(self.modifier_chips("mm-mods", &m.mods, cx, false).pt_2()),
             )
+            .child(self.fold(
+                "mm-keep",
+                "MODIFIERS PASSED ON TO THE SECOND BINDING",
+                kept,
+                cx,
+                |column, cx| {
+                    column.child(
+                        self.modifier_chips("mm-keep", &m.keep_mods, cx, true)
+                            .pt_3(),
+                    )
+                },
+            ))
     }
 
     fn render_sticky(&self, s: &StickyKey, cx: &mut Context<Self>) -> Div {
+        let tuned = [s.quick_release, s.lazy, !s.ignore_modifiers]
+            .into_iter()
+            .filter(|changed| *changed)
+            .count();
+        let tuned = match tuned {
+            0 => "All as they come".to_string(),
+            n => format!("{n} changed"),
+        };
+        let wraps = self.wrap_chips("sticky-wrap", &s.behavior, cx, |kind, behavior| {
+            if let BehaviorKind::StickyKey(s) = kind {
+                s.behavior = behavior;
+            }
+        });
         div()
             .flex()
             .flex_col()
-            .child(group("WHAT IS MADE STICKY", cx).child(choice(
-                "Behavior",
-                "",
-                self.wrap_chips("sticky-wrap", &s.behavior, cx, |kind, behavior| {
-                    if let BehaviorKind::StickyKey(s) = kind {
-                        s.behavior = behavior;
-                    }
-                }),
-                cx,
-            )))
             .child(
-                group("LETTING GO", cx)
+                group("WHAT IT DOES", cx)
+                    .child(field("What is made sticky", "", wraps, cx))
                     .child(self.stepper(
                         "sticky-release",
                         "Release after",
@@ -775,40 +886,45 @@ impl Workspace {
                                 }
                             });
                         },
-                    ))
-                    .child(self.toggle(
-                        "sticky-quick",
-                        "Release as soon as the next key is pressed",
-                        s.quick_release,
-                        cx,
-                        |kind| {
-                            if let BehaviorKind::StickyKey(s) = kind {
-                                s.quick_release = !s.quick_release;
-                            }
-                        },
-                    ))
-                    .child(self.toggle(
-                        "sticky-lazy",
-                        "Press only when the next key is",
-                        s.lazy,
-                        cx,
-                        |kind| {
-                            if let BehaviorKind::StickyKey(s) = kind {
-                                s.lazy = !s.lazy;
-                            }
-                        },
-                    ))
-                    .child(self.toggle(
-                        "sticky-ignore",
-                        "Let modifiers through",
-                        s.ignore_modifiers,
-                        cx,
-                        |kind| {
-                            if let BehaviorKind::StickyKey(s) = kind {
-                                s.ignore_modifiers = !s.ignore_modifiers;
-                            }
-                        },
                     )),
+            )
+            .child(
+                self.fold("sk-tuning", "FINE-TUNING", tuned, cx, |column, cx| {
+                    column
+                        .child(self.toggle(
+                            "sticky-quick",
+                            "Release as soon as the next key is pressed",
+                            s.quick_release,
+                            cx,
+                            |kind| {
+                                if let BehaviorKind::StickyKey(s) = kind {
+                                    s.quick_release = !s.quick_release;
+                                }
+                            },
+                        ))
+                        .child(self.toggle(
+                            "sticky-lazy",
+                            "Press only when the next key is",
+                            s.lazy,
+                            cx,
+                            |kind| {
+                                if let BehaviorKind::StickyKey(s) = kind {
+                                    s.lazy = !s.lazy;
+                                }
+                            },
+                        ))
+                        .child(self.toggle(
+                            "sticky-ignore",
+                            "Let modifiers through",
+                            s.ignore_modifiers,
+                            cx,
+                            |kind| {
+                                if let BehaviorKind::StickyKey(s) = kind {
+                                    s.ignore_modifiers = !s.ignore_modifiers;
+                                }
+                            },
+                        ))
+                }),
             )
     }
 
@@ -956,6 +1072,14 @@ impl Workspace {
             })
             .collect::<Vec<_>>();
 
+        let timed = match (m.wait_ms, m.tap_ms) {
+            (None, None) => "As it comes".to_string(),
+            _ => "Changed".to_string(),
+        };
+        let passed = match m.params {
+            0 => "None".to_string(),
+            n => n.to_string(),
+        };
         div()
             .flex()
             .flex_col()
@@ -1018,38 +1142,43 @@ impl Workspace {
                 ),
             )
             .child(
-                group("TIMING", cx)
-                    .child(self.stepper(
-                        "macro-wait",
-                        "Wait between steps",
-                        Self::optional_ms_default(m.wait_ms, "default"),
-                        cx,
-                        |this, d, window, cx| {
-                            this.edit_behavior("Change Macro Timing", window, cx, |kind| {
-                                if let BehaviorKind::Macro(m) = kind {
-                                    Self::step_optional_ms(&mut m.wait_ms, d, 5, 15);
-                                }
-                            });
-                        },
-                    ))
-                    .child(self.stepper(
-                        "macro-tap",
-                        "Hold each tap for",
-                        Self::optional_ms_default(m.tap_ms, "default"),
-                        cx,
-                        |this, d, window, cx| {
-                            this.edit_behavior("Change Macro Timing", window, cx, |kind| {
-                                if let BehaviorKind::Macro(m) = kind {
-                                    Self::step_optional_ms(&mut m.tap_ms, d, 5, 30);
-                                }
-                            });
-                        },
-                    )),
+                self.fold("macro-timing", "TIMING", timed, cx, |column, cx| {
+                    column
+                        .child(self.stepper(
+                            "macro-wait",
+                            "Wait between steps",
+                            Self::optional_ms_default(m.wait_ms, "default"),
+                            cx,
+                            |this, d, window, cx| {
+                                this.edit_behavior("Change Macro Timing", window, cx, |kind| {
+                                    if let BehaviorKind::Macro(m) = kind {
+                                        Self::step_optional_ms(&mut m.wait_ms, d, 5, 15);
+                                    }
+                                });
+                            },
+                        ))
+                        .child(self.stepper(
+                            "macro-tap",
+                            "Hold each tap for",
+                            Self::optional_ms_default(m.tap_ms, "default"),
+                            cx,
+                            |this, d, window, cx| {
+                                this.edit_behavior("Change Macro Timing", window, cx, |kind| {
+                                    if let BehaviorKind::Macro(m) = kind {
+                                        Self::step_optional_ms(&mut m.tap_ms, d, 5, 30);
+                                    }
+                                });
+                            },
+                        ))
+                }),
             )
-            .child(
-                group("PARAMETERS A KEY PASSES TO THIS MACRO", cx)
-                    .child(div().flex().gap_1().children(params).pt_2()),
-            )
+            .child(self.fold(
+                "macro-params",
+                "PARAMETERS A KEY PASSES TO THIS MACRO",
+                passed,
+                cx,
+                |column, _| column.child(div().flex().gap_1().children(params).pt_2()),
+            ))
     }
 
     pub(super) fn render_behaviors(&self, cx: &mut Context<Self>) -> impl IntoElement {
