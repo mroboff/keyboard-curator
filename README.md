@@ -19,10 +19,11 @@ cargo run -p kc-app
 ## Using it
 
 ```sh
-cargo run -p kc-app                      # welcome screen
+cargo run -p kc-app                      # My Boards
 cargo run -p kc-app -- my-layout.kcproj  # open a project
 ```
 
+- **My Boards**: the welcome screen lists your keyboards. Each has a board model and the firmware it runs, and can be linked to the physical keyboard on USB so the app recognises it. A keyboard does not need to be connected, or even owned. Projects are created, opened and imported under a keyboard, and the editor shows only what that keyboard's firmware supports.
 - **Keyboard**: select keys, pick bindings, edit layers.
 - **Generated Files**: the zmk-config files the project produces, and any problems.
 - **Lighting, Behaviors, Combos, Pointing, Settings**: per-key colours, hold-taps, macros and the rest.
@@ -37,13 +38,14 @@ A Cargo workspace under `crates/`. Only `kc-app` may depend on the GUI framework
 
 | Crate | Responsibility |
 |---|---|
-| `kc-model` | The project: layers, bindings, behaviours, combos, macros, pointing, lighting, settings; edit commands with undo/redo |
+| `kc-model` | The project: layers, bindings, behaviours, combos, macros, pointing, lighting, settings; edit commands with undo/redo. Also the user's saved keyboards |
 | `kc-zmk` | ZMK knowledge as data: keycodes, behaviour catalogue, Kconfig options |
 | `kc-boards` | Board definitions: physical layouts, LED maps, firmware profiles |
 | `kc-emit` | Generates `.keymap`, `.conf`, `west.yml` and `build.yaml` |
 | `kc-import` | Imports existing `.keymap` files and MoErgo Layout Editor JSON |
 | `kc-build` | Firmware build back ends (GitHub Actions first) |
 | `kc-flash` | UF2 bootloader detection and flashing |
+| `kc-device` | Finds connected keyboards over USB and recognises their board |
 | `kc-studio` | ZMK Studio transport and RPC for live editing |
 | `kc-app` | The desktop application |
 
