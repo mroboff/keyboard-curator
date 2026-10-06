@@ -360,6 +360,8 @@ impl Shell {
             window,
             |this, workspace, event: &WorkspaceEvent, window, cx| match event {
                 WorkspaceEvent::Apply => this.apply(workspace.clone(), window, cx),
+                // Asks first if the layout has unsaved changes.
+                WorkspaceEvent::Close => this.close(&CloseProject, window, cx),
             },
         )
         .detach();

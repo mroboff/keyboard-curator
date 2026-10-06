@@ -158,6 +158,8 @@ struct Shown {
 pub enum WorkspaceEvent {
     /// Make this layout the board's current one.
     Apply,
+    /// Leave the editor for the board's page.
+    Close,
 }
 
 impl EventEmitter<WorkspaceEvent> for Workspace {}
@@ -440,9 +442,17 @@ impl Workspace {
         self.path.is_none() || self.editor.is_dirty()
     }
 
+    /// What the layout is called: its file's name once it has one.
+    fn layout_name(&self) -> String {
+        self.path.as_deref().and_then(Path::file_stem).map_or_else(
+            || self.project().name.clone(),
+            |stem| stem.to_string_lossy().into_owned(),
+        )
+    }
+
     pub fn title(&self, cx: &App) -> String {
         let mark = if self.is_dirty() { " — Edited" } else { "" };
-        format!("{} · {}{mark}", self.project().name, self.keyboard_name(cx))
+        format!("{} › {}{mark}", self.keyboard_name(cx), self.layout_name())
     }
 
     pub fn save_to(&mut self, path: PathBuf) -> Result<(), file::FileError> {
@@ -1041,30 +1051,53 @@ impl Workspace {
         .detach();
     }
 
-    /// Which keyboard, board and firmware the project is open under.
-    fn render_keyboard_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Leaves the editor for the board's page.
+    fn leave(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.commit_inputs(cx);
+        cx.emit(WorkspaceEvent::Close);
+    }
+
+    /// Where the user is: the board, then this layout. The back button and
+    /// the board's name both lead out of the editor to the board's page.
+    fn render_breadcrumb(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted) = (theme.border, theme.muted_foreground);
+        let (border, muted, hover) = (theme.border, theme.muted_foreground, theme.secondary);
         let firmware = self
             .board
             .profile(&self.config.profile)
             .map_or_else(String::new, |p| p.name.clone());
+        let mark = if self.is_dirty() { " — Edited" } else { "" };
         div()
+            .flex()
+            .items_center()
+            .gap_2()
             .px_3()
             .py_2()
-            .flex()
-            .flex_col()
-            .gap_0p5()
             .border_b_1()
             .border_color(border)
-            .child(div().text_sm().child(self.keyboard_name(cx)))
+            .child(chip("back", "‹ Back", false, cx).on_click(cx.listener(Self::leave)))
             .child(
                 div()
-                    .text_xs()
-                    .text_color(muted)
-                    .child(format!("{} {}", self.board.vendor, self.board.name)),
+                    .id("crumb-board")
+                    .px_2()
+                    .h_7()
+                    .flex()
+                    .items_center()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .hover(|crumb| crumb.bg(hover))
+                    .text_sm()
+                    .child(self.keyboard_name(cx))
+                    .on_click(cx.listener(Self::leave)),
             )
-            .child(div().text_xs().text_color(muted).child(firmware))
+            .child(div().text_sm().text_color(muted).child("›"))
+            .child(div().px_1().text_sm().child(self.layout_name()))
+            .child(div().text_xs().text_color(muted).child(mark))
+            .child(div().flex_1())
+            .child(div().text_xs().text_color(muted).child(format!(
+                "{} {} · {firmware}",
+                self.board.vendor, self.board.name
+            )))
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1155,7 +1188,6 @@ impl Workspace {
             .flex_col()
             .border_r_1()
             .border_color(border)
-            .child(self.render_keyboard_header(cx))
             .child(
                 div()
                     .px_3()
@@ -2056,7 +2088,6 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border;
         div()
             .key_context("Workspace")
             .on_action(cx.listener(Self::copy))
@@ -2115,6 +2146,20 @@ impl Render for Workspace {
                 cx.notify();
             }))
             .size_full()
+            .flex()
+            .flex_col()
+            .child(self.render_breadcrumb(cx))
+            .child(self.render_editor(cx))
+    }
+}
+
+impl Workspace {
+    /// Everything under the breadcrumb: the layer list and the main area.
+    fn render_editor(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        div()
+            .flex_1()
+            .min_h_0()
             .flex()
             .child(self.render_sidebar(cx))
             .child(
