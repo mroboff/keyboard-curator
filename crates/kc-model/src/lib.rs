@@ -20,6 +20,7 @@ pub mod keycap;
 pub mod lighting;
 pub mod picker;
 pub mod project;
+pub mod tester;
 pub mod text;
 pub mod validate;
 

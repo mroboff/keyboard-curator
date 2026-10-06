@@ -26,6 +26,7 @@ A Cargo workspace under `crates/`:
 | `kc-flash` | UF2 flashing |
 | `kc-device` | Finds connected keyboards over USB and recognizes their board |
 | `kc-studio` | ZMK Studio RPC |
+| `kc-sound` | The key tester's synthesizer and sound output |
 | `kc-app` | GPUI application (binary `keyboard-curator`) |
 
 ## Rules

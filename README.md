@@ -28,6 +28,7 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
 - **My Boards**: the welcome screen lists your boards. A board does not need to be connected, or even owned; one that is on USB can be linked so the app recognizes it.
 - **A board's page** has four parts. *Firmware* chooses the firmware, and for ZMK builds one from parts: a base plus add-ons from the ZMK community, each described with what it is for. *Settings* adjusts that firmware's settings. *Layouts* creates, opens and imports layouts, and marks the current one. The last part depends on the firmware: *Build & Flash* for firmware that is built, *Keyboard* for firmware configured on the keyboard itself.
 - **The layout editor** edits one layout: keys, layers, behaviors, combos, per-key colors, pointing, layer rules. It shows only what the board's firmware supports. *Apply* makes the layout the board's current one.
+- **Key Tester**, a tab of the layout editor, lights each key as you press it on the keyboard and keeps count of the keys seen. Every key also plays a note: choose a sine, triangle, sawtooth or square wave and a scale, and the board becomes an instrument. `cargo run -p kc-sound --example scale` checks the sound output by itself.
 - **Import a Keymap**, on a board's page, opens an existing `.keymap` file or a MoErgo Layout Editor export as a new layout. Firmware settings found with it are offered to the board.
 
 ### Firmware families
@@ -60,6 +61,7 @@ A Cargo workspace under `crates/`. Only `kc-app` may depend on the GUI framework
 | `kc-flash` | UF2 bootloader detection and flashing |
 | `kc-device` | Finds connected keyboards over USB and recognizes their board |
 | `kc-studio` | ZMK Studio transport and RPC for live editing |
+| `kc-sound` | The key tester's synthesizer: scales, waveforms and sound output |
 | `kc-app` | The desktop application |
 
 ## Contributing

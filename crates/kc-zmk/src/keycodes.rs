@@ -332,6 +332,11 @@ pub fn from_typed(key: &str) -> Option<&'static str> {
         ("end", "END"),
         ("pageup", "PG_UP"),
         ("pagedown", "PG_DN"),
+        ("left", "LEFT"),
+        ("right", "RIGHT"),
+        ("up", "UP"),
+        ("down", "DOWN"),
+        ("insert", "INS"),
         ("-", "MINUS"),
         ("=", "EQUAL"),
         ("[", "LBKT"),
@@ -452,11 +457,13 @@ mod tests {
             ("f5", "F5"),
             ("\\", "BSLH"),
             ("/", "FSLH"),
+            ("left", "LEFT"),
+            ("insert", "INS"),
         ] {
             assert_eq!(from_typed(typed), Some(code), "{typed}");
             assert!(keycodes().get(code).is_some(), "{code}");
         }
-        for typed in ["", "ab", "f0", "f13", "left", "A"] {
+        for typed in ["", "ab", "f0", "f13", "A"] {
             assert_eq!(from_typed(typed), None, "{typed}");
         }
     }

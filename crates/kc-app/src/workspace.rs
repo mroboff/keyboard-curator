@@ -6,6 +6,7 @@ mod behaviors;
 mod combos;
 mod lighting;
 mod pointing;
+mod tester;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -72,13 +73,15 @@ enum Mode {
     /// Layer rules and custom devicetree.
     Advanced,
     Files,
+    /// Pressing keys to see that they work, and to play them.
+    Tester,
     /// Putting the layout on the board.
     Apply,
 }
 
 impl Mode {
     /// The modes in the order of their tabs, with their labels.
-    const TABS: [(Mode, &'static str, &'static str); 8] = [
+    const TABS: [(Mode, &'static str, &'static str); 9] = [
         (Mode::Keyboard, "mode-keyboard", "Keyboard"),
         (Mode::Lighting, "mode-lighting", "Lighting"),
         (Mode::Behaviors, "mode-behaviors", "Behaviors"),
@@ -86,6 +89,7 @@ impl Mode {
         (Mode::Pointing, "mode-pointing", "Pointing"),
         (Mode::Advanced, "mode-advanced", "Advanced"),
         (Mode::Files, "mode-files", "Generated Files"),
+        (Mode::Tester, "mode-tester", "Key Tester"),
         (Mode::Apply, "mode-apply", "Apply"),
     ];
 
@@ -184,6 +188,26 @@ pub enum WorkspaceEvent {
 impl EventEmitter<WorkspaceEvent> for Workspace {}
 
 pub struct Workspace {
+    /// The key tester: which keys are down and which have been seen.
+    tester: kc_model::tester::Tester,
+    /// The keys of the layout each key held on the computer's keyboard
+    /// lit, by the name the toolkit gives that key.
+    tester_held: std::collections::HashMap<String, Vec<usize>>,
+    /// The key being played with the mouse.
+    tester_mouse: Option<usize>,
+    /// What the tester last has to say, such as a key it could not match.
+    tester_message: Option<String>,
+    /// The sound output, opened when the first note is played.
+    sound: Option<kc_sound::Player>,
+    /// The sound output has been asked for and has not answered in time.
+    sound_slow: bool,
+    sound_on: bool,
+    waveform: kc_sound::Waveform,
+    scale: kc_sound::Scale,
+    /// Volume, as a percentage.
+    volume: u8,
+    /// How far the notes are moved, in semitones.
+    transpose: i32,
     shown: Shown,
     editor: Editor,
     board: Board,
@@ -369,6 +393,17 @@ impl Workspace {
         let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
         lighting::subscribe(&color_picker, cx);
         let mut workspace = Self {
+            tester: kc_model::tester::Tester::default(),
+            tester_held: std::collections::HashMap::new(),
+            tester_mouse: None,
+            tester_message: None,
+            sound: None,
+            sound_slow: false,
+            sound_on: true,
+            waveform: kc_sound::Waveform::Sine,
+            scale: kc_sound::Scale::Major,
+            volume: 60,
+            transpose: 0,
             shown: Shown::default(),
             editor,
             board,
@@ -410,6 +445,15 @@ impl Workspace {
             layer_name,
         };
         workspace.sync_inputs(window, cx);
+        // A key let go while another app is in front is never reported, so
+        // the tester lets go of everything when the window stops being used.
+        cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active() && this.mode == Mode::Tester {
+                this.tester_release_all();
+                cx.notify();
+            }
+        })
+        .detach();
         // For checking a screen from the command line: KC_MODE=advanced.
         let start = match std::env::var("KC_MODE").as_deref() {
             Ok("lighting") => Some(Mode::Lighting),
@@ -418,6 +462,7 @@ impl Workspace {
             Ok("pointing") => Some(Mode::Pointing),
             Ok("advanced") => Some(Mode::Advanced),
             Ok("files") => Some(Mode::Files),
+            Ok("tester") => Some(Mode::Tester),
             Ok("apply") => Some(Mode::Apply),
             _ => None,
         };
@@ -723,8 +768,17 @@ impl Workspace {
         } else {
             Mode::Keyboard
         };
+        // Nothing keeps sounding once the tester is left.
+        if self.mode == Mode::Tester && mode != Mode::Tester {
+            self.tester_release_all();
+        }
         self.mode = mode;
         self.hint = None;
+        if mode == Mode::Tester {
+            self.canvas_focus.focus(window, cx);
+            // Opened on the way in, so the first key already sounds.
+            self.tester_open_sound(cx);
+        }
         // Open the editors on something, so they are not blank.
         match mode {
             Mode::Behaviors if self.behavior.is_none() => {
@@ -2217,6 +2271,7 @@ impl Workspace {
                         Mode::Pointing => main.child(self.render_pointing(cx)),
                         Mode::Advanced => main.child(self.render_advanced(cx)),
                         Mode::Files => main.child(self.render_files(cx)),
+                        Mode::Tester => main.child(self.render_tester(cx)),
                         Mode::Apply => main.child(
                             div()
                                 .id("apply")
@@ -2261,8 +2316,11 @@ mod tests {
             "Pointing",
             "Advanced",
             "Generated Files",
+            "Key Tester",
             "Apply",
         ];
+        // The key tester needs nothing from the firmware.
+        assert!(Mode::Tester.available(&[]));
         assert_eq!(tabs("moergo-go60", "moergo-zmk-26.09"), without_lighting);
         assert_eq!(tabs("cyboard-imprint", "cyboard-zmk-0.3"), without_lighting);
 
@@ -2271,7 +2329,7 @@ mod tests {
             ("cyboard-imprint", "kc-zmk-0.3-perkey"),
         ] {
             let tabs = tabs(board, firmware);
-            assert_eq!(tabs.len(), 8);
+            assert_eq!(tabs.len(), 9);
             assert_eq!(tabs[1], "Lighting");
         }
 
@@ -2287,12 +2345,18 @@ mod tests {
         // defined in a layout are not translated to it yet.
         assert_eq!(
             tabs("cyboard-imprint", "rmk-0.9"),
-            ["Keyboard", "Combos", "Generated Files", "Apply"]
+            [
+                "Keyboard",
+                "Combos",
+                "Generated Files",
+                "Key Tester",
+                "Apply"
+            ]
         );
         // Dygma's firmware is configured live: keys and colors, no files.
         assert_eq!(
             tabs("dygma-defy", "dygma-defy"),
-            ["Keyboard", "Lighting", "Apply"]
+            ["Keyboard", "Lighting", "Key Tester", "Apply"]
         );
         assert!(Mode::Keyboard.available(&[]));
         assert!(Mode::Apply.available(&[]));
