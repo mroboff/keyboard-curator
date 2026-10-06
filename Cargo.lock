@@ -3501,6 +3501,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "io-kit-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06d3a048d09fbb6597dbf7c69f40d14df4a49487db1487191618c893fc3b1c26"
+dependencies = [
+ "core-foundation-sys",
+ "mach2 0.5.0",
+]
+
+[[package]]
 name = "io-surface"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3656,6 +3666,15 @@ dependencies = [
  "thiserror 2.0.21",
  "ureq",
  "zip",
+]
+
+[[package]]
+name = "kc-device"
+version = "0.1.0"
+dependencies = [
+ "kc-boards",
+ "kc-model",
+ "nusb",
 ]
 
 [[package]]
@@ -4505,6 +4524,28 @@ checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
  "hermit-abi",
  "libc",
+]
+
+[[package]]
+name = "nusb"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845"
+dependencies = [
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "futures-core",
+ "io-kit-sys 0.5.0",
+ "js-sys",
+ "linux-raw-sys",
+ "log",
+ "once_cell",
+ "rustix",
+ "slab",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6387,7 +6428,7 @@ dependencies = [
  "cfg-if",
  "core-foundation 0.10.1",
  "core-foundation-sys",
- "io-kit-sys",
+ "io-kit-sys 0.4.1",
  "libudev",
  "mach2 0.4.3",
  "nix",

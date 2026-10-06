@@ -23,12 +23,27 @@ pub struct Board {
     /// the default layout; an empty name leaves the key transparent.
     #[serde(default)]
     pub starter_keys: Vec<String>,
+    /// How the keyboard identifies itself over USB, for recognising one
+    /// that is connected.
+    #[serde(default)]
+    pub usb: Vec<UsbId>,
     pub flash: FlashInfo,
     pub halves: Vec<Half>,
     #[serde(default)]
     pub pointing: Vec<PointingDevice>,
     pub firmware: Vec<FirmwareProfile>,
     pub layouts: Vec<PhysicalLayout>,
+}
+
+/// What a board's stock firmware reports over USB. The IDs are often shared
+/// between boards, and the name changes if the user renames the keyboard.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UsbId {
+    pub vendor: u16,
+    pub product: u16,
+    /// The USB product name.
+    pub name: String,
 }
 
 /// One arrangement of keys. Boards with variants have several.

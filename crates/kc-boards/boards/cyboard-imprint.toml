@@ -21,6 +21,13 @@ starter_keys = [
   "LGUI", "", "", "CAPS", "", "",
 ]
 
+# ZMK's default USB IDs, which most ZMK keyboards share, and the keyboard
+# name from the shield's Kconfig.defconfig.
+[[usb]]
+vendor = 0x1d50
+product = 0x615e
+name = "Imprint"
+
 [flash]
 # Both halves mount under the same volume name, so the app must sequence them.
 order = ["left", "right"]

@@ -19,6 +19,13 @@ starter_keys = [
   "", "LSHFT", "LCTRL", "LALT", "SPACE", "",
 ]
 
+# From go60_lh_defconfig. Only the left half has USB; the IDs are shared with
+# MoErgo's other keyboards.
+[[usb]]
+vendor = 0x16c0
+product = 0x27db
+name = "Go60 Left"
+
 [flash]
 order = ["right", "left"]
 bootloader_entry = "Press the bootloader key on the Magic layer for that half, or hold the half's bootloader key combination while powering it on."
