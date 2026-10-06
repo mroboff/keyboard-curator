@@ -301,16 +301,14 @@ pub enum SettingValue {
     Text(String),
 }
 
-/// Devicetree and Kconfig text carried verbatim for anything the model does
-/// not represent.
+/// Devicetree text carried verbatim for anything the model does not
+/// represent.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RawBlocks {
     /// Behavior definitions, emitted inside the `behaviors` node.
     pub behaviors: String,
     /// General devicetree, emitted at the end of the keymap file.
     pub devicetree: String,
-    /// Extra lines for the `.conf` file.
-    pub conf: String,
 }
 
 #[cfg(test)]

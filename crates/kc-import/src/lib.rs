@@ -1,4 +1,4 @@
-//! Best-effort import of existing `.keymap` files and MoErgo Layout Editor JSON into a project.
+//! Best-effort import of existing `.keymap` files and MoErgo Layout Editor JSON as a layout, with any firmware settings they carry kept apart for the board.
 //!
 //! Importing never edits the source file. What the model understands
 //! becomes structured; everything else is carried over as raw text, and the
@@ -43,9 +43,20 @@ pub enum ImportError {
     Model(#[from] kc_model::ModelError),
 }
 
+/// An imported file: the layout, and apart from it the firmware settings
+/// the file carried, which are the board's to take or leave.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Imported {
+    pub project: kc_model::Project,
+    /// Which of the boards the file is for, as an index into them.
+    pub board: usize,
+    pub carried: kc_model::Carried,
+    pub report: Report,
+}
+
 /// Imports a file for whichever of `boards` it belongs to: a MoErgo Layout
 /// Editor export if it is JSON, otherwise a keymap. A `.conf` file's text,
-/// if there is one beside a keymap, is read into settings.
+/// if there is one beside a keymap, is read as firmware settings.
 ///
 /// A keymap does not say which keyboard it is for, so the board is the one
 /// the file's name or contents point to, or failing that the first whose
@@ -55,7 +66,7 @@ pub fn import_file(
     text: &str,
     conf: Option<&str>,
     boards: &[kc_boards::Board],
-) -> Result<(kc_model::Project, usize, Report), ImportError> {
+) -> Result<Imported, ImportError> {
     let lower = format!("{} {}", name.to_lowercase(), text.to_lowercase());
     let mut order: Vec<usize> = (0..boards.len()).collect();
     // Boards the file mentions come first.
@@ -81,14 +92,19 @@ pub fn import_file(
         let result = if is_json {
             import_moergo(text, board)
         } else {
-            import_keymap(stem, text, board)
+            import_keymap(stem, text, board).map(|(project, report)| {
+                let carried = conf.map(import_conf).unwrap_or_default();
+                (project, carried, report)
+            })
         };
         match result {
-            Ok((mut project, report)) => {
-                if let Some(conf) = conf {
-                    import_conf(&mut project, conf);
-                }
-                return Ok((project, index, report));
+            Ok((project, carried, report)) => {
+                return Ok(Imported {
+                    project,
+                    board: index,
+                    carried,
+                    report,
+                });
             }
             Err(error) => last = error,
         }

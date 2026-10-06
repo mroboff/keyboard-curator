@@ -239,7 +239,7 @@ fn build(board: &Board, vendor: &str) -> Result<Project, Error> {
         // Cyboard's own keymap keeps every spare slot free for ZMK Studio.
         p.set_reserved_layers(kc_model::project::MAX_LAYERS - p.layers.len())?;
     }
-    let errors: Vec<_> = validate(&p, board)
+    let errors: Vec<_> = validate(&p, board, &kc_model::FirmwareConfig::stock(board))
         .into_iter()
         .filter(|problem| problem.severity == Severity::Error)
         .collect();

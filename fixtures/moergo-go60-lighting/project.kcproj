@@ -1,9 +1,8 @@
 {
-  "format": 1,
+  "format": 2,
   "name": "Go60 lighting fixture",
   "board": "moergo-go60",
   "layout": "physical_layout0",
-  "firmware": "moergo-zmk-perkey",
   "key_count": 60,
   "layers": [
     {
@@ -752,7 +751,6 @@
       "palette": []
     }
   ],
-  "settings": {},
-  "raw": {"behaviors": "", "devicetree": "", "conf": ""},
+  "raw": {"behaviors": "", "devicetree": ""},
   "next_id": 18
 }

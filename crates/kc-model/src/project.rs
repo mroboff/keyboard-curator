@@ -1,8 +1,6 @@
 //! The project: one keyboard's complete configuration, and the operations
 //! that edit it while keeping every reference intact.
 
-use std::collections::BTreeMap;
-
 use kc_boards::Board;
 use serde::{Deserialize, Serialize};
 
@@ -10,12 +8,12 @@ use crate::behavior::{BehaviorDef, BehaviorKind};
 use crate::binding::{BehaviorRef, Binding, KeyExpr};
 use crate::features::{
     Combo, ConditionalLayer, InputProcessor, KeyLight, LayerLighting, PointingConfig, RawBlocks,
-    Rgb, SettingValue,
+    Rgb,
 };
 use crate::ids::{BehaviorId, ComboId, LayerId};
 
 /// The project file format version this build writes.
-pub const FORMAT: u32 = 1;
+pub const FORMAT: u32 = 2;
 
 /// ZMK's limit on layers, counting those reserved for ZMK Studio.
 pub const MAX_LAYERS: usize = 32;
@@ -103,11 +101,10 @@ pub enum ModelError {
 pub struct Project {
     pub format: u32,
     pub name: String,
-    /// Board, physical layout and firmware profile, by their IDs in the
-    /// board definition.
+    /// Board and physical layout, by their IDs in the board definition.
+    /// The firmware and its settings belong to the user's board, not here.
     pub board: String,
     pub layout: String,
-    pub firmware: String,
     /// Number of keys in the physical layout; every layer has this many
     /// bindings.
     pub key_count: usize,
@@ -120,8 +117,6 @@ pub struct Project {
     pub conditional_layers: Vec<ConditionalLayer>,
     pub pointing: Vec<PointingConfig>,
     pub lighting: Vec<LayerLighting>,
-    /// Kconfig options that differ from the board's defaults.
-    pub settings: BTreeMap<String, SettingValue>,
     pub raw: RawBlocks,
     next_id: u32,
 }
@@ -169,7 +164,6 @@ impl Project {
             name: name.into(),
             board: board.id.clone(),
             layout: layout.id.clone(),
-            firmware: board.firmware[0].id.clone(),
             key_count: layout.keys.len(),
             layers: Vec::new(),
             reserved_layers: 0,
@@ -178,7 +172,6 @@ impl Project {
             conditional_layers: Vec::new(),
             pointing: Vec::new(),
             lighting: Vec::new(),
-            settings: BTreeMap::new(),
             raw: RawBlocks::default(),
             next_id: 1,
         };

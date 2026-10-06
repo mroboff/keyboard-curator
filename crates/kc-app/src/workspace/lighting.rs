@@ -69,7 +69,7 @@ impl Workspace {
     /// Whether the firmware shows per-key colors from power-up.
     fn starts_lit(&self) -> bool {
         self.board
-            .profile(&self.project().firmware)
+            .profile(&self.config.profile)
             .and_then(|p| p.lighting.as_ref())
             .is_some_and(|l| l.start_effect.is_some())
     }
@@ -278,7 +278,7 @@ impl Workspace {
                 .p_6()
                 .child(div().text_lg().child("Per-key lighting"))
                 .child(div().max_w(px(560.)).text_sm().text_color(muted).child(
-                    "This keyboard's firmware has no per-key colors. The firmware is chosen in Settings.",
+                    "This board's firmware has no per-key colors. The firmware is chosen on the board's page.",
                 ));
         }
 

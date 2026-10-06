@@ -13,7 +13,7 @@ use kc_model::behavior::{BehaviorKind, HoldTap, Macro, MacroStep, ModMorph, Stic
 use kc_model::features::{
     ConditionalLayer, InputProcessor, PointingConfig, PointingOverride, SettingValue,
 };
-use kc_model::{file, BehaviorRef, Binding, KeyExpr, Param, Project};
+use kc_model::{file, BehaviorRef, Binding, FirmwareConfig, KeyExpr, Param, Project};
 use kc_zmk::{Feature, Modifier};
 
 fn kp(key: &str) -> Binding {
@@ -32,7 +32,7 @@ fn command(label: &str, name: &str, args: &[u32]) -> Binding {
 
 /// A project that uses every construct the emitter can write, limited to
 /// what the board's firmware supports.
-fn fixture(board: &Board) -> Project {
+fn fixture(board: &Board) -> (Project, FirmwareConfig) {
     let features = &board.firmware[0].capabilities;
     let mut p = Project::new(format!("{} fixture", board.name), board);
     let base = p.layers[0].id;
@@ -325,28 +325,29 @@ fn fixture(board: &Board) -> Project {
         });
     }
 
-    p.settings
+    let mut config = FirmwareConfig::stock(board);
+    config
+        .settings
         .insert("CONFIG_ZMK_SLEEP".into(), SettingValue::Bool(true));
-    p.settings.insert(
+    config.settings.insert(
         "CONFIG_ZMK_IDLE_SLEEP_TIMEOUT".into(),
         SettingValue::Int(900_000),
     );
-    p
+    (p, config)
 }
 
 /// The factory layout on the board's per-key lighting firmware, with every
 /// kind of key light across several layers.
-fn lighting_fixture(board: &Board) -> Project {
+fn lighting_fixture(board: &Board) -> (Project, FirmwareConfig) {
     use kc_model::features::{KeyLight, LockKind, Rgb};
 
     let mut p = Project::from_template(format!("{} lighting fixture", board.name), board);
-    p.firmware = board
+    let profile = board
         .firmware
         .iter()
         .find(|f| f.lighting.is_some())
-        .expect("a lighting profile")
-        .id
-        .clone();
+        .expect("a lighting profile");
+    let config = FirmwareConfig::new(profile.id.clone());
     let (base, second, third) = (p.layers[0].id, p.layers[1].id, p.layers[2].id);
     let keys = p.key_count;
     // Until a board's LED positions are confirmed on hardware, its lighting
@@ -362,7 +363,7 @@ fn lighting_fixture(board: &Board) -> Project {
         let (rows, columns) = kc_model::lighting::led_check(&layout.keys);
         p.lighting_mut(base).unwrap().keys = rows;
         p.lighting_mut(second).unwrap().keys = columns;
-        return p;
+        return (p, config);
     }
     {
         let lights = &mut p.lighting_mut(base).unwrap().keys;
@@ -399,7 +400,7 @@ fn lighting_fixture(board: &Board) -> Project {
         lighting.keys[position] = KeyLight::Color(Rgb(255, 160, 0));
     }
     p.lighting_mut(third).unwrap().keys[keys - 1] = KeyLight::Color(Rgb(128, 0, 128));
-    p
+    (p, config)
 }
 
 #[test]
@@ -424,17 +425,20 @@ fn fixtures_match_the_emitter() {
             (
                 board,
                 format!("{}-factory", board.id),
-                Project::from_template(format!("{} factory layout", board.name), board),
+                (
+                    Project::from_template(format!("{} factory layout", board.name), board),
+                    FirmwareConfig::stock(board),
+                ),
             ),
         ]
     });
-    for (board, directory, project) in projects.chain(lit) {
-        let errors: Vec<_> = kc_model::validate(&project, board)
+    for (board, directory, (project, config)) in projects.chain(lit) {
+        let errors: Vec<_> = kc_model::validate(&project, board, &config)
             .into_iter()
             .filter(|p| p.severity == kc_model::Severity::Error)
             .collect();
         assert_eq!(errors, [], "{directory}");
-        let mut files = kc_emit::generate(&project, board).unwrap();
+        let mut files = kc_emit::generate(&project, board, &config).unwrap();
         files.push(kc_emit::GeneratedFile {
             path: format!("project.{}", file::EXTENSION),
             contents: file::to_json(&project),

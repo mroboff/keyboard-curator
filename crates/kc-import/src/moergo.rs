@@ -6,7 +6,7 @@
 //! behaviors they stand for.
 
 use kc_boards::Board;
-use kc_model::Project;
+use kc_model::{Carried, Project};
 use serde_json::Value;
 
 use crate::dts;
@@ -381,8 +381,9 @@ fn convert(export: &Value) -> (String, String, Vec<String>) {
     (keymap, conf, notes)
 }
 
-/// Imports a MoErgo Layout Editor export as a project for `board`.
-pub fn import_moergo(json: &str, board: &Board) -> Result<(Project, Report), ImportError> {
+/// Imports a MoErgo Layout Editor export as a layout for `board`, with the
+/// firmware settings the export also holds.
+pub fn import_moergo(json: &str, board: &Board) -> Result<(Project, Carried, Report), ImportError> {
     let export: Value =
         serde_json::from_str(json).map_err(|e| ImportError::NotAnExport(e.to_string()))?;
     if !export["layers"].is_array() {
@@ -393,8 +394,7 @@ pub fn import_moergo(json: &str, board: &Board) -> Result<(Project, Report), Imp
         .filter(|t| !t.is_empty())
         .unwrap_or("Imported layout");
     let (keymap, conf, notes) = convert(&export);
-    let (mut project, mut report) = import_keymap(title, &keymap, board)?;
-    import_conf(&mut project, &conf);
+    let (project, mut report) = import_keymap(title, &keymap, board)?;
     report.notes.splice(0..0, notes);
-    Ok((project, report))
+    Ok((project, import_conf(&conf), report))
 }

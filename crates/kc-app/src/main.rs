@@ -1,6 +1,7 @@
 //! The Keyboard Curator desktop application. This is the only crate allowed
 //! to depend on the GUI framework; everything else stays UI-independent.
 
+mod board_page;
 mod canvas;
 mod flash_view;
 mod library;
@@ -59,8 +60,8 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Quit Keyboard Curator", Quit),
         ]),
         Menu::new("File").items([
-            MenuItem::action("New Project…", NewProject),
-            MenuItem::action("Open…", OpenProject),
+            MenuItem::action("New", NewProject),
+            MenuItem::action("Open Layout…", OpenProject),
             MenuItem::action("Import Keymap…", ImportProject),
             MenuItem::separator(),
             MenuItem::action("Save", Save),
@@ -68,7 +69,7 @@ fn menus() -> Vec<Menu> {
             MenuItem::separator(),
             MenuItem::action("Export ZMK Config…", ExportConfig),
             MenuItem::separator(),
-            MenuItem::action("Close Project", CloseProject),
+            MenuItem::action("Close", CloseProject),
         ]),
         Menu::new("Edit").items([
             MenuItem::action("Undo", Undo),
@@ -80,7 +81,7 @@ fn menus() -> Vec<Menu> {
         Menu::new("View").items([
             MenuItem::action("Keyboard", ShowKeyboard),
             MenuItem::action("Generated Files", ShowFiles),
-            MenuItem::action("Build & Flash", ShowFlash),
+            MenuItem::action("Apply to Board", ShowFlash),
             MenuItem::separator(),
             MenuItem::action("Next Layer", NextLayer),
             MenuItem::action("Previous Layer", PreviousLayer),
@@ -109,7 +110,7 @@ fn main() {
             KeyBinding::new("cmd-n", NewProject, Some("Shell")),
             KeyBinding::new("cmd-o", OpenProject, Some("Shell")),
             KeyBinding::new("cmd-i", ImportProject, Some("Shell")),
-            KeyBinding::new("cmd-e", ExportConfig, Some("Workspace")),
+            KeyBinding::new("cmd-e", ExportConfig, Some("Shell")),
             KeyBinding::new("cmd-c", Copy, Some("Workspace")),
             KeyBinding::new("cmd-v", Paste, Some("Workspace")),
             KeyBinding::new("cmd-]", NextLayer, Some("Workspace")),
@@ -173,7 +174,7 @@ fn main() {
                 let answer = window.prompt(
                     PromptLevel::Warning,
                     "Quit without saving?",
-                    Some("Your changes to this project will be lost."),
+                    Some("Your changes to this layout will be lost."),
                     &["Cancel", "Quit Without Saving"],
                     cx,
                 );

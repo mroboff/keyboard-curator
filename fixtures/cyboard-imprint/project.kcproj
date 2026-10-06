@@ -1,9 +1,8 @@
 {
-  "format": 1,
+  "format": 2,
   "name": "Imprint fixture",
   "board": "cyboard-imprint",
   "layout": "physical_layout_imprint_function_row_full_bottom_row",
-  "firmware": "cyboard-zmk-0.3",
   "key_count": 82,
   "layers": [
     {
@@ -512,7 +511,6 @@
     }
   ],
   "lighting": [],
-  "settings": {"CONFIG_ZMK_IDLE_SLEEP_TIMEOUT": 900000, "CONFIG_ZMK_SLEEP": true},
-  "raw": {"behaviors": "", "devicetree": "", "conf": ""},
+  "raw": {"behaviors": "", "devicetree": ""},
   "next_id": 13
 }

@@ -299,7 +299,7 @@ pub fn compare(project: &Project, table: &BehaviorTable, device: &Keymap) -> Com
     let mut result = Comparison::default();
     if device.layers.len() != project.layers.len() {
         result.mismatch = Some(format!(
-            "The keyboard has {} layers and the project has {}. Adding or removing layers needs a firmware build.",
+            "The keyboard has {} layers and the layout has {}. Adding or removing layers needs a firmware build.",
             device.layers.len(),
             project.layers.len()
         ));

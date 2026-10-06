@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use crate::firmware::Carried;
 use crate::project::{Project, FORMAT};
 
 /// The project file extension. Files are JSON.
@@ -15,11 +16,11 @@ const INLINE_WIDTH: usize = 100;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FileError {
-    #[error("not a Keyboard Curator project: {0}")]
+    #[error("not a Keyboard Curator layout: {0}")]
     NotAProject(String),
-    #[error("this project was saved by a newer version of Keyboard Curator (format {found}; this version reads up to {supported})")]
+    #[error("this layout was saved by a newer version of Keyboard Curator (format {found}; this version reads up to {supported})")]
     Newer { found: u64, supported: u32 },
-    #[error("the project file is damaged: {0}")]
+    #[error("the layout file is damaged: {0}")]
     Invalid(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
@@ -104,16 +105,46 @@ pub fn to_json(project: &Project) -> String {
     out
 }
 
+/// Format 1 kept the firmware and its settings in the file. They belong to
+/// the board now, so they are taken out and handed back for the board.
+fn split_off_firmware(value: &mut Value) -> Carried {
+    let mut carried = Carried::default();
+    let Some(project) = value.as_object_mut() else {
+        return carried;
+    };
+    project.remove("firmware");
+    if let Some(settings) = project.remove("settings") {
+        carried.settings = serde_json::from_value(settings).unwrap_or_default();
+    }
+    let conf = project
+        .get_mut("raw")
+        .and_then(Value::as_object_mut)
+        .and_then(|raw| raw.remove("conf"));
+    if let Some(Value::String(conf)) = conf {
+        carried.raw_conf = conf;
+    }
+    carried
+}
+
 /// Brings a file written by an older version up to the current format.
 /// Each format bump adds one step here.
-fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
+fn migrate(mut value: Value, from: u64) -> Result<(Value, Carried), FileError> {
     match from {
-        v if v == u64::from(FORMAT) => Ok(value),
+        1 => {
+            let carried = split_off_firmware(&mut value);
+            Ok((value, carried))
+        }
+        v if v == u64::from(FORMAT) => Ok((value, Carried::default())),
         v => Err(FileError::Invalid(format!("unknown format {v}"))),
     }
 }
 
 pub fn from_json(text: &str) -> Result<Project, FileError> {
+    from_json_carrying(text).map(|(project, _)| project)
+}
+
+/// Reads a project, and with it any firmware settings an older file held.
+pub fn from_json_carrying(text: &str) -> Result<(Project, Carried), FileError> {
     let value: Value =
         serde_json::from_str(text).map_err(|e| FileError::NotAProject(e.to_string()))?;
     let found = value
@@ -126,9 +157,10 @@ pub fn from_json(text: &str) -> Result<Project, FileError> {
             supported: FORMAT,
         });
     }
-    let mut value = migrate(value, found)?;
+    let (mut value, carried) = migrate(value, found)?;
     value["format"] = FORMAT.into();
-    serde_json::from_value(value).map_err(|e| FileError::Invalid(e.to_string()))
+    let project = serde_json::from_value(value).map_err(|e| FileError::Invalid(e.to_string()))?;
+    Ok((project, carried))
 }
 
 /// Writes the project, replacing any existing file only once the new
@@ -143,4 +175,9 @@ pub fn save(project: &Project, path: &Path) -> Result<(), FileError> {
 
 pub fn load(path: &Path) -> Result<Project, FileError> {
     from_json(&std::fs::read_to_string(path)?)
+}
+
+/// Loads a project, and with it any firmware settings an older file held.
+pub fn load_carrying(path: &Path) -> Result<(Project, Carried), FileError> {
+    from_json_carrying(&std::fs::read_to_string(path)?)
 }

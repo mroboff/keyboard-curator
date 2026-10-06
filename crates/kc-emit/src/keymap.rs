@@ -7,7 +7,7 @@ use kc_boards::Board;
 use kc_model::behavior::{BehaviorDef, BehaviorKind, Flavor, MacroStep};
 use kc_model::features::{InputProcessor, KeyLight, LockKind, Rgb};
 use kc_model::text::{format_binding, layer_constant, LayerStyle};
-use kc_model::{BehaviorRef, Binding, LayerId, Project};
+use kc_model::{BehaviorRef, Binding, FirmwareConfig, LayerId, Project};
 use kc_zmk::Feature;
 
 use crate::{profile, EmitError, NOTICE};
@@ -339,8 +339,13 @@ pub(crate) fn uses_lighting(project: &Project) -> bool {
 }
 
 /// The `.keymap` file for `project`.
-pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
-    let features = &profile(project, board)?.capabilities;
+pub fn keymap(
+    project: &Project,
+    board: &Board,
+    config: &FirmwareConfig,
+) -> Result<String, EmitError> {
+    let profile = profile(config, board)?;
+    let features = &profile.capabilities;
     let layout = board
         .layout(&project.layout)
         .ok_or_else(|| EmitError::NoLayout(project.layout.clone()))?;
@@ -417,7 +422,7 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
         w.line(0, "");
     }
 
-    if let (Some(backend), true) = (&profile(project, board)?.lighting, uses_lighting(project)) {
+    if let (Some(backend), true) = (&profile.lighting, uses_lighting(project)) {
         w.line(1, "underglow-layer {");
         w.line(2, "compatible = \"zmk,underglow-layer\";");
         for lighting in &project.lighting {

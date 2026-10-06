@@ -15,7 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or_else(|| format!("unknown board `{board_id}`"))?;
     let text = std::fs::read_to_string(&path)?;
     let (project, report) = if path.ends_with(".json") {
-        kc_import::import_moergo(&text, board)?
+        let (project, _, report) = kc_import::import_moergo(&text, board)?;
+        (project, report)
     } else {
         kc_import::import_keymap("Imported", &text, board)?
     };
@@ -27,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for note in &report.notes {
         println!("note: {note}");
     }
-    let problems = kc_model::validate(&project, board);
+    let problems = kc_model::validate(&project, board, &kc_model::FirmwareConfig::stock(board));
     let errors = problems
         .iter()
         .filter(|p| p.severity == kc_model::Severity::Error)

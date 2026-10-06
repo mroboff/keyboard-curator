@@ -1,9 +1,8 @@
 {
-  "format": 1,
+  "format": 2,
   "name": "Go60 fixture",
   "board": "moergo-go60",
   "layout": "physical_layout0",
-  "firmware": "moergo-zmk-26.09",
   "key_count": 60,
   "layers": [
     {
@@ -424,7 +423,6 @@
     }
   ],
   "lighting": [],
-  "settings": {"CONFIG_ZMK_IDLE_SLEEP_TIMEOUT": 900000, "CONFIG_ZMK_SLEEP": true},
-  "raw": {"behaviors": "", "devicetree": "", "conf": ""},
+  "raw": {"behaviors": "", "devicetree": ""},
   "next_id": 13
 }

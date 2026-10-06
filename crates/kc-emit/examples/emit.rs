@@ -9,13 +9,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (Some(project), Some(out)) = (args.next(), args.next()) else {
         return Err("usage: emit <project.kcproj> <output-dir>".into());
     };
-    let project = file::load(project.as_ref())?;
+    // A file from before settings moved to the board still carries them.
+    let (project, carried) = file::load_carrying(project.as_ref())?;
     let boards = kc_boards::built_in()?;
     let board = boards
         .iter()
         .find(|b| b.id == project.board)
         .ok_or_else(|| format!("unknown board `{}`", project.board))?;
-    for generated in kc_emit::generate(&project, board)? {
+    let mut config = kc_model::FirmwareConfig::stock(board);
+    config.absorb(carried);
+    for generated in kc_emit::generate(&project, board, &config)? {
         let path = std::path::Path::new(&out).join(&generated.path);
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;

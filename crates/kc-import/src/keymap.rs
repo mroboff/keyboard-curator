@@ -11,7 +11,7 @@ use kc_model::features::{
     SettingValue,
 };
 use kc_model::text::parse_binding;
-use kc_model::{BehaviorRef, Binding, LayerId, Project};
+use kc_model::{BehaviorRef, Binding, Carried, LayerId, Project};
 use kc_zmk::settings::{setting_for, SettingKind};
 use kc_zmk::Modifier;
 
@@ -746,20 +746,14 @@ pub fn import_keymap(
             report.raw_bindings
         ));
     }
-    // Per-key lighting needs a firmware that has it.
-    let lit = project
-        .lighting
-        .iter()
-        .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit));
-    if let (true, Some(profile)) = (lit, board.firmware.iter().find(|f| f.lighting.is_some())) {
-        project.firmware = profile.id.clone();
-    }
     Ok((project, report))
 }
 
-/// Reads a `.conf` file into a project's settings. Options the app has
-/// controls for become settings; the rest are kept as extra lines.
-pub fn import_conf(project: &mut Project, text: &str) {
+/// Reads a `.conf` file as firmware settings for a board to take on.
+/// Options the app has controls for become settings; the rest are kept as
+/// extra lines.
+pub fn import_conf(text: &str) -> Carried {
+    let mut carried = Carried::default();
     let mut extra: HashMap<usize, String> = HashMap::new();
     for (index, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -782,7 +776,7 @@ pub fn import_conf(project: &mut Project, text: &str) {
         });
         match known {
             Some((key, value)) => {
-                project.settings.insert(key.to_string(), value);
+                carried.settings.insert(key.to_string(), value);
             }
             None => {
                 extra.insert(index, trimmed.to_string());
@@ -791,9 +785,10 @@ pub fn import_conf(project: &mut Project, text: &str) {
     }
     let mut lines: Vec<(usize, String)> = extra.into_iter().collect();
     lines.sort();
-    project.raw.conf = lines
+    carried.raw_conf = lines
         .into_iter()
         .map(|(_, l)| l)
         .collect::<Vec<_>>()
         .join("\n");
+    carried
 }

@@ -1,13 +1,11 @@
-//! The user's saved keyboards, and moving projects between firmwares.
+//! The user's saved keyboards: firmware, devices and layouts.
 
 use std::path::PathBuf;
 
 use kc_boards::Board;
 use kc_model::features::{KeyLight, Rgb, SettingValue};
-use kc_model::keyboards::{
-    hidden, preview_retarget, retarget, Fit, KeyboardError, KeyboardsFileError, Placement,
-};
-use kc_model::{validate, Binding, Device, Editor, Keyboards, Param, Project, Severity};
+use kc_model::keyboards::{hidden, KeyboardError, KeyboardsFileError, Placement};
+use kc_model::{file, validate, Carried, Device, FirmwareConfig, Keyboards, Project, Severity};
 use kc_zmk::Feature;
 
 const GO60_STOCK: &str = "moergo-zmk-26.09";
@@ -38,6 +36,10 @@ fn keyboards_are_added_named_and_removed() {
     assert_eq!(keyboards.suggest_name(&go60), "My Go60");
     let first = keyboards.add("  My Go60 ", &go60, GO60_STOCK).unwrap();
     assert_eq!(keyboards.get(first).unwrap().name, "My Go60");
+    // A new keyboard has its firmware's default settings and no layouts.
+    let added = keyboards.get(first).unwrap();
+    assert_eq!(added.firmware, FirmwareConfig::new(GO60_STOCK));
+    assert!(added.layouts.is_empty() && added.current.is_none());
     assert_eq!(keyboards.suggest_name(&go60), "My Go60 2");
     let second = keyboards.add("Travel", &go60, GO60_PERKEY).unwrap();
     assert_ne!(first, second);
@@ -67,14 +69,35 @@ fn keyboards_are_added_named_and_removed() {
 }
 
 #[test]
-fn firmware_changes_stay_within_the_keyboards_board() {
+fn firmware_and_its_settings_belong_to_the_keyboard() {
     let go60 = board("moergo-go60");
     let imprint = board("cyboard-imprint");
     let mut keyboards = Keyboards::default();
     let id = keyboards.add("Desk", &go60, GO60_STOCK).unwrap();
 
+    keyboards
+        .set_setting(id, "CONFIG_ZMK_SLEEP", Some(SettingValue::Bool(true)))
+        .unwrap();
+    keyboards
+        .set_setting(
+            id,
+            "CONFIG_ZMK_STUDIO_LOCKING",
+            Some(SettingValue::Bool(false)),
+        )
+        .unwrap();
+    keyboards.set_raw_conf(id, "CONFIG_FOO=y").unwrap();
+
+    // Changing the firmware keeps every setting, including one the new
+    // firmware lacks, which is simply not offered until it comes back.
     keyboards.set_firmware(id, &go60, GO60_PERKEY).unwrap();
-    assert_eq!(keyboards.get(id).unwrap().firmware, GO60_PERKEY);
+    let firmware = &keyboards.get(id).unwrap().firmware;
+    assert_eq!(firmware.profile, GO60_PERKEY);
+    assert_eq!(firmware.settings.len(), 2);
+    assert_eq!(firmware.raw_conf, "CONFIG_FOO=y");
+    assert!(firmware.offers("CONFIG_ZMK_SLEEP", &go60));
+    assert!(!firmware.offers("CONFIG_ZMK_STUDIO_LOCKING", &go60));
+    assert!(!firmware.features(&go60).contains(&Feature::Studio));
+
     assert!(matches!(
         keyboards.set_firmware(id, &imprint, "cyboard-zmk-0.3"),
         Err(KeyboardError::NoSuchFirmware { .. })
@@ -83,7 +106,59 @@ fn firmware_changes_stay_within_the_keyboards_board() {
         keyboards.set_firmware(id, &go60, "nope"),
         Err(KeyboardError::NoSuchFirmware { .. })
     ));
-    assert_eq!(keyboards.get(id).unwrap().firmware, GO60_PERKEY);
+    assert_eq!(keyboards.get(id).unwrap().firmware.profile, GO60_PERKEY);
+
+    // Clearing a setting returns it to the board's default.
+    keyboards.set_setting(id, "CONFIG_ZMK_SLEEP", None).unwrap();
+    assert!(!keyboards
+        .get(id)
+        .unwrap()
+        .firmware
+        .settings
+        .contains_key("CONFIG_ZMK_SLEEP"));
+}
+
+#[test]
+fn settings_that_came_with_a_layout_can_be_taken_on() {
+    let go60 = board("moergo-go60");
+    let mut keyboards = Keyboards::default();
+    let id = keyboards.add("Desk", &go60, GO60_STOCK).unwrap();
+    keyboards
+        .set_setting(id, "CONFIG_ZMK_SLEEP", Some(SettingValue::Bool(false)))
+        .unwrap();
+    keyboards.set_raw_conf(id, "CONFIG_FOO=y").unwrap();
+
+    let carried = Carried {
+        settings: [
+            ("CONFIG_ZMK_SLEEP".to_string(), SettingValue::Bool(true)),
+            (
+                "CONFIG_ZMK_IDLE_SLEEP_TIMEOUT".to_string(),
+                SettingValue::Int(900_000),
+            ),
+        ]
+        .into(),
+        raw_conf: "CONFIG_BAR=y\n".into(),
+    };
+    assert!(!carried.is_empty());
+    assert!(carried.summary().ends_with("1 custom line"));
+    assert!(Carried::default().is_empty());
+
+    keyboards.absorb(id, carried.clone()).unwrap();
+    let firmware = &keyboards.get(id).unwrap().firmware;
+    // What the layout carried wins where both set the same option.
+    assert_eq!(
+        firmware.settings["CONFIG_ZMK_SLEEP"],
+        SettingValue::Bool(true)
+    );
+    assert_eq!(firmware.settings.len(), 2);
+    assert_eq!(firmware.raw_conf, "CONFIG_FOO=y\nCONFIG_BAR=y\n");
+
+    // Taking the same lines on twice does not repeat them.
+    keyboards.absorb(id, carried).unwrap();
+    assert_eq!(
+        keyboards.get(id).unwrap().firmware.raw_conf,
+        "CONFIG_FOO=y\nCONFIG_BAR=y\n"
+    );
 }
 
 #[test]
@@ -125,31 +200,43 @@ fn a_device_is_linked_to_one_keyboard_at_a_time() {
 }
 
 #[test]
-fn recent_projects_are_kept_per_keyboard() {
+fn each_keyboard_lists_its_layouts_and_has_one_current() {
     let go60 = board("moergo-go60");
     let mut keyboards = Keyboards::default();
     let desk = keyboards.add("Desk", &go60, GO60_STOCK).unwrap();
     let travel = keyboards.add("Travel", &go60, GO60_STOCK).unwrap();
+    let path = |name: &str| PathBuf::from(format!("/layouts/{name}.kcproj"));
 
-    for i in 0..12 {
-        keyboards
-            .note_recent(desk, PathBuf::from(format!("/p/{i}")))
-            .unwrap();
+    for name in ["a", "b", "c"] {
+        keyboards.note_layout(desk, path(name)).unwrap();
     }
-    keyboards.note_recent(desk, PathBuf::from("/p/5")).unwrap();
-    let recent = &keyboards.get(desk).unwrap().recent;
-    assert_eq!(recent.len(), 8);
-    assert_eq!(recent[0], PathBuf::from("/p/5"));
-    assert_eq!(recent.iter().filter(|p| p.ends_with("5")).count(), 1);
-    assert!(keyboards.get(travel).unwrap().recent.is_empty());
-
-    keyboards
-        .forget_recent(desk, &PathBuf::from("/p/5"))
-        .unwrap();
+    // Using one again moves it to the front without listing it twice.
+    keyboards.note_layout(desk, path("a")).unwrap();
     assert_eq!(
-        keyboards.get(desk).unwrap().recent[0],
-        PathBuf::from("/p/11")
+        keyboards.get(desk).unwrap().layouts,
+        [path("a"), path("c"), path("b")]
     );
+    assert!(keyboards.get(travel).unwrap().layouts.is_empty());
+
+    // The same file can be a layout of two keyboards.
+    keyboards.set_current(travel, Some(path("a"))).unwrap();
+    assert_eq!(keyboards.get(travel).unwrap().layouts, [path("a")]);
+    assert_eq!(keyboards.get(travel).unwrap().current, Some(path("a")));
+    assert_eq!(keyboards.get(desk).unwrap().current, None);
+
+    // Making a listed layout current does not reorder the list.
+    keyboards.set_current(desk, Some(path("b"))).unwrap();
+    assert_eq!(keyboards.get(desk).unwrap().layouts.len(), 3);
+    keyboards.forget_layout(desk, &path("c")).unwrap();
+    assert_eq!(keyboards.get(desk).unwrap().current, Some(path("b")));
+    // Forgetting the current layout leaves the keyboard on the factory one.
+    keyboards.forget_layout(desk, &path("b")).unwrap();
+    assert_eq!(keyboards.get(desk).unwrap().current, None);
+    assert_eq!(keyboards.get(desk).unwrap().layouts, [path("a")]);
+
+    keyboards.set_current(travel, None).unwrap();
+    assert_eq!(keyboards.get(travel).unwrap().current, None);
+    assert_eq!(keyboards.get(travel).unwrap().layouts, [path("a")]);
 }
 
 #[test]
@@ -161,7 +248,12 @@ fn the_keyboards_file_round_trips_and_is_repaired() {
     keyboards
         .set_repo_dir(desk, Some(PathBuf::from("/repos/go60")))
         .unwrap();
-    keyboards.note_recent(desk, PathBuf::from("/p/a")).unwrap();
+    keyboards
+        .set_setting(desk, "CONFIG_ZMK_SLEEP", Some(SettingValue::Bool(true)))
+        .unwrap();
+    keyboards
+        .set_current(desk, Some(PathBuf::from("/p/a")))
+        .unwrap();
 
     let text = keyboards.to_json();
     assert_eq!(Keyboards::from_json(&text).unwrap(), keyboards);
@@ -177,11 +269,13 @@ fn the_keyboards_file_round_trips_and_is_repaired() {
     // A file edited by hand so that two keyboards claim one device, with a
     // counter that would reuse an ID: the first keyboard keeps the device.
     let damaged = r#"{
-        "format": 1,
+        "format": 2,
         "keyboards": [
-            {"id": 1, "name": "A", "board": "moergo-go60", "firmware": "moergo-zmk-26.09",
+            {"id": 1, "name": "A", "board": "moergo-go60",
+             "firmware": {"profile": "moergo-zmk-26.09"},
              "device": {"vendor": 5824, "product": 10203, "serial": "AAA"}, "repo_dir": null},
-            {"id": 4, "name": "B", "board": "moergo-go60", "firmware": "moergo-zmk-26.09",
+            {"id": 4, "name": "B", "board": "moergo-go60",
+             "firmware": {"profile": "moergo-zmk-26.09"},
              "device": {"vendor": 5824, "product": 10203, "serial": "AAA"}, "repo_dir": null}
         ],
         "next_id": 2
@@ -203,173 +297,31 @@ fn the_keyboards_file_round_trips_and_is_repaired() {
 }
 
 #[test]
-fn projects_fit_keyboards_of_their_board() {
+fn keyboards_saved_by_the_first_format_are_brought_forward() {
+    // Format 1 held only the firmware's ID, and listed recent projects.
+    let old = r#"{
+        "format": 1,
+        "keyboards": [
+            {"id": 1, "name": "My Go60", "board": "moergo-go60",
+             "firmware": "moergo-zmk-perkey", "device": null, "repo_dir": null,
+             "recent": ["/p/a.kcproj"]}
+        ],
+        "next_id": 2
+    }"#;
+    let keyboards = Keyboards::from_json(old).unwrap();
+    let keyboard = keyboards.iter().next().unwrap();
+    assert_eq!(keyboard.firmware, FirmwareConfig::new(GO60_PERKEY));
+    assert_eq!(keyboard.layouts, [PathBuf::from("/p/a.kcproj")]);
+    assert_eq!(keyboard.current, None);
+    // It is written back in the current format.
+    assert!(keyboards.to_json().contains("\"format\": 2"));
+}
+
+#[test]
+fn layouts_are_placed_under_a_keyboard_of_their_board() {
     let go60 = board("moergo-go60");
     let imprint = board("cyboard-imprint");
-    let mut keyboards = Keyboards::default();
-    let lit = keyboards.add("Lit", &go60, GO60_PERKEY).unwrap();
-    let stock = keyboards.add("Stock", &go60, GO60_STOCK).unwrap();
-    let other = keyboards
-        .add("Imprint", &imprint, "cyboard-zmk-0.3")
-        .unwrap();
-
-    let mut project = Project::new("Mine", &go60);
-    project.firmware = GO60_STOCK.into();
-    assert_eq!(
-        keyboards.get(stock).unwrap().fit(&project),
-        Some(Fit::Exact)
-    );
-    assert_eq!(
-        keyboards.get(lit).unwrap().fit(&project),
-        Some(Fit::OtherFirmware)
-    );
-    assert_eq!(keyboards.get(other).unwrap().fit(&project), None);
-    // Exact fits come first, whatever order the keyboards were added in.
-    assert_eq!(
-        keyboards.fitting(&project),
-        [(stock, Fit::Exact), (lit, Fit::OtherFirmware)]
-    );
-}
-
-#[test]
-fn retargeting_hides_what_the_firmware_lacks_and_loses_nothing() {
-    let go60 = board("moergo-go60");
-    let mut project = Project::new("Lit", &go60);
-    project.firmware = GO60_PERKEY.into();
-    let base = project.layers[0].id;
-    project.lighting_mut(base).unwrap().keys[0] = KeyLight::Color(Rgb(255, 0, 0));
-    assert!(validate(&project, &go60)
-        .iter()
-        .all(|p| p.severity != Severity::Error));
-
-    let preview = preview_retarget(&project, &go60, GO60_STOCK).unwrap();
-    assert!(preview.hidden.lighting);
-    assert_eq!(
-        preview.summary(),
-        "Per-key colors will be hidden. Hidden parts stay in the project and return with a firmware that has them."
-    );
-    assert!(!preview.hidden.pointing);
-    assert_eq!(preview.flagged, 0);
-    // Previewing changes nothing.
-    assert_eq!(project.firmware, GO60_PERKEY);
-
-    let before = project.clone();
-    retarget(&mut project, &go60, GO60_STOCK).unwrap();
-    assert_eq!(project.firmware, GO60_STOCK);
-    assert_eq!(project.lighting, before.lighting);
-    assert!(validate(&project, &go60)
-        .iter()
-        .all(|p| p.severity != Severity::Error));
-
-    // Going back shows the colors again, with nothing hidden.
-    let back = preview_retarget(&project, &go60, GO60_PERKEY).unwrap();
-    assert!(back.hidden.is_empty());
-    assert_eq!(
-        back.summary(),
-        "Everything in the project works with this firmware."
-    );
-    retarget(&mut project, &go60, GO60_PERKEY).unwrap();
-    assert_eq!(project, before);
-
-    assert!(matches!(
-        retarget(&mut project, &go60, "cyboard-zmk-0.3"),
-        Err(KeyboardError::NoSuchFirmware { .. })
-    ));
-    assert_eq!(project.firmware, GO60_PERKEY);
-}
-
-#[test]
-fn retargeting_flags_keys_the_firmware_cannot_build() {
-    let go60 = board("moergo-go60");
-    let mut project = Project::new("Studio", &go60);
-    project.firmware = GO60_STOCK.into();
-    let base = project.layers[0].id;
-    // The stock firmware has ZMK Studio; the per-key one does not.
-    project
-        .set_binding(base, 0, Binding::new("studio_unlock", vec![]))
-        .unwrap();
-    project
-        .set_binding(
-            base,
-            1,
-            Binding::new(
-                "rgb_ug",
-                vec![Param::Command {
-                    name: "RGB_TOG".into(),
-                    args: vec![],
-                }],
-            ),
-        )
-        .unwrap();
-
-    let preview = preview_retarget(&project, &go60, GO60_PERKEY).unwrap();
-    // Only the Studio key is new trouble; underglow exists on both.
-    assert_eq!(preview.flagged, 1);
-    assert_eq!(
-        preview.summary(),
-        "One key or behavior uses a feature this firmware lacks and will be flagged."
-    );
-    assert!(preview.hidden.is_empty());
-}
-
-#[test]
-fn hidden_lists_settings_and_pointing_the_firmware_lacks() {
-    let imprint = board("cyboard-imprint");
-    let mut project = Project::from_template("Mine", &imprint);
-    project.settings.insert(
-        "CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX".into(),
-        SettingValue::Int(30),
-    );
-    assert!(!project.pointing.is_empty());
-
-    let everything = [Feature::RgbUnderglow, Feature::Pointing, Feature::Studio];
-    assert!(hidden(&project, &everything).is_empty());
-
-    let bare = hidden(&project, &[]);
-    assert!(bare.pointing);
-    assert!(!bare.lighting);
-    assert_eq!(bare.settings.len(), 1);
-}
-
-#[test]
-fn the_editor_changes_firmware_outside_the_undo_history() {
-    let go60 = board("moergo-go60");
-    let mut project = Project::new("Mine", &go60);
-    project.firmware = GO60_STOCK.into();
-    let mut editor = Editor::new(project);
-    editor.mark_saved();
-    editor
-        .edit("Add Layer", |p| p.add_layer("Nav").map(|_| ()))
-        .unwrap();
-    editor.mark_saved();
-
-    // The firmware the project already has changes nothing.
-    editor.set_firmware(GO60_STOCK);
-    assert!(!editor.is_dirty());
-
-    editor.set_firmware(GO60_PERKEY);
-    assert_eq!(editor.project().firmware, GO60_PERKEY);
-    assert!(editor.is_dirty());
-
-    // Undo and redo move through the edits, never back to the old firmware.
-    assert_eq!(editor.undo().as_deref(), Some("Add Layer"));
-    assert_eq!(editor.project().firmware, GO60_PERKEY);
-    assert_eq!(editor.project().layers.len(), 1);
-    assert!(editor.is_dirty());
-    editor.redo();
-    assert_eq!(editor.project().firmware, GO60_PERKEY);
-    assert!(editor.is_dirty());
-
-    editor.mark_saved();
-    assert!(!editor.is_dirty());
-}
-
-#[test]
-fn projects_are_placed_under_the_right_keyboard() {
-    let go60 = board("moergo-go60");
-    let imprint = board("cyboard-imprint");
-    let mut project = Project::new("Mine", &go60);
-    project.firmware = GO60_STOCK.into();
+    let project = Project::new("Mine", &go60);
 
     let mut keyboards = Keyboards::default();
     assert_eq!(keyboards.place(&project, None), Placement::NoKeyboard);
@@ -377,44 +329,95 @@ fn projects_are_placed_under_the_right_keyboard() {
     let other = keyboards
         .add("Imprint", &imprint, "cyboard-zmk-0.3")
         .unwrap();
+    assert!(!keyboards.get(other).unwrap().suits(&project));
     assert_eq!(keyboards.place(&project, None), Placement::NoKeyboard);
     assert_eq!(
         keyboards.place(&project, Some(other)),
         Placement::NoKeyboard
     );
 
-    // The only keyboard of the board is used, switching firmware if needed.
+    // The only keyboard of the board is used, whatever firmware it runs.
     let lit = keyboards.add("Lit", &go60, GO60_PERKEY).unwrap();
-    assert_eq!(keyboards.place(&project, None), Placement::Retarget(lit));
-    assert_eq!(
-        keyboards.place(&project, Some(other)),
-        Placement::Retarget(lit)
-    );
+    assert_eq!(keyboards.place(&project, None), Placement::Open(lit));
+    assert_eq!(keyboards.place(&project, Some(other)), Placement::Open(lit));
 
-    // An exact fit wins over one that needs retargeting...
+    // With two, the selected one is used; otherwise the user chooses.
     let stock = keyboards.add("Stock", &go60, GO60_STOCK).unwrap();
-    assert_eq!(keyboards.place(&project, None), Placement::Open(stock));
-    // ...unless another keyboard the project suits is the one selected.
-    assert_eq!(
-        keyboards.place(&project, Some(lit)),
-        Placement::Retarget(lit)
-    );
     assert_eq!(
         keyboards.place(&project, Some(stock)),
         Placement::Open(stock)
     );
-
-    // Two exact fits: the user chooses between those two only.
-    let second = keyboards.add("Stock 2", &go60, GO60_STOCK).unwrap();
+    assert_eq!(keyboards.place(&project, Some(lit)), Placement::Open(lit));
     assert_eq!(
         keyboards.place(&project, None),
-        Placement::Choose(vec![(stock, Fit::Exact), (second, Fit::Exact)])
+        Placement::Choose(vec![lit, stock])
+    );
+    assert_eq!(
+        keyboards.place(&project, Some(other)),
+        Placement::Choose(vec![lit, stock])
     );
 
     // A selection that no longer exists is ignored.
-    keyboards.remove(second).unwrap();
+    keyboards.remove(stock).unwrap();
+    assert_eq!(keyboards.place(&project, Some(stock)), Placement::Open(lit));
+}
+
+#[test]
+fn a_layout_keeps_what_a_firmware_lacks_out_of_sight() {
+    let go60 = board("moergo-go60");
+    let mut project = Project::new("Lit", &go60);
+    let base = project.layers[0].id;
+    project.lighting_mut(base).unwrap().keys[0] = KeyLight::Color(Rgb(255, 0, 0));
+
+    let stock = FirmwareConfig::new(GO60_STOCK);
+    let lit = FirmwareConfig::new(GO60_PERKEY);
+    // The same layout is valid with either firmware.
+    for config in [&stock, &lit] {
+        assert!(validate(&project, &go60, config)
+            .iter()
+            .all(|p| p.severity != Severity::Error));
+    }
+
+    let with_stock = hidden(&project, stock.features(&go60));
+    assert!(with_stock.lighting && !with_stock.pointing);
     assert_eq!(
-        keyboards.place(&project, Some(second)),
-        Placement::Open(stock)
+        with_stock.summary().unwrap(),
+        "Per-key colors in this layout are hidden, because this board's firmware does not have the feature. Nothing is removed from the file."
     );
+    let with_lit = hidden(&project, lit.features(&go60));
+    assert!(with_lit.is_empty());
+    assert_eq!(with_lit.summary(), None);
+
+    let imprint = board("cyboard-imprint");
+    let pointing = Project::from_template("Mine", &imprint);
+    assert!(!pointing.pointing.is_empty());
+    assert!(hidden(&pointing, &[Feature::Pointing]).is_empty());
+    assert!(hidden(&pointing, &[]).pointing);
+}
+
+#[test]
+fn a_layout_file_from_before_the_split_hands_its_settings_back() {
+    // Format 1 kept the firmware and its settings in the layout file.
+    let go60 = board("moergo-go60");
+    let current = file::to_json(&Project::new("Mine", &go60));
+    let mut old: serde_json::Value = serde_json::from_str(&current).unwrap();
+    old["format"] = 1.into();
+    old["firmware"] = "moergo-zmk-perkey".into();
+    old["settings"] = serde_json::json!({"CONFIG_ZMK_SLEEP": true});
+    old["raw"]["conf"] = "CONFIG_FOO=y".into();
+
+    let (project, carried) = file::from_json_carrying(&old.to_string()).unwrap();
+    assert_eq!(project, Project::new("Mine", &go60));
+    assert_eq!(
+        carried.settings["CONFIG_ZMK_SLEEP"],
+        SettingValue::Bool(true)
+    );
+    assert_eq!(carried.raw_conf, "CONFIG_FOO=y");
+
+    // A current file carries nothing, and holds nothing about firmware.
+    let (again, nothing) = file::from_json_carrying(&current).unwrap();
+    assert_eq!(again, project);
+    assert!(nothing.is_empty());
+    assert!(!current.contains("firmware") && !current.contains("settings"));
+    assert!(current.contains("\"format\": 2"));
 }

@@ -10,6 +10,22 @@ use kc_model::features::{
 };
 use kc_model::{file, Binding, LayerId, Param, Project, Severity};
 
+/// The firmware to build a layout with in these tests: the board's
+/// per-key lighting firmware when the layout has colors, otherwise its
+/// first.
+fn config_for(project: &Project, board: &Board) -> kc_model::FirmwareConfig {
+    let lit = project.lighting.iter().any(|l| {
+        l.keys
+            .iter()
+            .any(|k| *k != kc_model::features::KeyLight::Inherit)
+    });
+    let lighting = board.firmware.iter().find(|f| f.lighting.is_some());
+    match (lit, lighting) {
+        (true, Some(profile)) => kc_model::FirmwareConfig::new(profile.id.clone()),
+        _ => kc_model::FirmwareConfig::stock(board),
+    }
+}
+
 fn board(id: &str) -> Board {
     kc_boards::built_in()
         .unwrap()
@@ -49,11 +65,11 @@ fn generated_keymaps_survive_a_round_trip() {
             continue;
         };
         let board = board(&project.board);
-        let original = kc_emit::keymap(&project, &board).unwrap();
-        let (mut imported, report) = import_keymap("Imported", &original, &board).unwrap();
-        // The firmware is the user's choice, not something a keymap states.
-        imported.firmware = project.firmware.clone();
-        let again = kc_emit::keymap(&imported, &board).unwrap();
+        // The firmware is the board's, not something a keymap states.
+        let config = config_for(&project, &board);
+        let original = kc_emit::keymap(&project, &board, &config).unwrap();
+        let (imported, report) = import_keymap("Imported", &original, &board).unwrap();
+        let again = kc_emit::keymap(&imported, &board, &config).unwrap();
         assert_eq!(
             without_combo_ids(&again),
             without_combo_ids(&original),
@@ -105,13 +121,13 @@ fn the_go60_factory_keymap_imports_to_the_factory_template() {
     assert_eq!(imported.pointing, template_pointing(&imported, &template));
     assert_eq!(imported.raw, template.raw);
 
-    let errors: Vec<_> = kc_model::validate(&imported, &go60)
+    let errors: Vec<_> = kc_model::validate(&imported, &go60, &config_for(&imported, &go60))
         .into_iter()
         .filter(|p| p.severity == Severity::Error)
         .collect();
     assert_eq!(errors, []);
     // And it generates a keymap again.
-    assert!(kc_emit::generate(&imported, &go60).is_ok());
+    assert!(kc_emit::generate(&imported, &go60, &config_for(&imported, &go60)).is_ok());
 }
 
 /// The template's pointing settings, with its layer IDs replaced by the
@@ -247,28 +263,26 @@ fn imprint_variants_are_recognized_by_key_count() {
 
 #[test]
 fn conf_files_become_settings_and_extra_lines() {
-    let go60 = board("moergo-go60");
-    let mut project = Project::new("Conf", &go60);
-    import_conf(
-        &mut project,
+    let carried = import_conf(
         "# comment\nCONFIG_ZMK_SLEEP=y\nCONFIG_ZMK_IDLE_SLEEP_TIMEOUT=900000\nCONFIG_ZMK_KEYBOARD_NAME=\"Mine\"\n\nCONFIG_ZMK_USB_LOGGING=y\nCONFIG_ZMK_SLEEP_ODD=maybe\n",
     );
     assert_eq!(
-        project.settings["CONFIG_ZMK_SLEEP"],
+        carried.settings["CONFIG_ZMK_SLEEP"],
         SettingValue::Bool(true)
     );
     assert_eq!(
-        project.settings["CONFIG_ZMK_IDLE_SLEEP_TIMEOUT"],
+        carried.settings["CONFIG_ZMK_IDLE_SLEEP_TIMEOUT"],
         SettingValue::Int(900000)
     );
     assert_eq!(
-        project.settings["CONFIG_ZMK_KEYBOARD_NAME"],
+        carried.settings["CONFIG_ZMK_KEYBOARD_NAME"],
         SettingValue::Text("Mine".into())
     );
     assert_eq!(
-        project.raw.conf,
+        carried.raw_conf,
         "CONFIG_ZMK_USB_LOGGING=y\nCONFIG_ZMK_SLEEP_ODD=maybe"
     );
+    assert!(import_conf("# only a comment\n\n").is_empty());
 }
 
 /// A layout in the MoErgo Layout Editor's export format, using its
@@ -326,7 +340,7 @@ fn moergo_layout_editor_exports_import_with_their_shorthands_written_out() {
     use kc_model::text::{format_binding, LayerStyle};
 
     let go60 = board("moergo-go60");
-    let (project, report) = import_moergo(&moergo_export(), &go60).unwrap();
+    let (project, carried, report) = import_moergo(&moergo_export(), &go60).unwrap();
     assert_eq!(project.name, "My Go60");
     assert_eq!(report.layers, 2);
     assert_eq!(report.raw_bindings, 0);
@@ -406,19 +420,21 @@ fn moergo_layout_editor_exports_import_with_their_shorthands_written_out() {
     assert_eq!(pad.overrides[0].layers, [project.layers[1].id]);
     assert_eq!(project.raw.devicetree, "");
 
+    // The editor's firmware settings come apart from the layout, for the
+    // board to take on.
     assert_eq!(
-        project.settings["CONFIG_ZMK_SLEEP"],
+        carried.settings["CONFIG_ZMK_SLEEP"],
         SettingValue::Bool(true)
     );
     assert_eq!(
-        project.settings["CONFIG_ZMK_IDLE_SLEEP_TIMEOUT"],
+        carried.settings["CONFIG_ZMK_IDLE_SLEEP_TIMEOUT"],
         SettingValue::Int(900000)
     );
     assert!(report.notes.iter().any(|n| n.contains("SOMETHING_NEW")));
     assert!(report.notes.iter().any(|n| n.contains("sensitivity")));
 
     // The result is a valid project that generates a config.
-    assert!(kc_emit::generate(&project, &go60).is_ok());
+    assert!(kc_emit::generate(&project, &go60, &config_for(&project, &go60)).is_ok());
     assert!(matches!(
         import_moergo("{}", &go60),
         Err(ImportError::NotAnExport(_))
@@ -442,9 +458,9 @@ fn files_find_their_board() {
         )
     };
     let board_of = |name: &str, text: &str| {
-        let (project, index, _) = import_file(name, text, None, &boards).unwrap();
-        assert_eq!(boards[index].id, project.board);
-        project.board
+        let imported = import_file(name, text, None, &boards).unwrap();
+        assert_eq!(boards[imported.board].id, imported.project.board);
+        imported.project.board
     };
     // 82 keys can only be the Imprint.
     assert_eq!(board_of("x.keymap", &keymap(82, "")), "cyboard-imprint");
@@ -461,19 +477,21 @@ fn files_find_their_board() {
     // A Layout Editor export is recognized by being JSON.
     assert_eq!(board_of("layout.json", &moergo_export()), "moergo-go60");
 
-    let (project, _, report) = import_file(
+    let imported = import_file(
         "config/go60.keymap",
         &keymap(60, ""),
         Some("CONFIG_ZMK_SLEEP=y\n"),
         &boards,
     )
     .unwrap();
-    assert_eq!(project.name, "go60");
+    assert_eq!(imported.project.name, "go60");
+    // The `.conf` beside the keymap is firmware settings, kept apart.
     assert_eq!(
-        project.settings["CONFIG_ZMK_SLEEP"],
+        imported.carried.settings["CONFIG_ZMK_SLEEP"],
         SettingValue::Bool(true)
     );
-    assert!(report
+    assert!(imported
+        .report
         .summary()
         .starts_with("Imported 1 layer(s), 0 behavior(s) and 0 combo(s)."));
     assert!(import_file("x.keymap", &keymap(7, ""), None, &boards).is_err());
@@ -570,12 +588,12 @@ fn moergo_layout_editor_keymaps_import_completely() {
     assert_eq!(profile.auto_layer, Some((mouse, 250)));
     assert!(PointingProfile::from_processors(&left.overrides[0].processors, false).is_some());
 
-    let problems = kc_model::validate(&project, &go60);
+    let problems = kc_model::validate(&project, &go60, &config_for(&project, &go60));
     assert_eq!(problems, []);
 
     // The keymap written from it defines the right-click processor and
     // each behavior once, keeps the descriptions, and reads back the same.
-    let keymap = kc_emit::keymap(&project, &go60).unwrap();
+    let keymap = kc_emit::keymap(&project, &go60, &config_for(&project, &go60)).unwrap();
     for once in [
         "bt_0: bt_0 {",
         "lower: lower {",
@@ -589,7 +607,7 @@ fn moergo_layout_editor_keymaps_import_completely() {
     let (again, report) = import_keymap("Editor", &keymap, &go60).unwrap();
     assert_eq!(report.raw_blocks, [] as [&str; 0]);
     assert_eq!(
-        without_combo_ids(&kc_emit::keymap(&again, &go60).unwrap()),
+        without_combo_ids(&kc_emit::keymap(&again, &go60, &config_for(&again, &go60)).unwrap()),
         without_combo_ids(&keymap)
     );
 }

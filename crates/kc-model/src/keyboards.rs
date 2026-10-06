@@ -1,29 +1,26 @@
 //! The user's keyboards: which boards they work on, the firmware each one
-//! runs, and which physical device each one is.
+//! runs and how it is set up, which physical device each one is, and the
+//! layouts used with it.
 //!
-//! A [`Keyboard`] is separate from any project. Projects are opened under a
-//! keyboard, which decides the firmware they are built for; a project made
-//! for another firmware of the same board is switched over with
-//! [`retarget`], keeping whatever the new firmware cannot show.
+//! A [`Keyboard`] owns everything about the firmware. A layout (a
+//! [`Project`]) owns the keymap and nothing about the firmware, so one
+//! keyboard can have many layouts, and a layout can be used with any
+//! keyboard of its board.
 
 use std::path::{Path, PathBuf};
 
 use kc_boards::Board;
-use kc_zmk::settings::setting_for;
 use kc_zmk::Feature;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::features::KeyLight;
+use crate::features::{KeyLight, SettingValue};
+use crate::firmware::{Carried, FirmwareConfig};
 use crate::ids::KeyboardId;
 use crate::project::Project;
-use crate::validate::{validate, Severity};
 
 /// The keyboards file format version this build writes.
-pub const FORMAT: u32 = 1;
-
-/// How many recent projects each keyboard remembers.
-const RECENT_LIMIT: usize = 8;
+pub const FORMAT: u32 = 2;
 
 /// A physical keyboard, as its USB connection identifies it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -38,52 +35,38 @@ pub struct Device {
 pub struct Keyboard {
     pub id: KeyboardId,
     pub name: String,
-    /// Board and firmware profile, by their IDs in the board definition.
+    /// The board, by its ID in the board definitions.
     pub board: String,
-    pub firmware: String,
+    /// The firmware the keyboard runs and its settings.
+    pub firmware: FirmwareConfig,
     /// The physical keyboard this is, once one has been linked.
     pub device: Option<Device>,
     /// The local clone of the firmware repository this keyboard builds from.
     pub repo_dir: Option<PathBuf>,
-    /// Projects last opened under this keyboard, newest first.
+    /// The layout files used with this keyboard, last used first.
     #[serde(default)]
-    pub recent: Vec<PathBuf>,
-}
-
-/// How well a project suits a keyboard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Fit {
-    /// Made for this board and firmware.
-    Exact,
-    /// Made for this board with another firmware; it can be retargeted.
-    OtherFirmware,
-}
-
-/// Where a project being opened belongs.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Placement {
-    /// Under this keyboard, as it is.
-    Open(KeyboardId),
-    /// Under this keyboard, once switched to its firmware.
-    Retarget(KeyboardId),
-    /// Under one of these; the user chooses.
-    Choose(Vec<(KeyboardId, Fit)>),
-    /// No saved keyboard is of the project's board.
-    NoKeyboard,
+    pub layouts: Vec<PathBuf>,
+    /// The layout that goes into the firmware when it is built. Without
+    /// one, the firmware is built with the board's factory layout.
+    #[serde(default)]
+    pub current: Option<PathBuf>,
 }
 
 impl Keyboard {
-    /// Whether `project` can be opened under this keyboard, and how.
-    /// `None` when it is for a different board.
-    pub fn fit(&self, project: &Project) -> Option<Fit> {
-        if project.board != self.board {
-            None
-        } else if project.firmware == self.firmware {
-            Some(Fit::Exact)
-        } else {
-            Some(Fit::OtherFirmware)
-        }
+    /// Whether `project` is a layout for this keyboard's board.
+    pub fn suits(&self, project: &Project) -> bool {
+        project.board == self.board
     }
+}
+
+/// Which keyboard a layout being opened belongs under.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Placement {
+    Open(KeyboardId),
+    /// Under one of these; the user chooses.
+    Choose(Vec<KeyboardId>),
+    /// No saved keyboard is of the layout's board.
+    NoKeyboard,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -161,6 +144,8 @@ impl Keyboards {
             .expect("some number is always free")
     }
 
+    /// Adds a keyboard running `firmware` with every setting at its
+    /// default.
     pub fn add(
         &mut self,
         name: &str,
@@ -175,10 +160,11 @@ impl Keyboards {
             id,
             name,
             board: board.id.clone(),
-            firmware: firmware.to_string(),
+            firmware: FirmwareConfig::new(firmware),
             device: None,
             repo_dir: None,
-            recent: Vec::new(),
+            layouts: Vec::new(),
+            current: None,
         });
         Ok(id)
     }
@@ -198,8 +184,11 @@ impl Keyboards {
         Ok(())
     }
 
+    // Firmware
+
     /// Records that the keyboard now runs `firmware`. `board` must be the
-    /// keyboard's own board.
+    /// keyboard's own board. Settings the new firmware lacks are kept, and
+    /// return if the keyboard goes back.
     pub fn set_firmware(
         &mut self,
         id: KeyboardId,
@@ -214,9 +203,38 @@ impl Keyboards {
             });
         }
         check_firmware(board, firmware)?;
-        keyboard.firmware = firmware.to_string();
+        keyboard.firmware.profile = firmware.to_string();
         Ok(())
     }
+
+    /// Sets a firmware setting, or with `None` returns it to the board's
+    /// default.
+    pub fn set_setting(
+        &mut self,
+        id: KeyboardId,
+        key: &str,
+        value: Option<SettingValue>,
+    ) -> Result<(), KeyboardError> {
+        let settings = &mut self.get_mut(id)?.firmware.settings;
+        match value {
+            Some(value) => settings.insert(key.to_string(), value),
+            None => settings.remove(key),
+        };
+        Ok(())
+    }
+
+    pub fn set_raw_conf(&mut self, id: KeyboardId, text: &str) -> Result<(), KeyboardError> {
+        self.get_mut(id)?.firmware.raw_conf = text.to_string();
+        Ok(())
+    }
+
+    /// Gives the keyboard the firmware settings that came with a layout.
+    pub fn absorb(&mut self, id: KeyboardId, carried: Carried) -> Result<(), KeyboardError> {
+        self.get_mut(id)?.firmware.absorb(carried);
+        Ok(())
+    }
+
+    // Devices
 
     /// The keyboard a device is linked to, if any.
     pub fn linked_to(&self, device: &Device) -> Option<&Keyboard> {
@@ -265,57 +283,64 @@ impl Keyboards {
         Ok(())
     }
 
-    /// Moves `path` to the front of the keyboard's recent projects.
-    pub fn note_recent(&mut self, id: KeyboardId, path: PathBuf) -> Result<(), KeyboardError> {
-        let recent = &mut self.get_mut(id)?.recent;
-        recent.retain(|p| *p != path);
-        recent.insert(0, path);
-        recent.truncate(RECENT_LIMIT);
+    // Layouts
+
+    /// Lists a layout file under the keyboard, or moves it to the front.
+    pub fn note_layout(&mut self, id: KeyboardId, path: PathBuf) -> Result<(), KeyboardError> {
+        let layouts = &mut self.get_mut(id)?.layouts;
+        layouts.retain(|p| *p != path);
+        layouts.insert(0, path);
         Ok(())
     }
 
-    pub fn forget_recent(&mut self, id: KeyboardId, path: &Path) -> Result<(), KeyboardError> {
-        self.get_mut(id)?.recent.retain(|p| p != path);
+    /// Takes a layout file off the keyboard's list. The file is untouched.
+    /// If it was the current layout, the keyboard has none.
+    pub fn forget_layout(&mut self, id: KeyboardId, path: &Path) -> Result<(), KeyboardError> {
+        let keyboard = self.get_mut(id)?;
+        keyboard.layouts.retain(|p| p != path);
+        if keyboard.current.as_deref() == Some(path) {
+            keyboard.current = None;
+        }
         Ok(())
     }
 
-    /// The keyboards `project` can be opened under, exact fits first.
-    pub fn fitting(&self, project: &Project) -> Vec<(KeyboardId, Fit)> {
-        let mut fits: Vec<_> = self
-            .keyboards
-            .iter()
-            .filter_map(|k| Some((k.id, k.fit(project)?)))
-            .collect();
-        fits.sort_by_key(|(_, fit)| *fit != Fit::Exact);
-        fits
+    /// Chooses the layout the keyboard's firmware is built with; `None`
+    /// goes back to the factory layout.
+    pub fn set_current(
+        &mut self,
+        id: KeyboardId,
+        path: Option<PathBuf>,
+    ) -> Result<(), KeyboardError> {
+        let keyboard = self.get_mut(id)?;
+        if let Some(path) = &path {
+            if !keyboard.layouts.contains(path) {
+                keyboard.layouts.insert(0, path.clone());
+            }
+        }
+        keyboard.current = path;
+        Ok(())
     }
 
-    /// Decides which keyboard `project` opens under. The selected keyboard
-    /// is used whenever the project suits it, since that is the one being
-    /// worked on; otherwise the saved keyboards of the project's board are
-    /// considered, exact fits first.
+    /// Decides which keyboard a layout opens under: the selected one when
+    /// it is of the layout's board, since that is the one being worked on,
+    /// and otherwise whichever saved keyboard is.
     pub fn place(&self, project: &Project, selected: Option<KeyboardId>) -> Placement {
-        let direct = |(id, fit)| match fit {
-            Fit::Exact => Placement::Open(id),
-            Fit::OtherFirmware => Placement::Retarget(id),
-        };
         let selected = selected
             .and_then(|id| self.get(id))
-            .and_then(|k| Some((k.id, k.fit(project)?)));
-        if let Some(fit) = selected {
-            return direct(fit);
+            .filter(|k| k.suits(project));
+        if let Some(keyboard) = selected {
+            return Placement::Open(keyboard.id);
         }
-        let fits = self.fitting(project);
-        let exact: Vec<_> = fits
+        let suiting: Vec<KeyboardId> = self
+            .keyboards
             .iter()
-            .copied()
-            .filter(|(_, fit)| *fit == Fit::Exact)
+            .filter(|k| k.suits(project))
+            .map(|k| k.id)
             .collect();
-        let choices = if exact.is_empty() { fits } else { exact };
-        match choices.as_slice() {
+        match suiting.as_slice() {
             [] => Placement::NoKeyboard,
-            [only] => direct(*only),
-            _ => Placement::Choose(choices),
+            [only] => Placement::Open(*only),
+            _ => Placement::Choose(suiting),
         }
     }
 
@@ -344,7 +369,7 @@ impl Keyboards {
     }
 
     pub fn from_json(text: &str) -> Result<Self, KeyboardsFileError> {
-        let value: Value =
+        let mut value: Value =
             serde_json::from_str(text).map_err(|e| KeyboardsFileError::Invalid(e.to_string()))?;
         let found = value
             .get("format")
@@ -355,6 +380,9 @@ impl Keyboards {
                 found,
                 supported: FORMAT,
             });
+        }
+        if found == 1 {
+            migrate_from_1(&mut value);
         }
         let mut keyboards: Self = serde_json::from_value(value)
             .map_err(|e| KeyboardsFileError::Invalid(e.to_string()))?;
@@ -386,6 +414,23 @@ impl Keyboards {
     }
 }
 
+/// Format 1 held only the firmware's ID, and called the layout list
+/// `recent`.
+fn migrate_from_1(value: &mut Value) {
+    let keyboards = value.get_mut("keyboards").and_then(Value::as_array_mut);
+    for keyboard in keyboards.into_iter().flatten() {
+        let Some(keyboard) = keyboard.as_object_mut() else {
+            continue;
+        };
+        if let Some(Value::String(profile)) = keyboard.get("firmware").cloned() {
+            keyboard.insert("firmware".into(), serde_json::json!({ "profile": profile }));
+        }
+        if let Some(recent) = keyboard.remove("recent") {
+            keyboard.insert("layouts".into(), recent);
+        }
+    }
+}
+
 fn checked_name(name: &str) -> Result<String, KeyboardError> {
     let name = name.trim();
     if name.is_empty() {
@@ -404,22 +449,34 @@ fn check_firmware(board: &Board, firmware: &str) -> Result<(), KeyboardError> {
     Ok(())
 }
 
-/// What a project holds that a firmware cannot use. It stays in the project
+/// What a layout holds that a firmware cannot use. It stays in the layout
 /// file, out of sight and out of the generated config, and returns when the
-/// project is opened with a firmware that has the feature.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// layout is used with a firmware that has the feature.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Hidden {
     /// Per-key colors, when the firmware has no per-key lighting.
     pub lighting: bool,
     /// Pointing-device configuration, when the firmware has no pointing.
     pub pointing: bool,
-    /// The names of settings the firmware does not have.
-    pub settings: Vec<&'static str>,
 }
 
 impl Hidden {
     pub fn is_empty(&self) -> bool {
-        !self.lighting && !self.pointing && self.settings.is_empty()
+        !self.lighting && !self.pointing
+    }
+
+    /// A sentence for the user about what is hidden; `None` when nothing
+    /// is.
+    pub fn summary(&self) -> Option<String> {
+        let what = match (self.lighting, self.pointing) {
+            (false, false) => return None,
+            (true, false) => "Per-key colors in this layout are",
+            (false, true) => "Pointing configuration in this layout is",
+            (true, true) => "Per-key colors and pointing configuration in this layout are",
+        };
+        Some(format!(
+            "{what} hidden, because this board's firmware does not have the feature. Nothing is removed from the file."
+        ))
     }
 }
 
@@ -433,102 +490,5 @@ pub fn hidden(project: &Project, features: &[Feature]) -> Hidden {
                 .iter()
                 .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit)),
         pointing: lacks(Feature::Pointing) && !project.pointing.is_empty(),
-        settings: project
-            .settings
-            .keys()
-            .filter_map(|key| setting_for(key))
-            .filter(|setting| setting.requires.is_some_and(lacks))
-            .map(|setting| setting.name)
-            .collect(),
     }
-}
-
-/// What switching a project to another firmware of its board would do.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Retarget {
-    /// What the new firmware hides that the current one shows.
-    pub hidden: Hidden,
-    /// How many new problems the switch causes: keys and behaviors that
-    /// use something the new firmware lacks. These are flagged, not hidden,
-    /// because a key cannot be left out of a keymap.
-    pub flagged: usize,
-}
-
-impl Retarget {
-    /// What the switch means, in sentences for the user.
-    pub fn summary(&self) -> String {
-        let mut parts: Vec<String> = Vec::new();
-        if self.hidden.lighting {
-            parts.push("Per-key colors will be hidden.".into());
-        }
-        if self.hidden.pointing {
-            parts.push("Pointing device configuration will be hidden.".into());
-        }
-        match self.hidden.settings.as_slice() {
-            [] => {}
-            [one] => parts.push(format!("The setting \u{201c}{one}\u{201d} will be hidden.")),
-            many => parts.push(format!(
-                "{} settings will be hidden: {}.",
-                many.len(),
-                many.join(", ")
-            )),
-        }
-        if !self.hidden.is_empty() {
-            parts.push(
-                "Hidden parts stay in the project and return with a firmware that has them.".into(),
-            );
-        }
-        match self.flagged {
-            0 => {}
-            1 => parts.push(
-                "One key or behavior uses a feature this firmware lacks and will be flagged."
-                    .into(),
-            ),
-            n => parts.push(format!(
-                "{n} keys or behaviors use features this firmware lacks and will be flagged."
-            )),
-        }
-        if parts.is_empty() {
-            parts.push("Everything in the project works with this firmware.".into());
-        }
-        parts.join(" ")
-    }
-}
-
-/// Previews switching `project` to `firmware`, a profile of `board`.
-pub fn preview_retarget(
-    project: &Project,
-    board: &Board,
-    firmware: &str,
-) -> Result<Retarget, KeyboardError> {
-    check_firmware(board, firmware)?;
-    let features = &board
-        .profile(firmware)
-        .expect("checked just above")
-        .capabilities;
-    let errors = |project: &Project| {
-        validate(project, board)
-            .into_iter()
-            .filter(|p| p.severity == Severity::Error)
-            .collect::<Vec<_>>()
-    };
-    let before = errors(project);
-    let mut switched = project.clone();
-    switched.firmware = firmware.to_string();
-    let flagged = errors(&switched)
-        .iter()
-        .filter(|p| !before.contains(p))
-        .count();
-    Ok(Retarget {
-        hidden: hidden(project, features),
-        flagged,
-    })
-}
-
-/// Switches `project` to `firmware`, a profile of `board`. Nothing else in
-/// the project changes.
-pub fn retarget(project: &mut Project, board: &Board, firmware: &str) -> Result<(), KeyboardError> {
-    check_firmware(board, firmware)?;
-    project.firmware = firmware.to_string();
-    Ok(())
 }

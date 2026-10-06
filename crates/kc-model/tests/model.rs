@@ -7,8 +7,8 @@ use kc_model::features::{
 };
 use kc_model::validate::BRIGHTNESS_MAX_SETTING;
 use kc_model::{
-    file, validate, BehaviorRef, Binding, Editor, KeyExpr, LayerId, Location, ModelError, Param,
-    Project, Severity,
+    file, validate, BehaviorRef, Binding, Editor, FirmwareConfig, KeyExpr, LayerId, Location,
+    ModelError, Param, Project, Severity,
 };
 
 fn board(id: &str) -> Board {
@@ -33,8 +33,17 @@ fn command(label: &str, name: &str, args: &[u32]) -> Binding {
     )
 }
 
+/// The board's first firmware with default settings.
+fn stock(board: &Board) -> FirmwareConfig {
+    FirmwareConfig::stock(board)
+}
+
 fn errors(project: &Project, board: &Board) -> Vec<String> {
-    validate(project, board)
+    errors_with(project, board, &stock(board))
+}
+
+fn errors_with(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<String> {
+    validate(project, board, config)
         .into_iter()
         .filter(|p| p.severity == Severity::Error)
         .map(|p| p.message)
@@ -122,8 +131,6 @@ fn rich_project() -> (Project, Board) {
             processors: vec![InputProcessor::ToScroll],
         }],
     });
-    p.settings
-        .insert("CONFIG_ZMK_SLEEP".into(), SettingValue::Bool(true));
     p.raw.devicetree = "/* custom */".into();
     (p, go60)
 }
@@ -133,7 +140,6 @@ fn new_projects_match_their_board() {
     let imprint = board("cyboard-imprint");
     let p = Project::new("Mine", &imprint);
     assert_eq!((p.key_count, p.layers.len()), (82, 1));
-    assert_eq!(p.firmware, "cyboard-zmk-0.3");
     // The base layer starts from the board's factory keys.
     assert_eq!(p.binding(p.layers[0].id, 25), Some(&kp("Q")));
     assert_eq!(p.binding(p.layers[0].id, 60), Some(&Binding::trans()));
@@ -294,12 +300,14 @@ fn validation_reports_what_the_firmware_would_reject() {
     p.set_binding(base, 6, command("bl", "BL_TOG", &[]))
         .unwrap();
     p.set_binding(base, 7, kp("NOT_A_KEY")).unwrap();
-    p.settings
+    let mut config = stock(&imprint);
+    config
+        .settings
         .insert(BRIGHTNESS_MAX_SETTING.into(), SettingValue::Int(80));
     p.lighting_mut(base).unwrap().keys[0] = KeyLight::Off;
     p.add_combo("Solo", vec![200], Binding::trans());
 
-    let problems = validate(&p, &imprint);
+    let problems = validate(&p, &imprint, &config);
     let found = |text: &str| problems.iter().any(|p| p.message.contains(text));
     assert!(found("RGB_STATUS is not supported"));
     assert!(found("BT_SEL profile must be between 0 and 4, found 9"));
@@ -508,7 +516,7 @@ fn project_files_round_trip_and_diff_cleanly() {
 
     let text = file::to_json(&p);
     assert_eq!(file::from_json(&text).unwrap(), p);
-    assert!(text.starts_with("{\n  \"format\": 1,\n  \"name\": \"Rich\","));
+    assert!(text.starts_with("{\n  \"format\": 2,\n  \"name\": \"Rich\","));
     // Each binding sits on its own line, so changing a key changes one line.
     assert!(text
         .contains("\n        {\"behavior\": \"kp\", \"params\": [{\"key\": \"LC(LS(K))\"}]},\n"));
@@ -547,12 +555,12 @@ fn project_files_save_and_load_from_disk() {
 #[test]
 fn unreadable_project_files_explain_themselves() {
     let (p, _) = rich_project();
-    let newer = file::to_json(&p).replacen("\"format\": 1", "\"format\": 99", 1);
+    let newer = file::to_json(&p).replacen("\"format\": 2", "\"format\": 99", 1);
     assert!(matches!(
         file::from_json(&newer),
         Err(file::FileError::Newer {
             found: 99,
-            supported: 1
+            supported: 2
         })
     ));
     assert!(matches!(
@@ -722,7 +730,7 @@ fn the_picker_offers_what_the_firmware_supports() {
     use kc_model::picker::{picker_items, PickerGroup};
 
     let (p, go60) = rich_project();
-    let features = &go60.profile(&p.firmware).unwrap().capabilities;
+    let features = stock(&go60).features(&go60);
     let items = picker_items(&p, features);
     let find = |label: &str| items.iter().find(|i| i.label == label);
 
@@ -952,12 +960,12 @@ fn raw_behaviors_can_be_assigned_and_missing_bootloader_keys_are_flagged() {
 
     // The rich project has no bootloader key.
     let warning = "no key enters the bootloader";
-    assert!(validate(&p, &go60)
+    assert!(validate(&p, &go60, &stock(&go60))
         .iter()
         .any(|w| w.message.contains(warning)));
     p.set_binding(p.layers[2].id, 0, Binding::new("bootloader", vec![]))
         .unwrap();
-    assert!(!validate(&p, &go60)
+    assert!(!validate(&p, &go60, &stock(&go60))
         .iter()
         .any(|w| w.message.contains(warning)));
 }
@@ -984,7 +992,7 @@ fn factory_templates_reproduce_the_vendor_layouts_without_raw_bindings() {
                 .all(|(_, b)| !matches!(b, Binding::Raw { .. })),
             "{id}"
         );
-        assert_eq!(validate(&p, &board), [], "{id}");
+        assert_eq!(validate(&p, &board, &stock(&board)), [], "{id}");
         assert_eq!(file::from_json(&file::to_json(&p)).unwrap(), p);
     }
 
@@ -1076,9 +1084,9 @@ fn led_check_patterns_and_unverified_maps() {
     // The stock firmware has no per-key lighting; the colors are kept
     // out of sight rather than reported.
     assert!(errors(&p, &imprint).is_empty());
-    p.firmware = "kc-zmk-0.3-perkey".into();
-    assert!(errors(&p, &imprint).is_empty());
-    let problems = validate(&p, &imprint);
+    let lit = FirmwareConfig::new("kc-zmk-0.3-perkey");
+    assert!(errors_with(&p, &imprint, &lit).is_empty());
+    let problems = validate(&p, &imprint, &lit);
     assert!(problems
         .iter()
         .any(|w| w.message.contains("have not been confirmed on hardware")));
@@ -1089,7 +1097,7 @@ fn led_check_patterns_and_unverified_maps() {
 
     // The LED map is only known for the 82-key layout.
     p.layout = "physical_layout_imprint_number_row".into();
-    assert!(errors(&p, &imprint)
+    assert!(errors_with(&p, &imprint, &lit)
         .iter()
         .any(|e| e.contains("not available for this key layout")));
 }

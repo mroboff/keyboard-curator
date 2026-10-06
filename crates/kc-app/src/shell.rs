@@ -1,5 +1,5 @@
-//! The window's root view: My Boards, or a project open under one of the
-//! user's keyboards, plus the file commands that move between them.
+//! The window's root view. It moves between three screens: My Boards, one
+//! board's page, and the layout editor opened from it.
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -12,47 +12,51 @@ use gpui_kit::*;
 use kc_boards::board::Side;
 use kc_boards::Board;
 use kc_device::UsbDevice;
-use kc_model::keyboards::{preview_retarget, Fit, Placement};
-use kc_model::{file, Keyboard, KeyboardId, Project};
+use kc_model::keyboards::{hidden, Placement};
+use kc_model::{file, Carried, Keyboard, KeyboardId, Project};
 
+use crate::board_page::{BoardEvent, BoardPage, Section};
 use crate::library::Library;
 use crate::state::{default_project_dir, AppState, WindowFrame};
-use crate::workspace::{chip, Workspace};
-use crate::{CloseProject, ImportProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo};
+use crate::workspace::{chip, Workspace, WorkspaceEvent};
+use crate::{
+    CloseProject, ExportConfig, ImportProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo,
+};
 
-/// A keyboard being added or edited on the welcome screen.
+/// A board being added on the welcome screen.
 struct KeyboardForm {
-    /// The keyboard being edited; `None` while adding one.
-    editing: Option<KeyboardId>,
     /// The boards to choose between, as indices into the board list.
     choices: Vec<usize>,
     board: usize,
     firmware: String,
-    /// The connected device a new keyboard will be linked to.
+    /// The connected device the new board will be linked to.
     device: Option<UsbDevice>,
     /// Something the user should know about that device.
     note: Option<String>,
-    /// The name last suggested, replaced when the board changes unless the
+    /// The name last suggested, replaced when the model changes unless the
     /// user has typed their own.
     suggested: String,
 }
 
-/// A project on its way to being opened, while the keyboard it opens under
-/// is settled.
+/// A layout on its way to being opened, while the board it opens under is
+/// settled.
 struct Pending {
     project: Project,
     board: Board,
     path: Option<PathBuf>,
-    /// A message for the workspace to show once open.
+    /// A message for the editor to show once open.
     notice: Option<String>,
+    /// Firmware settings that arrived with the layout, for the board.
+    carried: Carried,
 }
 
 pub struct Shell {
     boards: Rc<Vec<Board>>,
     state: AppState,
     library: Entity<Library>,
-    /// The keyboard the welcome screen shows and new work happens under.
-    selected: Option<KeyboardId>,
+    /// The page of the board being worked on. It stays underneath an open
+    /// layout, which closes back to it.
+    page: Option<Entity<BoardPage>>,
     workspace: Option<Entity<Workspace>>,
     form: Option<KeyboardForm>,
     name_input: Entity<InputState>,
@@ -60,6 +64,8 @@ pub struct Shell {
     error: Option<String>,
     /// A passing remark on the welcome screen.
     notice: Option<String>,
+    /// True while a layout is being saved so that it can be applied.
+    applying: bool,
     focus: FocusHandle,
 }
 
@@ -70,7 +76,7 @@ fn firmware_name(board: &Board, id: &str) -> String {
 }
 
 /// Which half of each board to connect, for when none is found.
-fn connection_hint(boards: &[Board]) -> String {
+pub(crate) fn connection_hint(boards: &[Board]) -> String {
     let halves = boards
         .iter()
         .filter_map(|board| {
@@ -110,7 +116,7 @@ impl Shell {
         .detach();
         let library = cx.new(Library::new);
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
-        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("Keyboard name"));
+        let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("Board name"));
         cx.subscribe_in(
             &name_input,
             window,
@@ -121,29 +127,22 @@ impl Shell {
             },
         )
         .detach();
-        // The keyboard last worked on, or else the first one.
-        let selected = {
-            let keyboards = library.read(cx).keyboards();
-            state
-                .keyboard
-                .filter(|id| keyboards.get(*id).is_some())
-                .or_else(|| keyboards.iter().next().map(|k| k.id))
-        };
         Self {
             boards,
             state,
             library,
-            selected,
+            page: None,
             workspace: None,
             form: None,
             name_input,
             error: None,
             notice: None,
+            applying: false,
             focus,
         }
     }
 
-    /// Whether the open project has changes that are not on disk.
+    /// Whether the open layout has changes that are not on disk.
     pub fn has_unsaved_changes(&self, cx: &App) -> bool {
         self.workspace
             .as_ref()
@@ -158,19 +157,147 @@ impl Shell {
         self.library.read(cx).keyboards().get(id).cloned()
     }
 
-    fn select(&mut self, id: Option<KeyboardId>, cx: &mut Context<Self>) {
-        self.selected = id;
+    /// The board being worked on: the one whose page is showing, or else
+    /// the one last opened.
+    fn selected(&self, cx: &App) -> Option<KeyboardId> {
+        self.page
+            .as_ref()
+            .map(|page| page.read(cx).keyboard())
+            .or(self.state.keyboard)
+    }
+
+    // Boards
+
+    /// Shows a board's page.
+    fn open_board(
+        &mut self,
+        id: KeyboardId,
+        section: Section,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(keyboard) = self.keyboard(id, cx) else {
+            return;
+        };
+        let Some(board) = self.boards.iter().find(|b| b.id == keyboard.board).cloned() else {
+            self.error = Some(format!(
+                "This version of Keyboard Curator does not know the board `{}`.",
+                keyboard.board
+            ));
+            cx.notify();
+            return;
+        };
+        let (boards, library) = (self.boards.clone(), self.library.clone());
+        let page = cx.new(|cx| BoardPage::new(boards, board, library, id, section, window, cx));
+        cx.subscribe_in(&page, window, Self::on_board_event)
+            .detach();
+        self.page = Some(page);
         self.form = None;
-        if self.state.keyboard != id {
-            self.state.keyboard = id;
+        self.error = None;
+        self.notice = None;
+        if self.state.keyboard != Some(id) {
+            self.state.keyboard = Some(id);
             self.state.save();
         }
         cx.notify();
     }
 
-    // Opening projects
+    fn on_board_event(
+        &mut self,
+        page: &Entity<BoardPage>,
+        event: &BoardEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let id = page.read(cx).keyboard();
+        match event {
+            BoardEvent::Back => {
+                self.page = None;
+                self.focus.focus(window, cx);
+                cx.notify();
+            }
+            BoardEvent::NewLayout => self.new_layout(id, window, cx),
+            BoardEvent::OpenLayout(path) => self.open_path(path.clone(), window, cx),
+            BoardEvent::ChooseLayout => self.open(&OpenProject, window, cx),
+            BoardEvent::Import => self.import(&ImportProject, window, cx),
+            BoardEvent::Remove => self.remove_keyboard(id, window, cx),
+        }
+    }
 
+    fn remove_keyboard(&mut self, id: KeyboardId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(keyboard) = self.keyboard(id, cx) else {
+            return;
+        };
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            &format!("Remove “{}” from My Boards?", keyboard.name),
+            Some("Its firmware settings are forgotten. Its layout files stay where they are, and the keyboard itself is not changed."),
+            &["Cancel", "Remove"],
+            cx,
+        );
+        cx.spawn(async move |this, cx| {
+            if answer.await != Ok(1) {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.library.update(cx, |library, cx| {
+                    let _ = library.change(cx, |k| k.remove(id).map(|_| ()));
+                });
+                this.page = None;
+                if this.state.keyboard == Some(id) {
+                    this.state.keyboard = None;
+                    this.state.save();
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    // Opening layouts
+
+    /// Opens a layout under a board, first offering the board any firmware
+    /// settings that arrived with it.
     fn show(
+        &mut self,
+        mut pending: Pending,
+        keyboard: KeyboardId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if pending.carried.is_empty() {
+            self.open_editor(pending, keyboard, window, cx);
+            return;
+        }
+        let name = self
+            .keyboard(keyboard, cx)
+            .map_or_else(String::new, |k| k.name);
+        let carried = std::mem::take(&mut pending.carried);
+        let answer = window.prompt(
+            PromptLevel::Info,
+            &format!("Apply this file's firmware settings to “{name}”?"),
+            Some(&format!(
+                "It carries firmware settings: {}. Those belong to the board, not to the layout. Applying them replaces the board's own values for the same settings; ignoring them leaves the board as it is.",
+                carried.summary()
+            )),
+            &["Ignore", "Apply to Board"],
+            cx,
+        );
+        cx.spawn_in(window, async move |this, cx| {
+            let apply = answer.await == Ok(1);
+            let _ = this.update_in(cx, |this, window, cx| {
+                if apply {
+                    this.library.update(cx, |library, cx| {
+                        let _ = library.change(cx, |k| k.absorb(keyboard, carried));
+                    });
+                }
+                this.open_editor(pending, keyboard, window, cx);
+            });
+        })
+        .detach();
+    }
+
+    fn open_editor(
         &mut self,
         pending: Pending,
         keyboard: KeyboardId,
@@ -182,13 +309,16 @@ impl Shell {
             board,
             path,
             notice,
+            ..
         } = pending;
-        // A keyboard without a repository folder adopts the one this
-        // project built from before folders were kept per keyboard.
-        let has_repo = self
-            .keyboard(keyboard, cx)
-            .is_some_and(|k| k.repo_dir.is_some());
-        let earlier = (!has_repo)
+        let Some(saved) = self.keyboard(keyboard, cx) else {
+            return;
+        };
+        // A board without a repository folder adopts the one this layout
+        // built from before folders were kept per board.
+        let earlier = saved
+            .repo_dir
+            .is_none()
             .then(|| self.state.earlier_repo(path.as_deref(), &board.id))
             .flatten();
         self.library.update(cx, |library, cx| {
@@ -197,7 +327,7 @@ impl Shell {
                     k.set_repo_dir(keyboard, Some(dir))?;
                 }
                 if let Some(path) = &path {
-                    k.note_recent(keyboard, path.clone())?;
+                    k.note_layout(keyboard, path.clone())?;
                 }
                 Ok(())
             });
@@ -206,12 +336,33 @@ impl Shell {
             self.state.forget_recent(path);
             self.state.save();
         }
-        self.select(Some(keyboard), cx);
+        // The layout closes back to its board's page.
+        let on_page = self
+            .page
+            .as_ref()
+            .is_some_and(|page| page.read(cx).keyboard() == keyboard);
+        if !on_page {
+            self.open_board(keyboard, Section::Layouts, window, cx);
+        }
 
+        // Say what this board's firmware keeps out of sight.
+        let unseen = hidden(&project, saved.firmware.features(&board)).summary();
+        let notice = match (notice, unseen) {
+            (Some(notice), Some(unseen)) => Some(format!("{notice} {unseen}")),
+            (notice, unseen) => notice.or(unseen),
+        };
         let library = self.library.clone();
         let workspace =
             cx.new(|cx| Workspace::new(project, board, library, keyboard, path, window, cx));
         cx.observe(&workspace, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(
+            &workspace,
+            window,
+            |this, workspace, event: &WorkspaceEvent, window, cx| match event {
+                WorkspaceEvent::Apply => this.apply(workspace.clone(), window, cx),
+            },
+        )
+        .detach();
         workspace.update(cx, |w, cx| {
             w.focus_canvas(window, cx);
             if let Some(notice) = notice {
@@ -219,24 +370,26 @@ impl Shell {
             }
         });
         self.workspace = Some(workspace);
+        self.applying = false;
         self.error = None;
         self.notice = None;
         cx.notify();
     }
 
-    /// Settles which keyboard a project opens under, asking where there is
-    /// a choice to make, and opens it.
+    /// Settles which board a layout opens under, asking where there is a
+    /// choice to make, and opens it.
     fn place(
         &mut self,
         project: Project,
         path: Option<PathBuf>,
         notice: Option<String>,
+        carried: Carried,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some(board) = self.boards.iter().find(|b| b.id == project.board).cloned() else {
             self.error = Some(format!(
-                "This project is for an unknown board, `{}`.",
+                "This layout is for an unknown board, `{}`.",
                 project.board
             ));
             cx.notify();
@@ -246,115 +399,63 @@ impl Shell {
             .library
             .read(cx)
             .keyboards()
-            .place(&project, self.selected);
+            .place(&project, self.selected(cx));
         let pending = Pending {
             project,
             board,
             path,
             notice,
+            carried,
         };
         match placement {
             Placement::Open(id) => self.show(pending, id, window, cx),
-            Placement::Retarget(id) => self.confirm_retarget(pending, id, window, cx),
             Placement::Choose(choices) => self.choose_keyboard(pending, choices, window, cx),
             Placement::NoKeyboard => self.offer_keyboard(pending, window, cx),
         }
     }
 
-    /// Asks before opening a project made for another firmware of the
-    /// keyboard's board.
-    fn confirm_retarget(
-        &mut self,
-        pending: Pending,
-        id: KeyboardId,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(keyboard) = self.keyboard(id, cx) else {
-            return;
-        };
-        let preview = match preview_retarget(&pending.project, &pending.board, &keyboard.firmware) {
-            Ok(preview) => preview,
-            Err(error) => {
-                self.error = Some(format!("{error}."));
-                cx.notify();
-                return;
-            }
-        };
-        let answer = window.prompt(
-            PromptLevel::Info,
-            &format!(
-                "Open “{}” under “{}”?",
-                pending.project.name, keyboard.name
-            ),
-            Some(&format!(
-                "The project was made for {}. “{}” runs {}, so the project will be switched to it. {}",
-                firmware_name(&pending.board, &pending.project.firmware),
-                keyboard.name,
-                firmware_name(&pending.board, &keyboard.firmware),
-                preview.summary()
-            )),
-            &["Cancel", "Open"],
-            cx,
-        );
-        cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update_in(cx, |this, window, cx| this.show(pending, id, window, cx));
-            }
-        })
-        .detach();
-    }
-
-    /// Asks which of several fitting keyboards a project is for.
+    /// Asks which of several boards of the right model a layout is for.
     fn choose_keyboard(
         &mut self,
         pending: Pending,
-        choices: Vec<(KeyboardId, Fit)>,
+        choices: Vec<KeyboardId>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let names: Vec<String> = choices
             .iter()
-            .filter_map(|(id, _)| self.keyboard(*id, cx).map(|k| k.name))
+            .filter_map(|id| self.keyboard(*id, cx).map(|k| k.name))
             .collect();
         let mut buttons = vec!["Cancel"];
         buttons.extend(names.iter().map(String::as_str));
         let answer = window.prompt(
             PromptLevel::Info,
-            &format!("Which keyboard is “{}” for?", pending.project.name),
-            Some("Several of your keyboards could use this project."),
+            &format!("Which board is “{}” for?", pending.project.name),
+            Some("Several of your boards could use this layout."),
             &buttons,
             cx,
         );
         cx.spawn_in(window, async move |this, cx| {
             let Ok(index) = answer.await else { return };
-            let Some((id, fit)) = index.checked_sub(1).and_then(|i| choices.get(i)).copied() else {
+            let Some(id) = index.checked_sub(1).and_then(|i| choices.get(i)).copied() else {
                 return;
             };
-            let _ = this.update_in(cx, |this, window, cx| match fit {
-                Fit::Exact => this.show(pending, id, window, cx),
-                Fit::OtherFirmware => this.confirm_retarget(pending, id, window, cx),
-            });
+            let _ = this.update_in(cx, |this, window, cx| this.show(pending, id, window, cx));
         })
         .detach();
     }
 
-    /// Offers to save a keyboard for a project that none of the saved ones
-    /// suits, since projects are always opened under one.
+    /// Offers to add a board for a layout that none of the saved ones is
+    /// the model for, since layouts are always opened under a board.
     fn offer_keyboard(&mut self, pending: Pending, window: &mut Window, cx: &mut Context<Self>) {
         let board = &pending.board;
         let name = self.library.read(cx).keyboards().suggest_name(board);
-        // A firmware this version no longer knows falls back to the first.
-        let firmware = if board.profile(&pending.project.firmware).is_some() {
-            pending.project.firmware.clone()
-        } else {
-            board.firmware[0].id.clone()
-        };
+        let firmware = board.firmware[0].id.clone();
         let answer = window.prompt(
             PromptLevel::Info,
             &format!("Add “{name}” to My Boards?"),
             Some(&format!(
-                "“{}” is for a {} {} with {}, and none of your saved keyboards is one. Projects are opened under a saved keyboard; you can rename it or change its firmware afterward.",
+                "“{}” is a layout for a {} {}, and none of your boards is one. Layouts are opened under a board. It will start with {}; you can change the firmware and its settings on the board's page.",
                 pending.project.name,
                 board.vendor,
                 board.name,
@@ -383,46 +484,36 @@ impl Shell {
         .detach();
     }
 
-    fn new_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(keyboard) = self.selected.and_then(|id| self.keyboard(id, cx)) else {
-            self.start_add(window, cx);
+    /// Starts a layout from the board's factory layout.
+    fn new_layout(&mut self, id: KeyboardId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(keyboard) = self.keyboard(id, cx) else {
             return;
         };
         let Some(board) = self.boards.iter().find(|b| b.id == keyboard.board).cloned() else {
             return;
         };
-        // The workspace switches the template to the keyboard's firmware.
         let project = Project::from_template(format!("{} Layout", board.name), &board);
         let pending = Pending {
             project,
             board,
             path: None,
             notice: None,
+            carried: Carried::default(),
         };
-        self.show(pending, keyboard.id, window, cx);
+        self.open_editor(pending, id, window, cx);
     }
 
     pub fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
-        match file::load(&path) {
-            Ok(project) => self.place(project, Some(path), None, window, cx),
+        // A file from before settings moved to the board still carries them.
+        match file::load_carrying(&path) {
+            Ok((project, carried)) => self.place(project, Some(path), None, carried, window, cx),
             Err(error) => {
-                self.forget(&path, cx);
+                self.state.forget_recent(&path);
+                self.state.save();
                 self.error = Some(format!("Could not open {}: {error}", path.display()));
                 cx.notify();
             }
         }
-    }
-
-    /// Drops a project that can no longer be opened from every recent list.
-    fn forget(&mut self, path: &Path, cx: &mut Context<Self>) {
-        self.state.forget_recent(path);
-        self.state.save();
-        self.library.update(cx, |library, cx| {
-            let ids: Vec<KeyboardId> = library.keyboards().iter().map(|k| k.id).collect();
-            let _ = library.change(cx, |k| {
-                ids.into_iter().try_for_each(|id| k.forget_recent(id, path))
-            });
-        });
     }
 
     fn open(&mut self, _: &OpenProject, window: &mut Window, cx: &mut Context<Self>) {
@@ -445,7 +536,7 @@ impl Shell {
     }
 
     /// Imports a `.keymap` file or a MoErgo Layout Editor export as a new,
-    /// unsaved project. The source file is never changed.
+    /// unsaved layout. The source file is never changed.
     fn import(&mut self, _: &ImportProject, window: &mut Window, cx: &mut Context<Self>) {
         let paths = cx.prompt_for_paths(PathPromptOptions {
             files: true,
@@ -466,25 +557,38 @@ impl Shell {
     }
 
     pub fn import_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        // From a board's page the keymap is read as one for that board;
+        // otherwise for whichever board it fits.
+        let on_page = self
+            .page
+            .as_ref()
+            .map(|page| page.read(cx).keyboard())
+            .and_then(|id| self.keyboard(id, cx))
+            .and_then(|k| self.boards.iter().find(|b| b.id == k.board).cloned());
+        let boards: &[Board] = match &on_page {
+            Some(board) => std::slice::from_ref(board),
+            None => &self.boards,
+        };
         let imported = std::fs::read_to_string(&path)
             .map_err(|e| e.to_string())
             .and_then(|text| {
                 // A keymap's settings live in a `.conf` file beside it.
                 let conf = std::fs::read_to_string(path.with_extension("conf")).ok();
-                kc_import::import_file(
-                    &path.display().to_string(),
-                    &text,
-                    conf.as_deref(),
-                    &self.boards,
-                )
-                .map_err(|e| e.to_string())
+                kc_import::import_file(&path.display().to_string(), &text, conf.as_deref(), boards)
+                    .map_err(|e| e.to_string())
             });
         match imported {
-            Ok((project, _, report)) => {
-                self.place(project, None, Some(report.summary()), window, cx);
+            Ok(imported) => {
+                let notice = Some(imported.report.summary());
+                self.place(imported.project, None, notice, imported.carried, window, cx);
             }
             Err(message) => {
-                self.error = Some(format!("Could not import {}: {message}", path.display()));
+                let whose =
+                    on_page.map_or_else(String::new, |b| format!(" as a {} keymap", b.name));
+                self.error = Some(format!(
+                    "Could not import {}{whose}: {message}",
+                    path.display()
+                ));
                 cx.notify();
             }
         }
@@ -507,12 +611,16 @@ impl Shell {
         let chosen = cx.prompt_for_new_path(&directory, Some(&name));
         cx.spawn_in(window, async move |this, cx| {
             let Ok(Ok(Some(mut path))) = chosen.await else {
+                // Nothing was saved, so nothing is applied either.
+                let _ = this.update(cx, |this, _| this.applying = false);
                 return;
             };
             if path.extension().is_none() {
                 path.set_extension(file::EXTENSION);
             }
-            let _ = this.update(cx, |this, cx| this.write(&workspace, path, cx));
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.write(&workspace, path, window, cx);
+            });
         })
         .detach();
     }
@@ -522,40 +630,119 @@ impl Shell {
             return;
         };
         match workspace.read(cx).path().map(PathBuf::from) {
-            Some(path) => self.write(&workspace, path, cx),
+            Some(path) => self.write(&workspace, path, window, cx),
             None => self.save_as(&SaveAs, window, cx),
         }
     }
 
-    fn write(&mut self, workspace: &Entity<Workspace>, path: PathBuf, cx: &mut Context<Self>) {
+    fn write(
+        &mut self,
+        workspace: &Entity<Workspace>,
+        path: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let result = workspace.update(cx, |w, cx| {
             cx.notify();
             w.save_to(path.clone())
         });
+        let applying = std::mem::take(&mut self.applying);
         match result {
             Ok(()) => {
                 let keyboard = workspace.read(cx).keyboard();
                 self.library.update(cx, |library, cx| {
-                    let _ = library.change(cx, |k| k.note_recent(keyboard, path));
+                    let _ = library.change(cx, |k| k.note_layout(keyboard, path.clone()));
                 });
                 self.error = None;
+                if applying {
+                    self.finish_apply(keyboard, &path, window, cx);
+                }
             }
             Err(e) => self.error = Some(format!("Could not save {}: {e}", path.display())),
         }
         cx.notify();
     }
 
-    /// Starts a project under the selected keyboard. With a project open,
-    /// returns to My Boards first, where the keyboard is chosen.
-    fn new_project_action(&mut self, _: &NewProject, window: &mut Window, cx: &mut Context<Self>) {
-        if self.workspace.is_some() {
-            self.close_project(&CloseProject, window, cx);
-        } else {
-            self.new_project(window, cx);
+    /// Makes the open layout its board's current one. The board builds
+    /// from the file, so the layout is saved first.
+    fn apply(&mut self, workspace: Entity<Workspace>, window: &mut Window, cx: &mut Context<Self>) {
+        let (path, dirty, keyboard) = {
+            let workspace = workspace.read(cx);
+            (
+                workspace.path().map(PathBuf::from),
+                workspace.is_dirty(),
+                workspace.keyboard(),
+            )
+        };
+        match path {
+            Some(path) if !dirty => self.finish_apply(keyboard, &path, window, cx),
+            Some(path) => {
+                self.applying = true;
+                self.write(&workspace, path, window, cx);
+            }
+            None => {
+                self.applying = true;
+                self.save_as(&SaveAs, window, cx);
+            }
         }
     }
 
-    fn close_project(&mut self, _: &CloseProject, window: &mut Window, cx: &mut Context<Self>) {
+    fn finish_apply(
+        &mut self,
+        keyboard: KeyboardId,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.library.update(cx, |library, cx| {
+            let _ = library.change(cx, |k| k.set_current(keyboard, Some(path.to_path_buf())));
+        });
+        self.workspace = None;
+        let on_page = self
+            .page
+            .as_ref()
+            .is_some_and(|page| page.read(cx).keyboard() == keyboard);
+        if !on_page {
+            self.open_board(keyboard, Section::Build, window, cx);
+        }
+        let name = path
+            .file_stem()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        if let Some(page) = &self.page {
+            page.update(cx, |page, cx| {
+                page.show_section(Section::Build, cx);
+                page.set_notice(
+                    format!("“{name}” is now this board's layout. Build and flash to put it on the keyboard."),
+                    cx,
+                );
+            });
+        }
+        self.focus.focus(window, cx);
+        cx.notify();
+    }
+
+    /// Starts something new for where the user is: a board on My Boards, a
+    /// layout on a board's page. With a layout open, closes it first.
+    fn new_action(&mut self, _: &NewProject, window: &mut Window, cx: &mut Context<Self>) {
+        if self.workspace.is_some() {
+            self.close(&CloseProject, window, cx);
+            return;
+        }
+        match self.page.as_ref().map(|page| page.read(cx).keyboard()) {
+            Some(id) => self.new_layout(id, window, cx),
+            None => self.start_add(window, cx),
+        }
+    }
+
+    /// Closes the open layout back to its board, or a board's page back to
+    /// My Boards.
+    fn close(&mut self, _: &CloseProject, window: &mut Window, cx: &mut Context<Self>) {
+        if self.workspace.is_none() {
+            self.page = None;
+            self.focus.focus(window, cx);
+            cx.notify();
+            return;
+        }
         if !self.has_unsaved_changes(cx) {
             self.workspace = None;
             self.focus.focus(window, cx);
@@ -564,7 +751,7 @@ impl Shell {
         }
         let answer = window.prompt(
             PromptLevel::Warning,
-            "Close this project without saving?",
+            "Close this layout without saving?",
             Some("Your changes will be lost."),
             &["Cancel", "Close Without Saving"],
             cx,
@@ -578,6 +765,16 @@ impl Shell {
             }
         })
         .detach();
+    }
+
+    /// Exports the config of the board whose page is showing.
+    fn export(&mut self, _: &ExportConfig, window: &mut Window, cx: &mut Context<Self>) {
+        if self.workspace.is_some() {
+            return;
+        }
+        if let Some(page) = &self.page {
+            page.update(cx, |page, cx| page.export(window, cx));
+        }
     }
 
     fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
@@ -596,28 +793,23 @@ impl Shell {
         }
     }
 
-    // Saved keyboards
+    // Adding boards
 
-    fn open_form(
-        &mut self,
-        form: KeyboardForm,
-        name: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.name_input.update(cx, |input, cx| {
-            input.set_value(name.to_string(), window, cx)
-        });
+    fn open_form(&mut self, form: KeyboardForm, window: &mut Window, cx: &mut Context<Self>) {
+        let name = form.suggested.clone();
+        self.name_input
+            .update(cx, |input, cx| input.set_value(name, window, cx));
         self.form = Some(form);
         self.error = None;
         self.notice = None;
         cx.notify();
     }
 
-    /// Starts adding a keyboard that need not be connected, or even owned.
+    /// Starts adding a board that need not be connected, or even owned.
     fn start_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let board = self
-            .selected
+            .state
+            .keyboard
             .and_then(|id| self.keyboard(id, cx))
             .and_then(|k| self.board_index(&k.board))
             .unwrap_or(0);
@@ -627,19 +819,18 @@ impl Shell {
             .keyboards()
             .suggest_name(&self.boards[board]);
         let form = KeyboardForm {
-            editing: None,
             choices: (0..self.boards.len()).collect(),
             board,
             firmware: self.boards[board].firmware[0].id.clone(),
             device: None,
             note: None,
-            suggested: suggested.clone(),
+            suggested,
         };
-        self.open_form(form, &suggested, window, cx);
+        self.open_form(form, window, cx);
     }
 
     /// Looks for a keyboard on USB and starts adding it, linked to that
-    /// device. One that is saved already is shown instead.
+    /// device. One that is saved already is opened instead.
     fn add_connected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let detected = kc_device::detect(&self.boards);
         let keyboards = self.library.read(cx).keyboards();
@@ -649,7 +840,6 @@ impl Shell {
         match (fresh, already) {
             (Some(found), _) => {
                 let board = found.boards[0];
-                let suggested = keyboards.suggest_name(&self.boards[board]);
                 let mut notes = Vec::new();
                 if !found.certain {
                     notes.push(
@@ -660,22 +850,26 @@ impl Shell {
                     notes.push("It reports no serial number, so it cannot be linked and will not be recognized later.");
                 }
                 let form = KeyboardForm {
-                    editing: None,
                     choices: found.boards.clone(),
                     board,
                     firmware: self.boards[board].firmware[0].id.clone(),
                     device: Some(found.usb.clone()),
                     note: (!notes.is_empty()).then(|| notes.join(" ")),
-                    suggested: suggested.clone(),
+                    suggested: keyboards.suggest_name(&self.boards[board]),
                 };
-                self.open_form(form, &suggested, window, cx);
+                self.open_form(form, window, cx);
             }
             (None, Some(keyboard)) => {
                 let (id, name) = (keyboard.id, keyboard.name.clone());
-                self.select(Some(id), cx);
-                self.notice = Some(format!(
-                    "The connected keyboard is already saved as “{name}”."
-                ));
+                self.open_board(id, Section::Firmware, window, cx);
+                if let Some(page) = &self.page {
+                    page.update(cx, |page, cx| {
+                        page.set_notice(
+                            format!("The connected keyboard is already saved as “{name}”."),
+                            cx,
+                        );
+                    });
+                }
             }
             (None, None) => {
                 self.notice = Some(format!(
@@ -687,26 +881,7 @@ impl Shell {
         }
     }
 
-    fn start_edit(&mut self, id: KeyboardId, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(keyboard) = self.keyboard(id, cx) else {
-            return;
-        };
-        let Some(board) = self.board_index(&keyboard.board) else {
-            return;
-        };
-        let form = KeyboardForm {
-            editing: Some(id),
-            choices: vec![board],
-            board,
-            firmware: keyboard.firmware.clone(),
-            device: None,
-            note: None,
-            suggested: String::new(),
-        };
-        self.open_form(form, &keyboard.name, window, cx);
-    }
-
-    /// Changes the board a new keyboard is of, with that board's first
+    /// Changes the model of the board being added, with that model's first
     /// firmware and, unless the user has typed a name, a fitting name.
     fn set_form_board(&mut self, board: usize, window: &mut Window, cx: &mut Context<Self>) {
         let suggested = self
@@ -727,36 +902,26 @@ impl Shell {
         cx.notify();
     }
 
-    fn submit_form(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    /// Adds the board and opens its page, where its firmware is set up.
+    fn submit_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(form) = &self.form else { return };
         let name = self.name_input.read(cx).value().to_string();
         let board = self.boards[form.board].clone();
         let firmware = form.firmware.clone();
         let link = form.device.as_ref().and_then(UsbDevice::link);
-        let editing = form.editing;
         let result = self.library.update(cx, |library, cx| {
-            library.change(cx, |k| match editing {
-                Some(id) => {
-                    k.rename(id, &name)?;
-                    k.set_firmware(id, &board, &firmware)?;
-                    Ok(id)
+            library.change(cx, |k| {
+                let id = k.add(&name, &board, &firmware)?;
+                // The device was free when the form opened; if it has been
+                // taken since, the board is added unlinked.
+                if let Some(link) = link {
+                    let _ = k.link(id, link);
                 }
-                None => {
-                    let id = k.add(&name, &board, &firmware)?;
-                    // The device was free when the form opened; if it has
-                    // been taken since, the keyboard is added unlinked.
-                    if let Some(link) = link {
-                        let _ = k.link(id, link);
-                    }
-                    Ok(id)
-                }
+                Ok(id)
             })
         });
         match result {
-            Ok(id) => {
-                self.error = None;
-                self.select(Some(id), cx);
-            }
+            Ok(id) => self.open_board(id, Section::Firmware, window, cx),
             Err(error) => {
                 self.error = Some(format!("{error}."));
                 cx.notify();
@@ -764,110 +929,15 @@ impl Shell {
         }
     }
 
-    fn remove_keyboard(&mut self, id: KeyboardId, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(keyboard) = self.keyboard(id, cx) else {
-            return;
-        };
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &format!("Remove “{}” from My Boards?", keyboard.name),
-            Some("Its projects stay where they are. The keyboard itself is not changed."),
-            &["Cancel", "Remove"],
-            cx,
-        );
-        cx.spawn(async move |this, cx| {
-            if answer.await != Ok(1) {
-                return;
-            }
-            let _ = this.update(cx, |this, cx| {
-                this.library.update(cx, |library, cx| {
-                    let _ = library.change(cx, |k| k.remove(id).map(|_| ()));
-                });
-                let next = this
-                    .library
-                    .read(cx)
-                    .keyboards()
-                    .iter()
-                    .next()
-                    .map(|k| k.id);
-                this.select(next, cx);
-            });
-        })
-        .detach();
-    }
-
-    /// Links the keyboard to a connected device of its board. A device
-    /// linked to another keyboard moves only once the user agrees, so that
-    /// no device is ever two keyboards.
-    fn link_connected(&mut self, id: KeyboardId, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(keyboard) = self.keyboard(id, cx) else {
-            return;
-        };
-        let Some(board) = self.board_index(&keyboard.board) else {
-            return;
-        };
-        let keyboards = self.library.read(cx).keyboards();
-        let mut devices: Vec<_> = kc_device::detect(&self.boards)
-            .into_iter()
-            .filter(|d| d.boards.contains(&board))
-            .filter_map(|d| d.usb.link())
-            .collect();
-        // A device no keyboard has yet is preferred.
-        devices.sort_by_key(|device| keyboards.linked_to(device).is_some());
-        let Some(device) = devices.into_iter().next() else {
-            self.notice = Some(format!(
-                "No {} that reports a serial number was found on USB. {}",
-                self.boards[board].name,
-                connection_hint(&self.boards[board..=board])
-            ));
-            cx.notify();
-            return;
-        };
-        let holder = keyboards
-            .linked_to(&device)
-            .filter(|k| k.id != id)
-            .map(|k| k.name.clone());
-        let Some(holder) = holder else {
-            self.library.update(cx, |library, cx| {
-                let _ = library.change(cx, |k| k.link(id, device));
-            });
-            self.notice = None;
-            return;
-        };
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &format!("Move the connected keyboard to “{}”?", keyboard.name),
-            Some(&format!(
-                "It is linked to “{holder}”. A keyboard can be linked to one saved keyboard at a time, so “{holder}” will be left without a device."
-            )),
-            &["Cancel", "Move Link"],
-            cx,
-        );
-        cx.spawn(async move |this, cx| {
-            if answer.await != Ok(1) {
-                return;
-            }
-            let _ = this.update(cx, |this, cx| {
-                this.library.update(cx, |library, cx| {
-                    let _ = library.change(cx, |k| k.relink(id, device).map(|_| ()));
-                });
-            });
-        })
-        .detach();
-    }
-
-    fn unlink(&mut self, id: KeyboardId, cx: &mut Context<Self>) {
-        self.library.update(cx, |library, cx| {
-            let _ = library.change(cx, |k| k.unlink(id));
-        });
-    }
-
     // Welcome screen
 
-    fn render_recent(&self, title: &'static str, paths: &[PathBuf], cx: &mut Context<Self>) -> Div {
+    /// Layouts opened before boards were saved, until each is opened again.
+    fn render_earlier(&self, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
         let (muted, hover) = (theme.muted_foreground, theme.secondary);
-        let rows = paths
+        let rows = self
+            .state
+            .recent
             .iter()
             .enumerate()
             .map(|(index, path)| {
@@ -876,7 +946,7 @@ impl Shell {
                     .file_stem()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
                 div()
-                    .id((title, index))
+                    .id(("earlier", index))
                     .px_3()
                     .py_1p5()
                     .rounded_md()
@@ -898,18 +968,24 @@ impl Shell {
             .flex()
             .flex_col()
             .gap_0p5()
-            .child(div().px_3().pb_1().text_xs().text_color(muted).child(title))
+            .child(
+                div()
+                    .px_3()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(muted)
+                    .child("OPENED BEFORE MY BOARDS"),
+            )
             .children(rows)
     }
 
-    /// The list of saved keyboards, and the ways to add one.
+    /// The list of boards, and the ways to add one.
     fn render_boards(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (muted, hover, accent, accent_text, success) = (
+        let (muted, hover, border, success) = (
             theme.muted_foreground,
             theme.secondary,
-            theme.primary,
-            theme.primary_foreground,
+            theme.border,
             theme.success,
         );
         let library = self.library.read(cx);
@@ -918,90 +994,80 @@ impl Shell {
             .iter()
             .map(|keyboard| {
                 let id = keyboard.id;
-                let active = self.selected == Some(id) && self.form.is_none();
                 let board = self.boards.iter().find(|b| b.id == keyboard.board);
                 let detail = match board {
                     Some(board) => format!(
-                        "{} · {}",
+                        "{} {} · {}",
+                        board.vendor,
                         board.name,
-                        firmware_name(board, &keyboard.firmware)
+                        firmware_name(board, &keyboard.firmware.profile)
                     ),
                     None => format!("Unknown board `{}`", keyboard.board),
+                };
+                let layouts = match keyboard.layouts.len() {
+                    0 => "No layouts yet".to_string(),
+                    1 => "1 layout".to_string(),
+                    n => format!("{n} layouts"),
                 };
                 let connected = library.is_connected(keyboard);
                 div()
                     .id(("keyboard", id.0 as usize))
                     .px_3()
-                    .py_1p5()
+                    .py_2()
                     .rounded_md()
+                    .border_1()
+                    .border_color(border)
                     .cursor_pointer()
-                    .when(active, |row| row.bg(accent).text_color(accent_text))
-                    .when(!active, |row| row.hover(|row| row.bg(hover)))
+                    .hover(|row| row.bg(hover))
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap_2()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_sm()
-                                    .child(keyboard.name.clone()),
-                            )
+                            .child(div().flex_1().min_w_0().child(keyboard.name.clone()))
                             .when(connected, |row| {
-                                row.child(
-                                    div()
-                                        .text_xs()
-                                        .when(!active, |label| label.text_color(success))
-                                        .child("Connected"),
-                                )
+                                row.child(div().text_xs().text_color(success).child("Connected"))
                             }),
                     )
-                    .child(
-                        div()
-                            .text_xs()
-                            .when(!active, |line| line.text_color(muted))
-                            .child(detail),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.notice = None;
-                        this.error = None;
-                        this.select(Some(id), cx);
+                    .child(div().text_xs().text_color(muted).child(detail))
+                    .child(div().text_xs().text_color(muted).child(layouts))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_board(id, Section::Firmware, window, cx);
                     }))
             })
             .collect::<Vec<_>>();
         div()
-            .w_72()
+            .w_80()
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().px_3().text_xs().text_color(muted).child("MY BOARDS"))
+            .child(div().px_1().text_xs().text_color(muted).child("MY BOARDS"))
             .child(
                 div()
                     .id("keyboard-list")
-                    .max_h_80()
+                    .max_h_96()
                     .overflow_y_scroll()
                     .flex()
                     .flex_col()
-                    .gap_0p5()
+                    .gap_1()
                     .children(rows),
             )
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .items_start()
+                    .flex_wrap()
                     .gap_2()
-                    .px_3()
                     .child(
-                        Button::new("add-keyboard").label("Add Keyboard…").on_click(
-                            cx.listener(|this, _, window, cx| this.start_add(window, cx)),
-                        ),
+                        Button::new("add-keyboard")
+                            .primary()
+                            .label("Add Board…")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.start_add(window, cx);
+                            })),
                     )
                     .child(
                         Button::new("add-connected")
-                            .label("Add Connected Keyboard")
+                            .label("Add Connected Board")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.add_connected(window, cx);
                             })),
@@ -1009,15 +1075,15 @@ impl Shell {
             )
     }
 
-    /// The form for adding or editing a keyboard.
+    /// The form for adding a board.
     fn render_form(&self, form: &KeyboardForm, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
         let label = |text: &'static str| div().text_xs().text_color(muted).child(text);
         let board = &self.boards[form.board];
-        let title = match (form.editing, &form.device) {
-            (Some(_), _) => "Edit Keyboard",
-            (None, Some(_)) => "Add the Connected Keyboard",
-            (None, None) => "Add a Keyboard",
+        let title = if form.device.is_some() {
+            "Add the Connected Board"
+        } else {
+            "Add a Board"
         };
         let models = form
             .choices
@@ -1051,7 +1117,7 @@ impl Shell {
             .collect::<Vec<_>>();
         let device = form.device.as_ref().map(|usb| match usb.link() {
             Some(link) => format!(
-                "Found {} on USB. It will be linked to this keyboard (serial {}).",
+                "Found {} on USB. It will be linked to this board (serial {}).",
                 usb.label(),
                 link.serial
             ),
@@ -1062,7 +1128,7 @@ impl Shell {
             .flex_col()
             .gap_3()
             .child(div().text_xl().child(title))
-            .when(form.editing.is_none() && form.device.is_none(), |page| {
+            .when(form.device.is_none(), |page| {
                 page.child(div().text_sm().text_color(muted).child(
                     "The keyboard does not need to be connected, or even one you own.",
                 ))
@@ -1087,7 +1153,7 @@ impl Shell {
                     .children(firmwares),
             )
             .child(div().text_xs().text_color(muted).child(
-                "The firmware the keyboard runs, or will be built with. The editor shows only what it supports. A keyboard cannot report this itself.",
+                "The firmware the keyboard runs, or will be built with. A keyboard cannot report this itself. You can change it, and adjust its settings, on the board's page.",
             ))
             .child(
                 div()
@@ -1097,11 +1163,7 @@ impl Shell {
                     .child(
                         Button::new("form-submit")
                             .primary()
-                            .label(if form.editing.is_some() {
-                                "Save"
-                            } else {
-                                "Add Keyboard"
-                            })
+                            .label("Add Board")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.submit_form(window, cx);
                             })),
@@ -1119,158 +1181,27 @@ impl Shell {
             )
     }
 
-    /// The selected keyboard: what it is, its device, and its projects.
-    fn render_keyboard(&self, keyboard: &Keyboard, cx: &mut Context<Self>) -> Div {
-        let theme = cx.theme();
-        let (muted, success) = (theme.muted_foreground, theme.success);
-        let id = keyboard.id;
-        let board = self.boards.iter().find(|b| b.id == keyboard.board);
-        let detail = match board {
-            Some(board) => format!(
-                "{} {} · {}",
-                board.vendor,
-                board.name,
-                firmware_name(board, &keyboard.firmware)
-            ),
-            None => format!(
-                "This version of Keyboard Curator does not know the board `{}`.",
-                keyboard.board
-            ),
-        };
-        let connected = self.library.read(cx).is_connected(keyboard);
-        let device = match (&keyboard.device, connected) {
-            (Some(_), true) => div().text_sm().text_color(success).child("Connected by USB."),
-            (Some(device), false) => div().text_sm().text_color(muted).child(format!(
-                "Linked to a device that is not connected by USB (serial {}).",
-                device.serial
-            )),
-            (None, _) => div().text_sm().text_color(muted).child(
-                "Not linked to a device. Linking lets the app recognize this keyboard when it is connected.",
-            ),
-        };
-        let link = if keyboard.device.is_some() {
-            Button::new("unlink")
-                .ghost()
-                .label("Unlink Device")
-                .on_click(cx.listener(move |this, _, _, cx| this.unlink(id, cx)))
-        } else {
-            Button::new("link")
-                .ghost()
-                .label("Link Connected Keyboard")
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.link_connected(id, window, cx);
-                }))
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xl().child(keyboard.name.clone()))
-                    .child(div().text_sm().text_color(muted).child(detail)),
-            )
-            .child(device)
-            .when(board.is_some(), |page| {
-                page.child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_2()
-                        .child(
-                            Button::new("new-project")
-                                .primary()
-                                .label("New Project")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.new_project(window, cx);
-                                })),
-                        )
-                        .child(Button::new("open-project").label("Open Project…").on_click(
-                            cx.listener(|this, _, window, cx| {
-                                this.open(&OpenProject, window, cx);
-                            }),
-                        ))
-                        .child(
-                            Button::new("import-project")
-                                .label("Import a Keymap…")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.import(&ImportProject, window, cx);
-                                })),
-                        ),
-                )
-            })
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .when(board.is_some(), |row| {
-                        row.child(
-                            Button::new("edit-keyboard")
-                                .ghost()
-                                .label("Edit…")
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.start_edit(id, window, cx);
-                                })),
-                        )
-                    })
-                    .when(board.is_some(), |row| row.child(link))
-                    .child(
-                        Button::new("remove-keyboard")
-                            .ghost()
-                            .label("Remove…")
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.remove_keyboard(id, window, cx);
-                            })),
-                    ),
-            )
-            .when(!keyboard.recent.is_empty(), |page| {
-                page.child(
-                    self.render_recent("RECENT PROJECTS", &keyboard.recent, cx)
-                        .pt_2(),
-                )
-            })
-    }
-
     fn render_welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let border = cx.theme().border;
-        let selected = self.selected.and_then(|id| self.keyboard(id, cx));
-        let detail = match (&self.form, &selected) {
-            (Some(form), _) => self.render_form(form, cx),
-            (None, Some(keyboard)) => self.render_keyboard(keyboard, cx),
-            (None, None) => div()
+        let empty = self.library.read(cx).keyboards().is_empty();
+        let detail = match &self.form {
+            Some(form) => self.render_form(form, cx),
+            None => div()
                 .flex()
                 .flex_col()
                 .gap_3()
-                .child(div().text_xl().child("Add your first keyboard"))
+                .child(div().text_xl().child(if empty {
+                    "Add your first board"
+                } else {
+                    "Choose a board"
+                }))
                 .child(div().max_w_96().text_sm().text_color(muted).child(
-                    "Projects are opened under a keyboard, which decides the firmware they are built for and what the editor shows. It does not need to be connected, or even one you own.",
-                ))
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(Button::new("first-open").label("Open Project…").on_click(
-                            cx.listener(|this, _, window, cx| {
-                                this.open(&OpenProject, window, cx);
-                            }),
-                        ))
-                        .child(
-                            Button::new("first-import")
-                                .label("Import a Keymap…")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.import(&ImportProject, window, cx);
-                                })),
-                        ),
-                ),
+                    "A board is one of your keyboards: its firmware and that firmware's settings. Open one to set up its firmware, build and flash it, and create the layouts used with it. A board does not need to be connected, or even one you own.",
+                )),
         };
-        // Projects from before keyboards were saved, until each is opened.
-        let earlier = (self.form.is_none() && !self.state.recent.is_empty())
-            .then(|| self.render_recent("OPENED BEFORE MY BOARDS", &self.state.recent, cx));
+        let earlier =
+            (self.form.is_none() && !self.state.recent.is_empty()).then(|| self.render_earlier(cx));
 
         div()
             .size_full()
@@ -1304,8 +1235,8 @@ impl Shell {
                     .child(self.render_boards(cx))
                     .child(
                         div()
-                            .id("keyboard-detail")
-                            .w(px(480.))
+                            .id("welcome-detail")
+                            .w(px(460.))
                             .max_h(px(520.))
                             .overflow_y_scroll()
                             .pl_6()
@@ -1323,9 +1254,16 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let title = match &self.workspace {
-            Some(workspace) => workspace.read(cx).title(cx),
-            None => "Keyboard Curator".to_string(),
+        let board_name = self
+            .page
+            .as_ref()
+            .map(|page| page.read(cx).keyboard())
+            .and_then(|id| self.keyboard(id, cx))
+            .map(|k| k.name);
+        let title = match (&self.workspace, board_name) {
+            (Some(workspace), _) => workspace.read(cx).title(cx),
+            (None, Some(name)) => format!("{name} — Keyboard Curator"),
+            (None, None) => "Keyboard Curator".to_string(),
         };
         window.set_window_title(&title);
 
@@ -1335,9 +1273,10 @@ impl Render for Shell {
             .error
             .clone()
             .or_else(|| self.library.read(cx).problem().map(str::to_string));
-        let content = match &self.workspace {
-            Some(workspace) => workspace.clone().into_any_element(),
-            None => self.render_welcome(cx).into_any_element(),
+        let content = match (&self.workspace, &self.page) {
+            (Some(workspace), _) => workspace.clone().into_any_element(),
+            (None, Some(page)) => page.clone().into_any_element(),
+            (None, None) => self.render_welcome(cx).into_any_element(),
         };
         div()
             .id("shell")
@@ -1347,8 +1286,9 @@ impl Render for Shell {
             .on_action(cx.listener(Self::import))
             .on_action(cx.listener(Self::save))
             .on_action(cx.listener(Self::save_as))
-            .on_action(cx.listener(Self::close_project))
-            .on_action(cx.listener(Self::new_project_action))
+            .on_action(cx.listener(Self::close))
+            .on_action(cx.listener(Self::new_action))
+            .on_action(cx.listener(Self::export))
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .size_full()

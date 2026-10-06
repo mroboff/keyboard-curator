@@ -1,4 +1,5 @@
-//! Checks a project against its board and firmware profile.
+//! Checks a layout, and the firmware configuration it is built with,
+//! against the board.
 
 use std::collections::HashSet;
 
@@ -10,6 +11,7 @@ use kc_zmk::Feature;
 use crate::behavior::BehaviorKind;
 use crate::binding::{BehaviorRef, Binding, Param};
 use crate::features::{InputProcessor, KeyLight, SettingValue};
+use crate::firmware::FirmwareConfig;
 use crate::ids::LayerId;
 use crate::project::{Location, Project, MAX_LAYERS};
 
@@ -221,7 +223,7 @@ fn raw_labels_in(text: &str) -> Vec<String> {
 }
 
 /// Every problem in `project`, checked against the board it targets.
-pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
+pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<Problem> {
     let root = Location::Project;
     let mut c = Checker {
         project,
@@ -233,7 +235,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         c.error(
             &root,
             format!(
-                "the project is for board `{}`, not `{}`",
+                "the layout is for board `{}`, not `{}`",
                 project.board, board.id
             ),
         );
@@ -243,7 +245,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         Some(layout) if layout.keys.len() != project.key_count => c.error(
             &root,
             format!(
-                "the project has {} keys per layer, but layout `{}` has {}",
+                "the layout has {} keys per layer, but the physical layout `{}` has {}",
                 project.key_count,
                 layout.id,
                 layout.keys.len()
@@ -252,14 +254,15 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
         Some(_) => {}
         None => c.error(
             &root,
-            format!("the board has no layout `{}`", project.layout),
+            format!("the board has no physical layout `{}`", project.layout),
         ),
     }
-    match board.profile(&project.firmware) {
+    let profile = board.profile(&config.profile);
+    match profile {
         Some(profile) => c.features = &profile.capabilities,
         None => c.error(
             &root,
-            format!("the board has no firmware profile `{}`", project.firmware),
+            format!("the board has no firmware profile `{}`", config.profile),
         ),
     }
 
@@ -416,7 +419,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
     }
 
     for key in kc_zmk::settings::BRIGHTNESS_SETTINGS {
-        if let Some(SettingValue::Int(value)) = project.settings.get(key) {
+        if let Some(SettingValue::Int(value)) = config.settings.get(key) {
             if *value > i64::from(board.brightness_cap) {
                 c.error(
                     &Location::Setting(key.into()),
@@ -436,8 +439,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
             .lighting
             .iter()
             .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit));
-    let starts_lit = board
-        .profile(&project.firmware)
+    let starts_lit = profile
         .and_then(|p| p.lighting.as_ref())
         .is_some_and(|l| l.start_effect.is_some());
     let cycles = project.bindings().iter().any(|(_, b)| {
@@ -445,8 +447,7 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
             |p| matches!(p, Param::Command { name, .. } if name == "RGB_EFF" || name == "RGB_EFR"),
         ))
     });
-    let needs_map = board
-        .profile(&project.firmware)
+    let needs_map = profile
         .and_then(|p| p.lighting.as_ref())
         .is_some_and(|l| l.led_map_overlay);
     if lit && needs_map {

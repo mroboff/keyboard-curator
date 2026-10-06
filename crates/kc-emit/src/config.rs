@@ -3,7 +3,7 @@
 
 use kc_boards::board::{FirmwareProfile, Side};
 use kc_model::features::SettingValue;
-use kc_model::Project;
+use kc_model::{FirmwareConfig, Project};
 
 use crate::NOTICE;
 
@@ -30,9 +30,9 @@ fn lighting_settings(profile: &FirmwareProfile) -> Vec<(String, SettingValue)> {
     settings
 }
 
-pub fn conf(project: &Project, profile: &FirmwareProfile) -> String {
+pub fn conf(project: &Project, config: &FirmwareConfig, profile: &FirmwareProfile) -> String {
     let mut out = format!("# {NOTICE}\n");
-    let mut settings = project.settings.clone();
+    let mut settings = config.settings.clone();
     if crate::keymap::uses_lighting(project) {
         for (key, value) in lighting_settings(profile) {
             settings.entry(key).or_insert(value);
@@ -57,7 +57,7 @@ pub fn conf(project: &Project, profile: &FirmwareProfile) -> String {
         };
         out.push_str(&format!("{key}={value}\n"));
     }
-    let raw = project.raw.conf.trim();
+    let raw = config.raw_conf.trim();
     if !raw.is_empty() {
         out.push_str(&format!("\n{raw}\n"));
     }

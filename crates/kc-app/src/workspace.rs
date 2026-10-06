@@ -1,11 +1,11 @@
 //! The editing window for one project: layer list, keyboard canvas, key
 //! picker and key inspector.
 
+mod advanced;
 mod behaviors;
 mod combos;
 mod lighting;
 mod pointing;
-mod settings;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -23,24 +23,20 @@ use kc_boards::Board;
 use kc_model::clipboard;
 use kc_model::edit::{self, Hold};
 use kc_model::features::Rgb;
-use kc_model::keyboards::preview_retarget;
 use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::picker::{picker_items, PickerGroup};
 use kc_model::text::{format_binding, parse_binding, LayerStyle};
 use kc_model::{
-    file, validate, BehaviorId, Binding, ComboId, Editor, KeyExpr, Keyboard, KeyboardId, LayerId,
-    ModelError, Project, Severity, Slot,
+    file, validate, BehaviorId, Binding, ComboId, Editor, FirmwareConfig, KeyExpr, Keyboard,
+    KeyboardId, LayerId, ModelError, Project, Severity, Slot,
 };
 use kc_zmk::{Feature, Modifier};
 
 use crate::canvas::{self, Device, Frame, Palette};
-use crate::flash_view::FlashView;
 use crate::library::Library;
-use crate::state::AppState;
 use crate::{
-    Copy, ExportConfig, Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, Layer7, Layer8, Layer9,
-    NextLayer, Paste, PreviousLayer, ShowFiles, ShowFlash, ShowKeyboard, ToggleAutoAdvance,
-    ToggleTypeToAssign,
+    Copy, Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, Layer7, Layer8, Layer9, NextLayer, Paste,
+    PreviousLayer, ShowFiles, ShowFlash, ShowKeyboard, ToggleAutoAdvance, ToggleTypeToAssign,
 };
 
 /// The modifiers offered as toggles, with their keycap symbols.
@@ -73,9 +69,11 @@ enum Mode {
     Behaviors,
     Combos,
     Pointing,
-    Settings,
+    /// Layer rules and custom devicetree.
+    Advanced,
     Files,
-    Flash,
+    /// Putting the layout on the board.
+    Apply,
 }
 
 impl Mode {
@@ -86,9 +84,9 @@ impl Mode {
         (Mode::Behaviors, "mode-behaviors", "Behaviors"),
         (Mode::Combos, "mode-combos", "Combos"),
         (Mode::Pointing, "mode-pointing", "Pointing"),
-        (Mode::Settings, "mode-settings", "Settings"),
+        (Mode::Advanced, "mode-advanced", "Advanced"),
         (Mode::Files, "mode-files", "Generated Files"),
-        (Mode::Flash, "mode-flash", "Build & Flash"),
+        (Mode::Apply, "mode-apply", "Apply"),
     ];
 
     /// What a firmware must have for the mode to be offered at all. A
@@ -104,20 +102,6 @@ impl Mode {
     fn available(self, features: &[Feature]) -> bool {
         self.requires().is_none_or(|f| features.contains(&f))
     }
-}
-
-/// Where a firmware build has got to.
-#[derive(Debug, Clone, PartialEq)]
-enum BuildStatus {
-    Idle,
-    /// A step is under way; the text says which.
-    Working(String),
-    Succeeded(String),
-    Failed {
-        message: String,
-        /// The run's page on GitHub, when the failure was in the build.
-        url: Option<String>,
-    },
 }
 
 /// What is known about a keyboard connected for direct updates.
@@ -170,6 +154,14 @@ struct Shown {
     combo: Option<ComboId>,
 }
 
+/// What the workspace asks of the window around it.
+pub enum WorkspaceEvent {
+    /// Make this layout the board's current one.
+    Apply,
+}
+
+impl EventEmitter<WorkspaceEvent> for Workspace {}
+
 pub struct Workspace {
     shown: Shown,
     editor: Editor,
@@ -179,13 +171,13 @@ pub struct Workspace {
     mode: Mode,
     /// Which generated file the files view shows.
     file_index: usize,
-    flash: Entity<FlashView>,
-    /// The saved keyboards, and the one this project is open under. The
-    /// keyboard decides the firmware and holds the folder of the firmware
-    /// repository.
+    /// The saved keyboards, and the one this layout is open under.
     library: Entity<Library>,
     keyboard: KeyboardId,
-    build: BuildStatus,
+    /// That keyboard's firmware and settings, which decide what the editor
+    /// offers and what the layout is checked against. Kept in step with
+    /// the library.
+    config: FirmwareConfig,
     live: LiveStatus,
     /// The binding inside a behavior or combo that the picker assigns to,
     /// in the Behaviors and Combos modes.
@@ -199,10 +191,8 @@ pub struct Workspace {
     behavior_label: Entity<InputState>,
     macro_text: Entity<InputState>,
     combo_name: Entity<InputState>,
-    keyboard_name: Entity<InputState>,
     raw_behaviors: Entity<TextareaState>,
     raw_devicetree: Entity<TextareaState>,
-    raw_conf: Entity<TextareaState>,
     /// What painting does in the Lighting mode, and with which color.
     brush: lighting::Brush,
     paint_color: kc_model::features::Rgb,
@@ -287,12 +277,29 @@ impl Workspace {
         if path.is_some() {
             editor.mark_saved();
         }
-        // The project is built for the keyboard's firmware, whichever one
-        // it was saved for.
-        if let Some(saved) = library.read(cx).keyboards().get(keyboard) {
-            editor.set_firmware(&saved.firmware);
-        }
-        cx.observe(&library, |_, _, cx| cx.notify()).detach();
+        let firmware_of = move |library: &Entity<Library>, cx: &App| {
+            library
+                .read(cx)
+                .keyboards()
+                .get(keyboard)
+                .map(|k| k.firmware.clone())
+        };
+        let config = firmware_of(&library, cx).unwrap_or_else(|| FirmwareConfig::stock(&board));
+        cx.observe_in(&library, window, move |this, library, window, cx| {
+            let Some(config) = firmware_of(&library, cx) else {
+                return;
+            };
+            if this.config != config {
+                this.config = config;
+                // What the firmware offers may have changed under the mode.
+                if !this.mode.available(&this.features()) {
+                    this.mode = Mode::Keyboard;
+                }
+                this.after_change(window, cx);
+            }
+            cx.notify();
+        })
+        .detach();
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search keys"));
         let binding_input = cx.new(|cx| InputState::new(window, cx).placeholder("&kp A"));
         let layer_name = cx.new(|cx| InputState::new(window, cx).placeholder("Layer name"));
@@ -326,7 +333,6 @@ impl Workspace {
         )
         .detach();
 
-        let flash = cx.new(|cx| FlashView::new(board.clone(), cx));
         let line = |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| {
             cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
         };
@@ -334,18 +340,9 @@ impl Workspace {
         let behavior_label = line("label", window, cx);
         let macro_text = line("Text to type", window, cx);
         let combo_name = line("Name", window, cx);
-        let keyboard_name = line("Board default", window, cx);
         let raw_behaviors = cx.new(|cx| TextareaState::new(window, cx));
         let raw_devicetree = cx.new(|cx| TextareaState::new(window, cx));
-        let raw_conf = cx.new(|cx| TextareaState::new(window, cx));
-        settings::subscribe(
-            &keyboard_name,
-            &raw_behaviors,
-            &raw_devicetree,
-            &raw_conf,
-            window,
-            cx,
-        );
+        advanced::subscribe(&raw_behaviors, &raw_devicetree, window, cx);
         behaviors::subscribe(&behavior_name, &behavior_label, &macro_text, window, cx);
         combos::subscribe(&combo_name, window, cx);
         let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
@@ -358,10 +355,9 @@ impl Workspace {
             layer,
             mode: Mode::Keyboard,
             file_index: 0,
-            flash,
             library,
             keyboard,
-            build: BuildStatus::Idle,
+            config,
             live: LiveStatus::Idle,
             slot: None,
             behavior: None,
@@ -371,10 +367,8 @@ impl Workspace {
             behavior_label,
             macro_text,
             combo_name,
-            keyboard_name,
             raw_behaviors,
             raw_devicetree,
-            raw_conf,
             brush: lighting::Brush::Color,
             paint_color: kc_model::features::Rgb(0x00, 0xC0, 0xFF),
             painting: false,
@@ -395,15 +389,15 @@ impl Workspace {
             layer_name,
         };
         workspace.sync_inputs(window, cx);
-        // For checking a screen from the command line: KC_MODE=settings.
+        // For checking a screen from the command line: KC_MODE=advanced.
         let start = match std::env::var("KC_MODE").as_deref() {
             Ok("lighting") => Some(Mode::Lighting),
             Ok("behaviors") => Some(Mode::Behaviors),
             Ok("combos") => Some(Mode::Combos),
             Ok("pointing") => Some(Mode::Pointing),
-            Ok("settings") => Some(Mode::Settings),
+            Ok("advanced") => Some(Mode::Advanced),
             Ok("files") => Some(Mode::Files),
-            Ok("flash") => Some(Mode::Flash),
+            Ok("apply") => Some(Mode::Apply),
             _ => None,
         };
         if let Some(mode) = start {
@@ -424,11 +418,6 @@ impl Workspace {
     fn keyboard_name(&self, cx: &App) -> String {
         self.saved_keyboard(cx)
             .map_or_else(String::new, |k| k.name.clone())
-    }
-
-    /// The local clone of the firmware repository the keyboard builds from.
-    fn repo_dir(&self, cx: &App) -> Option<PathBuf> {
-        self.saved_keyboard(cx).and_then(|k| k.repo_dir.clone())
     }
 
     pub fn project(&self) -> &Project {
@@ -522,7 +511,7 @@ impl Workspace {
                 self.notice = Some(format!("{error}."));
             }
         }
-        self.commit_settings_inputs(cx);
+        self.commit_advanced_inputs(cx);
     }
 
     /// Shows the edited behavior's and combo's names in their fields.
@@ -546,7 +535,7 @@ impl Workspace {
                 input.update(cx, |input, cx| input.set_value(text, window, cx));
             }
         }
-        self.sync_settings_inputs(window, cx);
+        self.sync_advanced_inputs(window, cx);
         self.shown = Shown {
             layer: Some(self.layer),
             behavior: self.behavior,
@@ -611,10 +600,7 @@ impl Workspace {
     }
 
     fn features(&self) -> Vec<Feature> {
-        self.board
-            .profile(&self.project().firmware)
-            .map(|p| p.capabilities.clone())
-            .unwrap_or_default()
+        self.config.features(&self.board).to_vec()
     }
 
     fn layout_keys(&self) -> &[kc_boards::geometry::Key] {
@@ -1061,7 +1047,7 @@ impl Workspace {
         let (border, muted) = (theme.border, theme.muted_foreground);
         let firmware = self
             .board
-            .profile(&self.project().firmware)
+            .profile(&self.config.profile)
             .map_or_else(String::new, |p| p.name.clone());
         div()
             .px_3()
@@ -1642,255 +1628,6 @@ impl Workspace {
         panel
     }
 
-    /// Writes the generated zmk-config files, and a copy of the project,
-    /// into a folder the user chooses.
-    fn export(&mut self, _: &ExportConfig, window: &mut Window, cx: &mut Context<Self>) {
-        let files = match kc_emit::generate(self.project(), &self.board) {
-            Ok(files) => files,
-            Err(error) => {
-                self.notice = Some(format!("Cannot export: {error}."));
-                self.mode = Mode::Files;
-                cx.notify();
-                return;
-            }
-        };
-        let project = file::to_json(self.project());
-        let chosen = cx.prompt_for_paths(PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: Some("Export Here".into()),
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(Some(paths))) = chosen.await else {
-                return;
-            };
-            let Some(root) = paths.into_iter().next() else {
-                return;
-            };
-            let write = |path: PathBuf, contents: &str| -> std::io::Result<()> {
-                if let Some(dir) = path.parent() {
-                    std::fs::create_dir_all(dir)?;
-                }
-                std::fs::write(path, contents)
-            };
-            let result = files
-                .iter()
-                .try_for_each(|f| write(root.join(&f.path), &f.contents))
-                .and_then(|()| {
-                    write(
-                        root.join(format!("keyboard-curator.{}", file::EXTENSION)),
-                        &project,
-                    )
-                });
-            let _ = this.update(cx, |this, cx| {
-                this.notice = Some(match result {
-                    Ok(()) => {
-                        let mut state = AppState::load();
-                        state.export_dir = Some(root.clone());
-                        state.save();
-                        format!("Exported {} files to {}.", files.len() + 1, root.display())
-                    }
-                    Err(error) => format!("Could not export: {error}."),
-                });
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    fn choose_repo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let chosen = cx.prompt_for_paths(PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: Some("Use This Folder".into()),
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(Some(paths))) = chosen.await else {
-                return;
-            };
-            let Some(dir) = paths.into_iter().next() else {
-                return;
-            };
-            let _ = this.update(cx, |this, cx| {
-                let keyboard = this.keyboard;
-                let _ = this.library.update(cx, |library, cx| {
-                    library.change(cx, |k| k.set_repo_dir(keyboard, Some(dir)))
-                });
-                this.build = BuildStatus::Idle;
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    /// Generates the config, pushes it to the firmware repository, follows
-    /// the GitHub build and hands the firmware to the flash view.
-    fn build_firmware(&mut self, cx: &mut Context<Self>) {
-        let fail = |message: String| BuildStatus::Failed { message, url: None };
-        let Some(dir) = self.repo_dir(cx) else {
-            self.build = fail("Choose the folder of your firmware repository first.".into());
-            cx.notify();
-            return;
-        };
-        let mut files: Vec<(String, String)> = match kc_emit::generate(self.project(), &self.board)
-        {
-            Ok(files) => files.into_iter().map(|f| (f.path, f.contents)).collect(),
-            Err(error) => {
-                self.build = fail(format!("{error}. See Generated Files for the list."));
-                cx.notify();
-                return;
-            }
-        };
-        files.push((
-            format!("keyboard-curator.{}", file::EXTENSION),
-            file::to_json(self.project()),
-        ));
-        let Some(token) = kc_build::github::find_token() else {
-            self.build = fail(
-                "Not signed in to GitHub. Run `gh auth login` in a terminal, then try again."
-                    .into(),
-            );
-            cx.notify();
-            return;
-        };
-        let message = format!("Update {} from Keyboard Curator", self.project().name);
-        let repo_name = dir.file_name().map_or_else(
-            || "zmk-config".to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        );
-        self.build = BuildStatus::Working("Pushing the config to GitHub…".into());
-        cx.notify();
-
-        cx.spawn(async move |this, cx| {
-            let status = |this: &WeakEntity<Self>, cx: &mut AsyncApp, status: BuildStatus| {
-                let _ = this.update(cx, |this, cx| {
-                    this.build = status;
-                    cx.notify();
-                });
-            };
-            let background = cx.background_executor().clone();
-
-            // Commit and push, creating the repository on first use.
-            let push_token = token.clone();
-            let pushed = background
-                .spawn(async move {
-                    let github = kc_build::GitHub::new(push_token.clone());
-                    let repo = match kc_build::Repo::open(&dir) {
-                        Ok(repo) => repo,
-                        Err(kc_build::BuildError::NotARepository(_)) => kc_build::Repo::init(&dir)?,
-                        Err(other) => return Err(other),
-                    };
-                    if repo.github().is_err() {
-                        let url = github.create_repo(&repo_name)?;
-                        repo.set_origin(&url)?;
-                    }
-                    repo.write(&files)?;
-                    repo.commit(&message)?;
-                    let sha = repo.push(&push_token)?;
-                    let (owner, name) = repo.github()?;
-                    Ok::<_, kc_build::BuildError>((owner, name, sha))
-                })
-                .await;
-            let (owner, name, sha) = match pushed {
-                Ok(pushed) => pushed,
-                Err(error) => {
-                    status(&this, cx, BuildStatus::Failed { message: error.to_string(), url: None });
-                    return;
-                }
-            };
-
-            // Follow the run that the push started.
-            let started = std::time::Instant::now();
-            let run = loop {
-                let actions_url = format!("https://github.com/{owner}/{name}/actions");
-                let (token, owner, name, sha) = (token.clone(), owner.clone(), name.clone(), sha.clone());
-                let found = background
-                    .spawn(async move {
-                        kc_build::GitHub::new(token).run_for_commit(&owner, &name, &sha)
-                    })
-                    .await;
-                let elapsed = started.elapsed().as_secs();
-                match found {
-                    Ok(Some(run)) if run.state != kc_build::RunState::InProgress => break run,
-                    Ok(Some(_)) => status(
-                        &this,
-                        cx,
-                        BuildStatus::Working(format!(
-                            "GitHub is building the firmware… {}:{:02}",
-                            elapsed / 60,
-                            elapsed % 60
-                        )),
-                    ),
-                    Ok(None) if elapsed > 90 => {
-                        status(&this, cx, BuildStatus::Failed {
-                            message: "GitHub did not start a build. Check that Actions are enabled for the repository.".into(),
-                            url: Some(actions_url),
-                        });
-                        return;
-                    }
-                    Ok(None) => status(
-                        &this,
-                        cx,
-                        BuildStatus::Working("Waiting for GitHub to start the build…".into()),
-                    ),
-                    Err(error) => {
-                        status(&this, cx, BuildStatus::Failed { message: error.to_string(), url: None });
-                        return;
-                    }
-                }
-                background.timer(std::time::Duration::from_secs(5)).await;
-            };
-
-            let (run_id, run_url) = (run.id, run.url.clone());
-            if run.state == kc_build::RunState::Failed {
-                let log = background
-                    .spawn(async move { kc_build::GitHub::new(token).failure(&owner, &name, run_id) })
-                    .await
-                    .unwrap_or_default();
-                status(&this, cx, BuildStatus::Failed {
-                    message: format!("The firmware did not build.\n{log}"),
-                    url: Some(run_url),
-                });
-                return;
-            }
-
-            status(&this, cx, BuildStatus::Working("Downloading the firmware…".into()));
-            let downloaded = background
-                .spawn(async move {
-                    let archives = kc_build::GitHub::new(token).artifacts(&owner, &name, run_id)?;
-                    let mut firmware = Vec::new();
-                    for archive in archives {
-                        firmware.extend(kc_build::extract_uf2(&archive)?);
-                    }
-                    Ok::<_, kc_build::BuildError>(firmware)
-                })
-                .await;
-            match downloaded {
-                Ok(firmware) if firmware.is_empty() => status(&this, cx, BuildStatus::Failed {
-                    message: "The build finished but produced no firmware files.".into(),
-                    url: Some(run_url),
-                }),
-                Ok(firmware) => {
-                    let count = firmware.len();
-                    let _ = this.update(cx, |this, cx| {
-                        let files = firmware.into_iter().map(|f| (f.name, f.bytes)).collect();
-                        this.flash.update(cx, |flash, cx| flash.set_firmware(files, cx));
-                        this.build = BuildStatus::Succeeded(format!(
-                            "Built {count} firmware file(s). Flash each half below."
-                        ));
-                        cx.notify();
-                    });
-                }
-                Err(error) => {
-                    status(&this, cx, BuildStatus::Failed { message: error.to_string(), url: Some(run_url) });
-                }
-            }
-        })
-        .detach();
-    }
-
     /// Why a keyboard that answered must not be updated from this project:
     /// it is saved as a different keyboard, or is not the device this
     /// keyboard is linked to. `None` when nothing speaks against it.
@@ -1901,7 +1638,7 @@ impl Workspace {
         match keyboards.linked_to(device) {
             Some(linked) if linked.id == ours.id => None,
             Some(linked) => Some(format!(
-                "The connected keyboard is saved as “{}”, but this project is open under “{}”. Open the project under “{}”, or connect “{}”.",
+                "The connected keyboard is saved as “{}”, but this layout is open under “{}”. Open the layout under “{}”, or connect “{}”.",
                 linked.name, ours.name, linked.name, ours.name
             )),
             None if ours.device.is_some() => Some(format!(
@@ -1912,52 +1649,42 @@ impl Workspace {
         }
     }
 
-    /// Asks before switching the keyboard, and so this project, to another
-    /// firmware.
-    fn request_firmware(&mut self, firmware: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Ok(preview) = preview_retarget(self.project(), &self.board, &firmware) else {
-            return;
-        };
-        let name = self
-            .board
-            .profile(&firmware)
-            .map_or_else(String::new, |p| p.name.clone());
-        let answer = window.prompt(
-            PromptLevel::Info,
-            &format!("Switch “{}” to {name}?", self.keyboard_name(cx)),
-            Some(&format!(
-                "This changes the firmware of the keyboard, for this and every project opened under it. {}",
-                preview.summary()
-            )),
-            &["Cancel", "Switch Firmware"],
-            cx,
-        );
-        cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update_in(cx, |this, window, cx| {
-                    this.set_firmware(&firmware, window, cx);
-                });
-            }
-        })
-        .detach();
-    }
-
-    fn set_firmware(&mut self, firmware: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let (keyboard, board) = (self.keyboard, self.board.clone());
-        let changed = self.library.update(cx, |library, cx| {
-            library.change(cx, |k| k.set_firmware(keyboard, &board, firmware))
-        });
-        if let Err(error) = changed {
-            self.notice = Some(format!("{error}."));
-            cx.notify();
-            return;
-        }
-        self.editor.set_firmware(firmware);
-        self.live = LiveStatus::Idle;
-        if !self.mode.available(&self.features()) {
-            self.mode = Mode::Keyboard;
-        }
-        self.after_change(window, cx);
+    /// Making this layout the one the board's firmware is built with.
+    fn render_apply(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (border, muted) = (theme.border, theme.muted_foreground);
+        let name = self.keyboard_name(cx);
+        let panel = div()
+            .w(px(640.))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .rounded_lg()
+            .border_1()
+            .border_color(border)
+            .child(div().text_lg().child(format!("Apply to “{name}”")))
+            .child(div().text_sm().text_color(muted).child(format!(
+                "Makes this the layout “{name}” is built with, saving it first, and takes you to the board's Build & Flash. The board's firmware and settings are not changed.",
+            )))
+            .child(
+                div().flex().child(
+                    Button::new("apply-layout")
+                        .primary()
+                        .label("Apply to Board")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.commit_inputs(cx);
+                            cx.emit(WorkspaceEvent::Apply);
+                        })),
+                ),
+            );
+        div()
+            .w_full()
+            .flex()
+            .justify_center()
+            .pt_6()
+            .pb_4()
+            .child(panel)
     }
 
     /// Looks for a connected keyboard and compares it with the project.
@@ -2034,7 +1761,7 @@ impl Workspace {
                         Ok(())
                     });
                     this.notice = Some(format!(
-                        "Read {count} key(s) from the keyboard into the project."
+                        "Read {count} key(s) from the keyboard into the layout."
                     ));
                     this.find_keyboard(cx);
                 }
@@ -2100,7 +1827,7 @@ impl Workspace {
                             let (send_port, read_port) = (found.port.clone(), found.port.clone());
                             let count = comparison.changes.len();
                             let summary = match (count, comparison.needs_build) {
-                                (0, 0) => "The keyboard matches the project.".to_string(),
+                                (0, 0) => "The keyboard matches the layout.".to_string(),
                                 (0, n) => format!("{n} key(s) differ in ways that need a firmware build."),
                                 (c, 0) => format!("{c} key(s) differ and can be sent now."),
                                 (c, n) => format!("{c} key(s) differ and can be sent now; {n} more need a firmware build."),
@@ -2144,92 +1871,6 @@ impl Workspace {
         div().w_full().flex().justify_center().pb_4().child(panel)
     }
 
-    fn render_build(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (border, muted, danger, success) = (
-            theme.border,
-            theme.muted_foreground,
-            theme.danger,
-            theme.success,
-        );
-        let working = matches!(self.build, BuildStatus::Working(_));
-        let repo = match self.repo_dir(cx) {
-            Some(dir) => dir.display().to_string(),
-            None => "No folder chosen".to_string(),
-        };
-        let panel = div()
-            .w(px(640.))
-            .flex()
-            .flex_col()
-            .gap_3()
-            .p_4()
-            .rounded_lg()
-            .border_1()
-            .border_color(border)
-            .child(div().text_lg().child("Build the firmware"))
-            .child(div().text_sm().text_color(muted).child(
-                "Your layout is pushed to a firmware repository on GitHub, which builds it. Choose the folder of that repository, or an empty folder to have a private one created.",
-            ))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().flex_1().text_sm().child(repo))
-                    .child(
-                        Button::new("choose-repo")
-                            .label("Choose Folder…")
-                            .on_click(cx.listener(|this, _, window, cx| this.choose_repo(window, cx))),
-                    )
-                    .when(!working, |row| {
-                        row.child(
-                            Button::new("build-firmware")
-                                .primary()
-                                .label("Build Firmware")
-                                .on_click(cx.listener(|this, _, _, cx| this.build_firmware(cx))),
-                        )
-                    }),
-            );
-        let panel = match &self.build {
-            BuildStatus::Idle => panel,
-            BuildStatus::Working(text) => panel.child(div().text_sm().child(text.clone())),
-            BuildStatus::Succeeded(text) => {
-                panel.child(div().text_sm().text_color(success).child(text.clone()))
-            }
-            BuildStatus::Failed { message, url } => {
-                let lines = message
-                    .lines()
-                    .map(|l| div().child(l.to_string()))
-                    .collect::<Vec<_>>();
-                panel
-                    .child(
-                        div()
-                            .id("build-failure")
-                            .max_h_48()
-                            .overflow_y_scroll()
-                            .text_xs()
-                            .text_color(danger)
-                            .children(lines),
-                    )
-                    .when_some(url.clone(), |panel, url| {
-                        panel.child(
-                            Button::new("open-run")
-                                .ghost()
-                                .label("Open on GitHub")
-                                .on_click(move |_, _, cx| cx.open_url(&url)),
-                        )
-                    })
-            }
-        };
-        div()
-            .w_full()
-            .flex()
-            .justify_center()
-            .pt_6()
-            .pb_4()
-            .child(panel)
-    }
-
     fn render_mode_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let muted = cx.theme().muted_foreground;
@@ -2260,9 +1901,6 @@ impl Workspace {
                     .text_color(muted)
                     .child(self.notice.clone().unwrap_or_default()),
             )
-            .child(chip("export", "Export ZMK Config…", false, cx).on_click(
-                cx.listener(|this, _, window, cx| this.export(&ExportConfig, window, cx)),
-            ))
     }
 
     /// Shows the key a problem is about, when it is about one.
@@ -2292,7 +1930,7 @@ impl Workspace {
         );
         let page = div().flex_1().min_h_0().flex().flex_col().gap_2().p_3();
 
-        let problems = validate(self.project(), &self.board);
+        let problems = validate(self.project(), &self.board, &self.config);
         let problem_rows = problems
             .iter()
             .enumerate()
@@ -2332,7 +1970,7 @@ impl Workspace {
                 .child(div().flex().flex_col().children(problem_rows))
         });
 
-        let files = match kc_emit::generate(self.project(), &self.board) {
+        let files = match kc_emit::generate(self.project(), &self.board, &self.config) {
             Ok(files) => files,
             Err(_) => {
                 return page.child(div().text_sm().text_color(muted).child(
@@ -2385,7 +2023,7 @@ impl Workspace {
     fn render_status(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted) = (theme.border, theme.muted_foreground);
-        let problems = validate(self.project(), &self.board);
+        let problems = validate(self.project(), &self.board, &self.config);
         let errors = problems
             .iter()
             .filter(|p| p.severity == Severity::Error)
@@ -2456,7 +2094,6 @@ impl Render for Workspace {
             .on_action(
                 cx.listener(|this, _: &Layer9, window, cx| this.show_layer_at(8, window, cx)),
             )
-            .on_action(cx.listener(Self::export))
             .on_action(cx.listener(|this, _: &ShowKeyboard, _, cx| {
                 this.mode = Mode::Keyboard;
                 cx.notify();
@@ -2466,7 +2103,7 @@ impl Render for Workspace {
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ShowFlash, _, cx| {
-                this.mode = Mode::Flash;
+                this.mode = Mode::Apply;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToggleAutoAdvance, _, cx| {
@@ -2506,19 +2143,18 @@ impl Render for Workspace {
                             .child(self.render_combos(cx))
                             .child(self.render_slot_picker(cx)),
                         Mode::Pointing => main.child(self.render_pointing(cx)),
-                        Mode::Settings => main.child(self.render_settings(cx)),
+                        Mode::Advanced => main.child(self.render_advanced(cx)),
                         Mode::Files => main.child(self.render_files(cx)),
-                        Mode::Flash => main.child(
+                        Mode::Apply => main.child(
                             div()
-                                .id("build-and-flash")
+                                .id("apply")
                                 .flex_1()
                                 .min_h_0()
                                 .overflow_y_scroll()
-                                .child(self.render_build(cx))
+                                .child(self.render_apply(cx))
                                 .when(self.features().contains(&Feature::Studio), |page| {
                                     page.child(self.render_live(cx))
-                                })
-                                .child(self.flash.clone()),
+                                }),
                         ),
                     })
                     .child(self.render_status(cx)),
@@ -2551,9 +2187,9 @@ mod tests {
             "Behaviors",
             "Combos",
             "Pointing",
-            "Settings",
+            "Advanced",
             "Generated Files",
-            "Build & Flash",
+            "Apply",
         ];
         assert_eq!(tabs("moergo-go60", "moergo-zmk-26.09"), without_lighting);
         assert_eq!(tabs("cyboard-imprint", "cyboard-zmk-0.3"), without_lighting);
@@ -2571,6 +2207,6 @@ mod tests {
         assert!(!Mode::Lighting.available(&[]));
         assert!(!Mode::Pointing.available(&[]));
         assert!(Mode::Keyboard.available(&[]));
-        assert!(Mode::Flash.available(&[]));
+        assert!(Mode::Apply.available(&[]));
     }
 }

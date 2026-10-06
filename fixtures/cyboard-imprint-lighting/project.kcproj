@@ -1,9 +1,8 @@
 {
-  "format": 1,
+  "format": 2,
   "name": "Imprint LED check",
   "board": "cyboard-imprint",
   "layout": "physical_layout_imprint_function_row_full_bottom_row",
-  "firmware": "kc-zmk-0.3-perkey",
   "key_count": 82,
   "layers": [
     {
@@ -647,7 +646,6 @@
       "palette": []
     }
   ],
-  "settings": {},
-  "raw": {"behaviors": "", "devicetree": "", "conf": ""},
+  "raw": {"behaviors": "", "devicetree": ""},
   "next_id": 6
 }
