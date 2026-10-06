@@ -1,10 +1,10 @@
 # keyboard-curator
 
-A native, open-source keymap, feature and per-key lighting editor for ZMK keyboards.
+A native, open-source keymap, feature and per-key lighting editor for programmable keyboards: ZMK first, with RMK and Dygma alongside.
 
 **Status: early development.** Keymap and behavior editing, per-key lighting, import, config generation, GitHub builds, guided flashing and direct updates over ZMK Studio are all built. The generated firmware configs are compiled in CI, but little has been tried on real keyboards yet.
 
-The first release targets macOS and two boards: the Cyboard Imprint (82-key, wireless) and the MoErgo Go60. More ZMK boards, Windows and Linux are planned afterward.
+The first release targets macOS and three boards: the Cyboard Imprint (82-key, wireless) and the MoErgo Go60, on ZMK or RMK, and the Dygma Defy on Dygma's own firmware. More boards, Windows and Linux are planned afterward.
 
 ## Building
 
@@ -26,9 +26,19 @@ cargo run -p kc-app -- my-layout.kcproj  # open a layout
 Configuration is in two levels. A **board** is one of your keyboards: its firmware and that firmware's settings. A **layout** is what the keys do, and a board can have any number of them.
 
 - **My Boards**: the welcome screen lists your boards. A board does not need to be connected, or even owned; one that is on USB can be linked so the app recognizes it.
-- **A board's page** has three parts. *Firmware* chooses the firmware and adjusts its settings. *Layouts* creates, opens and imports layouts, and marks the current one. *Build & Flash* pushes the config to a firmware repository on GitHub, waits for the build and flashes each half; it builds the board's settings with the current layout, or the factory layout if none has been applied. Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
-- **The layout editor** edits one layout: keys, layers, behaviors, combos, per-key colors, pointing, layer rules. It shows only what the board's firmware supports. *Apply* makes the layout the board's current one; with firmware built for ZMK Studio it can also send key changes over USB without a build.
+- **A board's page** has four parts. *Firmware* chooses the firmware, and for ZMK builds one from parts: a base plus add-ons from the ZMK community, each described with what it is for. *Settings* adjusts that firmware's settings. *Layouts* creates, opens and imports layouts, and marks the current one. The last part depends on the firmware: *Build & Flash* for firmware that is built, *Keyboard* for firmware configured on the keyboard itself.
+- **The layout editor** edits one layout: keys, layers, behaviors, combos, per-key colors, pointing, layer rules. It shows only what the board's firmware supports. *Apply* makes the layout the board's current one.
 - **Import a Keymap**, on a board's page, opens an existing `.keymap` file or a MoErgo Layout Editor export as a new layout. Firmware settings found with it are offered to the board.
+
+### Firmware families
+
+| Family | Boards | How a layout reaches the keyboard |
+|---|---|---|
+| ZMK | Imprint, Go60 | Generated config, built on GitHub, flashed as UF2. Key changes can also be sent over USB with ZMK Studio firmware. |
+| RMK (experimental) | Imprint, Go60 | Generated project, built on GitHub, flashed as UF2. On the Go60 it builds colonelpanic's moergo-rmk. Compiled, never flashed. |
+| Dygma | Defy | Written to the keyboard over USB, with no build. Reading is proven on a Defy; writing has only been run against a simulated keyboard. |
+
+Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
 
 `fixtures/` holds a generated config for each board. CI builds them with the real ZMK toolchain; after an intended change to the emitter, refresh them with `UPDATE_FIXTURES=1 cargo test -p kc-emit --test fixtures`.
 
@@ -39,9 +49,12 @@ A Cargo workspace under `crates/`. Only `kc-app` may depend on the GUI framework
 | Crate | Responsibility |
 |---|---|
 | `kc-model` | The layout: layers, bindings, behaviors, combos, macros, pointing, lighting; edit commands with undo/redo. Also the user's saved boards and their firmware settings |
-| `kc-zmk` | ZMK knowledge as data: keycodes, behavior catalog, Kconfig options |
+| `kc-zmk` | ZMK knowledge as data: keycodes, behavior catalog, Kconfig options, and the add-on catalog |
 | `kc-boards` | Board definitions: physical layouts, LED maps, firmware profiles |
 | `kc-emit` | Generates `.keymap`, `.conf`, `west.yml` and `build.yaml` |
+| `kc-rmk` | RMK keymaps and the project that builds them |
+| `kc-dygma` | Dygma's Focus protocol, and layouts to and from the keyboard |
+| `kc-firmware` | One front door to the firmware families |
 | `kc-import` | Imports existing `.keymap` files and MoErgo Layout Editor JSON |
 | `kc-build` | Firmware build back ends (GitHub Actions first) |
 | `kc-flash` | UF2 bootloader detection and flashing |
