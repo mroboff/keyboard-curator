@@ -224,6 +224,9 @@ pub struct Workspace {
     selection: Vec<usize>,
     hovered: Option<usize>,
     drag: Option<KeyDrag>,
+    /// The layer being dragged in the layer list, and the place in the
+    /// list it would take if let go of now.
+    layer_drop: Option<(LayerId, usize)>,
     /// A selection rectangle being dragged out, with the selection it adds to.
     band: Option<(Point<Pixels>, Point<Pixels>, Vec<usize>)>,
     canvas_bounds: Rc<Cell<Bounds<Pixels>>>,
@@ -273,6 +276,19 @@ pub(crate) fn chip(
             chip.bg(accent).text_color(accent_text).border_color(accent)
         })
         .when(!active, |chip| chip.hover(|chip| chip.bg(hover)))
+        .child(label.into())
+}
+
+/// A small outlined tag, such as the kind of a behavior.
+pub(crate) fn badge(label: impl Into<SharedString>, color: Hsla) -> Div {
+    div()
+        .px_1p5()
+        .rounded_md()
+        .border_1()
+        .border_color(color.opacity(0.4))
+        .text_xs()
+        .text_color(color)
+        .flex_shrink_0()
         .child(label.into())
 }
 
@@ -397,6 +413,7 @@ impl Workspace {
             selection: Vec::new(),
             hovered: None,
             drag: None,
+            layer_drop: None,
             band: None,
             canvas_bounds: Rc::new(Cell::new(Bounds::default())),
             canvas_focus: cx.focus_handle(),
@@ -1020,6 +1037,24 @@ impl Workspace {
         });
     }
 
+    /// Notes where a dragged layer would land, so the list can show it.
+    fn aim_layer(&mut self, layer: LayerId, index: usize, cx: &mut Context<Self>) {
+        if self.layer_drop != Some((layer, index)) {
+            self.layer_drop = Some((layer, index));
+            cx.notify();
+        }
+    }
+
+    /// Puts a dragged layer where the list was showing it would go.
+    fn drop_layer(&mut self, layer: LayerId, window: &mut Window, cx: &mut Context<Self>) {
+        match self.layer_drop.take() {
+            Some((aimed, index)) if aimed == layer => {
+                self.move_layer_to(layer, index, window, cx);
+            }
+            _ => cx.notify(),
+        }
+    }
+
     fn tag_layer(&mut self, tag: Option<Rgb>, window: &mut Window, cx: &mut Context<Self>) {
         let layer = self.layer;
         self.edit_layers("Tag Layer", window, cx, |p| {
@@ -1128,13 +1163,28 @@ impl Workspace {
             theme.primary_foreground,
             theme.secondary,
         );
-        let rows = self
-            .project()
-            .layers
-            .iter()
+        // While a layer is dragged, the list is drawn in the order a drop
+        // would give: the other layers have moved out of the way, and a
+        // shaded slot shows where the dragged layer would land. A drag let
+        // go of elsewhere leaves the aim behind, so it only counts while a
+        // drag is going on.
+        let aim = self.layer_drop.filter(|_| cx.has_active_drag());
+        let mut order: Vec<&kc_model::Layer> = self.project().layers.iter().collect();
+        if let Some((dragged, index)) = aim {
+            if let Some(from) = order.iter().position(|l| l.id == dragged) {
+                let layer = order.remove(from);
+                order.insert(index.min(order.len()), layer);
+            }
+        }
+        let workspace = cx.weak_entity();
+        let rows = order
+            .into_iter()
             .enumerate()
             .map(|(index, layer)| {
-                let (id, active) = (layer.id, layer.id == self.layer);
+                let id = layer.id;
+                let slot = aim.is_some_and(|(dragged, _)| dragged == id);
+                let active = id == self.layer && !slot;
+                let workspace = workspace.clone();
                 div()
                     .id(("layer", layer.id.0 as usize))
                     .flex()
@@ -1143,9 +1193,19 @@ impl Workspace {
                     .px_3()
                     .py_1p5()
                     .rounded_md()
+                    .border_1()
+                    .border_color(transparent_black())
                     .cursor_pointer()
+                    .when(slot, |row| {
+                        row.bg(hover)
+                            .border_dashed()
+                            .border_color(accent)
+                            .text_color(muted)
+                    })
                     .when(active, |row| row.bg(accent).text_color(accent_text))
-                    .when(!active, |row| row.hover(|row| row.bg(hover)))
+                    .when(!active && !slot && aim.is_none(), |row| {
+                        row.hover(|row| row.bg(hover))
+                    })
                     .child(
                         div()
                             .w_5()
@@ -1165,11 +1225,30 @@ impl Workspace {
                             id,
                             name: layer.name.clone().into(),
                         },
-                        |dragged, _, _, cx| cx.new(|_| dragged.clone()),
+                        move |dragged, _, _, cx| {
+                            // The slot shows from the first moment, where
+                            // the layer already is.
+                            let _ = workspace.update(cx, |this, cx| {
+                                this.aim_layer(id, index, cx);
+                            });
+                            cx.new(|_| dragged.clone())
+                        },
                     )
+                    // Every row hears every move of a drag, so each
+                    // answers only for the pointer being over it. Rows are
+                    // all one height, so the slot settles under the pointer.
+                    .on_drag_move(cx.listener(
+                        move |this, event: &DragMoveEvent<DraggedLayer>, _, cx| {
+                            if event.bounds.contains(&event.event.position) {
+                                let dragged = event.drag(cx).id;
+                                this.aim_layer(dragged, index, cx);
+                            }
+                        },
+                    ))
                     .on_drop(
                         cx.listener(move |this, dragged: &DraggedLayer, window, cx| {
-                            this.move_layer_to(dragged.id, index, window, cx);
+                            this.aim_layer(dragged.id, index, cx);
+                            this.drop_layer(dragged.id, window, cx);
                         }),
                     )
             })
@@ -1223,7 +1302,12 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .gap_0p5()
-                    .children(rows),
+                    .children(rows)
+                    // Let go between rows or below the last one: the layer
+                    // goes where the slot was last shown.
+                    .on_drop(cx.listener(|this, dragged: &DraggedLayer, window, cx| {
+                        this.drop_layer(dragged.id, window, cx);
+                    })),
             )
             .child(
                 div()
@@ -1407,6 +1491,7 @@ impl Workspace {
                     .min_w_10()
                     .px_2()
                     .flex()
+                    .flex_col()
                     .items_center()
                     .justify_center()
                     .rounded_md()
@@ -1418,6 +1503,11 @@ impl Workspace {
                     })
                     .when(!enabled, |cell| cell.text_color(muted))
                     .child(item.label)
+                    // A behavior the user named says what kind it is.
+                    .when_some(item.kind, |cell, kind| {
+                        cell.h_12()
+                            .child(div().text_xs().text_color(muted).child(kind))
+                    })
                     .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                         this.hint = hovered.then(|| description.clone());
                         cx.notify();
@@ -1543,6 +1633,40 @@ impl Workspace {
                         n => format!("{n} keys selected. Changes apply to all of them."),
                     }),
             );
+
+        // A key that uses one of the user's own behaviors says which kind
+        // it is, since the name alone does not.
+        let own = match binding {
+            Binding::Behavior {
+                behavior: kc_model::BehaviorRef::User { user },
+                ..
+            } => self.project().behavior(*user),
+            _ => None,
+        };
+        if let Some(def) = own {
+            let id = def.id;
+            panel = panel
+                .child(section_title("BEHAVIOR", cx))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(div().flex_1().min_w_0().text_sm().child(def.name.clone()))
+                        .child(badge(def.kind.name(), cx.theme().foreground)),
+                )
+                .child(div().text_xs().text_color(muted).child(def.kind.summary()))
+                .when(Mode::Behaviors.available(&self.features()), |panel| {
+                    panel.child(div().flex().child(
+                        chip("edit-behavior", "Edit Behavior", false, cx).on_click(cx.listener(
+                            move |this, _, window, cx| {
+                                this.behavior = Some(id);
+                                this.set_mode(Mode::Behaviors, window, cx);
+                            },
+                        )),
+                    ))
+                });
+        }
 
         let arguments = edit::command_args(binding);
         if !arguments.is_empty() {

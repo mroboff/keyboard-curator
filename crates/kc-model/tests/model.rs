@@ -746,6 +746,15 @@ fn the_picker_offers_what_the_firmware_supports() {
     );
     assert_eq!(find("Left click").unwrap().group, PickerGroup::Mouse);
     assert_eq!(find("Nav tap-dance").unwrap().group, PickerGroup::Custom);
+    // A behavior the user named says what kind it is; built-in keys do not
+    // need to.
+    assert_eq!(find("Nav tap-dance").unwrap().kind, Some("Tap-dance"));
+    assert!(find("Nav tap-dance").unwrap().matches("tap-dance tapped"));
+    assert_eq!(find("A").unwrap().kind, None);
+    for def in &p.behaviors {
+        assert_eq!(find(&def.name).unwrap().kind, Some(def.kind.name()));
+        assert!(!def.kind.summary().is_empty());
+    }
     assert!(find("Transparent").is_some() && find("Bootloader").is_some());
     // MoErgo's status command is offered on the Go60; backlight is not.
     assert!(find("RGB STATUS").is_some());

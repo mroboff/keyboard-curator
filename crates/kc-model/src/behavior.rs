@@ -32,6 +32,34 @@ pub enum BehaviorKind {
 }
 
 impl BehaviorKind {
+    /// What this kind of behavior is called.
+    pub fn name(&self) -> &'static str {
+        match self {
+            BehaviorKind::HoldTap(_) => "Hold-tap",
+            BehaviorKind::TapDance(_) => "Tap-dance",
+            BehaviorKind::ModMorph(_) => "Mod-morph",
+            BehaviorKind::StickyKey(_) => "Sticky key",
+            BehaviorKind::Macro(_) => "Macro",
+        }
+    }
+
+    /// One sentence on what this kind of behavior does.
+    pub fn summary(&self) -> &'static str {
+        match self {
+            BehaviorKind::HoldTap(_) => "Does one thing when tapped and another when held.",
+            BehaviorKind::TapDance(_) => {
+                "Does something different depending on how many times it is tapped."
+            }
+            BehaviorKind::ModMorph(_) => {
+                "Sends one key normally and another while chosen modifiers are held."
+            }
+            BehaviorKind::StickyKey(_) => {
+                "Stays in effect after it is let go, until the next key is pressed."
+            }
+            BehaviorKind::Macro(_) => "Plays a sequence of key presses.",
+        }
+    }
+
     /// How many parameters a binding to this behavior takes.
     pub fn param_count(&self) -> usize {
         match self {

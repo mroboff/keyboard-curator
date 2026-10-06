@@ -74,6 +74,9 @@ pub struct PickerItem {
     /// A plain-language description of what the key will do.
     pub description: String,
     pub binding: Binding,
+    /// For a behavior the user defined, what kind it is ("Hold-tap"), so
+    /// that a name alone does not have to say.
+    pub kind: Option<&'static str>,
     /// Lower-case text that a search is matched against.
     search: String,
 }
@@ -93,8 +96,14 @@ impl PickerItem {
             label,
             description,
             binding,
+            kind: None,
             search,
         }
+    }
+
+    fn of_kind(mut self, kind: &'static str) -> Self {
+        self.kind = Some(kind);
+        self
     }
 
     /// Whether every word of `query` appears somewhere in this item.
@@ -284,31 +293,31 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
         behavior_items(project, def, features, &mut items);
     }
     for def in &project.behaviors {
-        let what = match def.kind {
-            BehaviorKind::Macro(_) => "Macro",
-            BehaviorKind::TapDance(_) => "Tap-dance",
-            BehaviorKind::ModMorph(_) => "Mod-morph",
-            BehaviorKind::HoldTap(_) => "Hold-tap",
-            BehaviorKind::StickyKey(_) => "Sticky key",
-        };
-        items.push(PickerItem::new(
-            PickerGroup::Custom,
-            def.name.clone(),
-            format!("{what}: {}", def.name),
-            Binding::user(def.id, default_params(project, &def.kind)),
-            &def.label,
-        ));
+        let what = def.kind.name();
+        items.push(
+            PickerItem::new(
+                PickerGroup::Custom,
+                def.name.clone(),
+                format!("{what}: {}. {}", def.name, def.kind.summary()),
+                Binding::user(def.id, default_params(project, &def.kind)),
+                &def.label,
+            )
+            .of_kind(what),
+        );
     }
     for (label, cells) in raw_behaviors(&project.raw.behaviors) {
-        items.push(PickerItem::new(
-            PickerGroup::Custom,
-            label.clone(),
-            format!("Custom behavior &{label}"),
-            Binding::Raw {
-                raw: format!("&{label}{}", " 0".repeat(cells)),
-            },
-            "custom raw",
-        ));
+        items.push(
+            PickerItem::new(
+                PickerGroup::Custom,
+                label.clone(),
+                format!("Custom behavior &{label}, written by hand under Advanced"),
+                Binding::Raw {
+                    raw: format!("&{label}{}", " 0".repeat(cells)),
+                },
+                "custom raw",
+            )
+            .of_kind("Hand-written"),
+        );
     }
     items
 }

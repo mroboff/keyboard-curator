@@ -14,7 +14,7 @@ use kc_model::text::{format_binding, LayerStyle};
 use kc_model::{BehaviorId, BehaviorRef, Binding, KeyExpr, ModelError, Slot};
 use kc_zmk::Modifier;
 
-use super::{chip, section_title, Workspace};
+use super::{badge, chip, section_title, Workspace};
 use crate::canvas::{self, Frame, Palette};
 
 /// The built-in behaviors a hold-tap or sticky key can wrap.
@@ -236,12 +236,13 @@ impl Workspace {
 
     fn render_behavior_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted, accent, accent_text, hover) = (
+        let (border, muted, accent, accent_text, hover, foreground) = (
             theme.border,
             theme.muted_foreground,
             theme.primary,
             theme.primary_foreground,
             theme.secondary,
+            theme.foreground,
         );
         let rows = self
             .project()
@@ -249,28 +250,32 @@ impl Workspace {
             .iter()
             .map(|def| {
                 let (id, active) = (def.id, Some(def.id) == self.behavior);
-                let kind = match def.kind {
-                    BehaviorKind::HoldTap(_) => "Hold-tap",
-                    BehaviorKind::TapDance(_) => "Tap-dance",
-                    BehaviorKind::ModMorph(_) => "Mod-morph",
-                    BehaviorKind::StickyKey(_) => "Sticky key",
-                    BehaviorKind::Macro(_) => "Macro",
-                };
+                let tag = if active { accent_text } else { foreground };
                 div()
                     .id(("behavior", id.0 as usize))
                     .px_3()
                     .py_1p5()
                     .rounded_md()
                     .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .gap_2()
                     .when(active, |row| row.bg(accent).text_color(accent_text))
                     .when(!active, |row| row.hover(|row| row.bg(hover)))
-                    .child(div().text_sm().child(def.name.clone()))
                     .child(
                         div()
-                            .text_xs()
-                            .when(!active, |d| d.text_color(muted))
-                            .child(format!("{kind} · &{}", def.label)),
+                            .flex_1()
+                            .min_w_0()
+                            .child(div().text_sm().child(def.name.clone()))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .when(!active, |d| d.text_color(muted))
+                                    .child(format!("&{}", def.label)),
+                            ),
                     )
+                    // What kind of behavior it is, set apart from its name.
+                    .child(badge(def.kind.name(), tag))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.behavior = Some(id);
                         this.slot = None;
@@ -1057,7 +1062,16 @@ impl Workspace {
                     BehaviorKind::StickyKey(s) => self.render_sticky(s, cx),
                     BehaviorKind::Macro(m) => self.render_macro(id, m, cx),
                 };
+                // First, what kind of behavior this is and what that means.
                 form.child(
+                    div()
+                        .flex()
+                        .items_baseline()
+                        .gap_3()
+                        .child(div().text_lg().child(def.kind.name()))
+                        .child(div().flex_1().text_sm().text_color(muted).child(def.kind.summary())),
+                )
+                .child(
                     div()
                         .flex()
                         .items_end()
