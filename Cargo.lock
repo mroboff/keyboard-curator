@@ -3710,6 +3710,7 @@ dependencies = [
  "kc-dygma",
  "kc-emit",
  "kc-model",
+ "kc-rmk",
  "thiserror 2.0.21",
 ]
 
@@ -3742,6 +3743,16 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "kc-rmk"
+version = "0.1.0"
+dependencies = [
+ "kc-boards",
+ "kc-model",
+ "kc-zmk",
+ "toml 1.1.6+spec-1.1.0",
 ]
 
 [[package]]

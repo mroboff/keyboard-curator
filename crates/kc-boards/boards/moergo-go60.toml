@@ -122,6 +122,33 @@ board = "go60_lh"
 side = "right"
 board = "go60_rh"
 
+# colonelpanic's moergo-rmk (https://github.com/colonelpanic8/moergo-rmk,
+# MIT): RMK with lighting, the Cirque touchpads and a status layer for
+# MoErgo's boards, on its own fork of RMK. It is the firmware Moosy
+# Research's TailorKey for RMK is built on. It has its own project for the
+# Go60, so the app supplies only the keymap, in the same key order as this
+# board's layout, and builds inside that project at a pinned commit.
+[[firmware]]
+id = "moergo-rmk"
+name = "RMK for MoErgo (community)"
+family = "rmk"
+experimental = true
+config_name = "go60"
+notes = [
+  "A different firmware from ZMK: colonelpanic's moergo-rmk, the community firmware behind Moosy Research's TailorKey for RMK. It adds RGB with animations, the touchpads and a status layer. It is not MoErgo firmware, and MoErgo does not support it.",
+  "For now this app supplies the keys only: plain keys, layers, mod-taps, layer-taps, sticky keys and combos. Lighting, touchpad and home-row-mod settings stay at that firmware's defaults, and hold-taps, macros and tap-dances defined in a layout are flagged.",
+  "Its authors describe it as experimental, and its Go60 image nearly fills the flash, so a large layout may fail to build. A generated keymap has been checked to be accepted by that firmware and to compile; a complete build and a real keyboard have not been tried. Keep MoErgo's firmware files at hand to go back.",
+]
+
+[firmware.rmk]
+flavor = "moergo-rmk"
+source = { url = "https://github.com/colonelpanic8/moergo-rmk", revision = "179bd66bb45f8a12bb8ee2501f592923b023b7d0" }
+ble_profiles = 3
+project_dir = "crates/go60-rmk"
+# That project's lighting and status settings refer to layers by number,
+# up to the sixteen its keymap declares.
+layers = 16
+
 [[layouts]]
 id = "physical_layout0"
 name = "Go60"

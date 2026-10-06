@@ -479,7 +479,11 @@ fn a_layout_builds_with_any_firmware_of_its_board() {
     // firmware is in the layout, so it needs no change to move.
     let go60 = board("moergo-go60");
     let project = Project::from_template("Shared", &go60);
-    for profile in &go60.firmware {
+    let zmk = go60
+        .firmware
+        .iter()
+        .filter(|p| p.family == kc_boards::Family::Zmk);
+    for profile in zmk {
         let files = generate(&project, &go60, &FirmwareConfig::new(profile.id.clone())).unwrap();
         assert!(file(&files, "config/west.yml").contains(&profile.zmk.as_ref().unwrap().url));
     }

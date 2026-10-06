@@ -1541,7 +1541,7 @@ impl BoardPage {
                         div().flex().child(
                             Button::new("export-config")
                                 .ghost()
-                                .label("Export ZMK Config…")
+                                .label("Export Firmware Config…")
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.export(window, cx);
                                 })),

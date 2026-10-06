@@ -68,7 +68,7 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Save", Save),
             MenuItem::action("Save As…", SaveAs),
             MenuItem::separator(),
-            MenuItem::action("Export ZMK Config…", ExportConfig),
+            MenuItem::action("Export Firmware Config…", ExportConfig),
             MenuItem::separator(),
             MenuItem::action("Close", CloseProject),
         ]),

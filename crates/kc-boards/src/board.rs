@@ -210,7 +210,8 @@ impl Family {
                 Build, Combos, LayerRules, Macros, TapDance, ModMorph, HoldTaps, StickyKeys,
                 Devicetree,
             ],
-            Family::Rmk => &[Build, Combos, Macros, TapDance],
+            // Behaviors defined in a layout are not translated to RMK yet.
+            Family::Rmk => &[Build, Combos],
             // Dygma's superkeys and macros are kept as the keyboard has
             // them, and are not edited yet.
             Family::Dygma => &[],
@@ -260,8 +261,55 @@ pub struct FirmwareProfile {
     /// How this board's keys and lights are laid out in Dygma's firmware.
     /// Dygma only, and required for it.
     pub dygma: Option<DygmaProfile>,
+    /// What an RMK build for this board is made from. RMK only, and
+    /// required for it.
+    pub rmk: Option<RmkProfile>,
     #[serde(default)]
     pub builds: Vec<BuildTarget>,
+}
+
+/// How an RMK firmware for a board is put together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RmkFlavor {
+    /// RMK itself: the app generates the whole project.
+    Upstream,
+    /// A firmware built on RMK that has its own project for the board; the
+    /// app supplies the keymap.
+    MoergoRmk,
+}
+
+/// What an RMK build for a board is made from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RmkProfile {
+    pub flavor: RmkFlavor,
+    /// Where RMK, or the firmware built on it, comes from.
+    pub source: Source,
+    /// How many Bluetooth profiles the firmware keeps, which decides the
+    /// numbering of its profile keys.
+    pub ble_profiles: u8,
+    /// `keyboard.toml` up to the keymap: the keyboard's identity, matrix,
+    /// split halves and input devices. For the upstream flavor.
+    #[serde(default)]
+    pub hardware: String,
+    /// Where the firmware starts in flash, and how much it may take. Kept
+    /// to the vendor's own layout, so that the vendor's firmware can be
+    /// flashed again. For the upstream flavor.
+    #[serde(default)]
+    pub flash_origin: u32,
+    #[serde(default)]
+    pub flash_length: u32,
+    /// The board's project inside the source repository. For flavors that
+    /// build inside one.
+    #[serde(default)]
+    pub project_dir: String,
+    /// How many layers the keymap must declare, when the firmware's own
+    /// configuration counts on a fixed number. A layout with fewer is
+    /// filled out with see-through layers. Zero means as many as the
+    /// layout has.
+    #[serde(default)]
+    pub layers: usize,
 }
 
 /// Where a board's keys and lights sit in Dygma's firmware, which stores a
@@ -358,6 +406,8 @@ pub enum BoardError {
     IncompleteZmk(String),
     #[error("Dygma firmware profile `{0}` needs a `dygma` section giving every key of the default layout a different slot and light, within range")]
     BadDygma(String),
+    #[error("RMK firmware profile `{0}` needs an `rmk` section and a `config_name`")]
+    IncompleteRmk(String),
     #[error("starter_keys has {found} entries, but the default layout has {keys} keys")]
     StarterKeyCount { found: usize, keys: usize },
     #[error("starter key `{0}` is not a ZMK keycode")]
@@ -506,6 +556,20 @@ impl Board {
                     || profile.builds.is_empty())
             {
                 return Err(BoardError::IncompleteZmk(profile.id.clone()));
+            }
+            if profile.family == Family::Rmk {
+                let sound = !profile.config_name.is_empty()
+                    && profile.rmk.as_ref().is_some_and(|rmk| match rmk.flavor {
+                        RmkFlavor::Upstream => {
+                            !rmk.hardware.trim().is_empty()
+                                && rmk.flash_origin > 0
+                                && rmk.flash_length > 0
+                        }
+                        RmkFlavor::MoergoRmk => !rmk.project_dir.is_empty(),
+                    });
+                if !sound {
+                    return Err(BoardError::IncompleteRmk(profile.id.clone()));
+                }
             }
             if profile.family == Family::Dygma {
                 let keys = self

@@ -2283,6 +2283,12 @@ mod tests {
         assert!(!Mode::Behaviors.available(&[]));
         assert!(!Mode::Files.available(&[]));
 
+        // RMK builds from generated files, and has combos; behaviors
+        // defined in a layout are not translated to it yet.
+        assert_eq!(
+            tabs("cyboard-imprint", "rmk-0.9"),
+            ["Keyboard", "Combos", "Generated Files", "Apply"]
+        );
         // Dygma's firmware is configured live: keys and colors, no files.
         assert_eq!(
             tabs("dygma-defy", "dygma-defy"),

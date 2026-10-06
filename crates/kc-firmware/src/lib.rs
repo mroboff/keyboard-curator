@@ -10,7 +10,7 @@
 pub use kc_boards::{Delivery, Family};
 pub use kc_emit::GeneratedFile;
 
-use kc_boards::board::DygmaProfile;
+use kc_boards::board::{DygmaProfile, RmkProfile};
 use kc_boards::Board;
 use kc_model::{Binding, FirmwareConfig, Problem, Project, Severity};
 
@@ -32,7 +32,13 @@ pub enum FirmwareError {
 pub fn check(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<Problem> {
     let mut problems = kc_model::validate(project, board, config);
     match config.family(board) {
-        Family::Zmk | Family::Rmk => {}
+        Family::Zmk => {}
+        Family::Rmk => {
+            problems.retain(|p| p.severity == Severity::Error);
+            if let Some(rmk) = rmk(board, config) {
+                problems.extend(kc_rmk::check(project, rmk));
+            }
+        }
         Family::Dygma => {
             // The general check's advice is about ZMK builds; only what is
             // wrong with the layout itself carries over.
@@ -43,6 +49,10 @@ pub fn check(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<P
         }
     }
     problems
+}
+
+fn rmk<'a>(board: &'a Board, config: &FirmwareConfig) -> Option<&'a RmkProfile> {
+    board.profile(&config.profile)?.rmk.as_ref()
 }
 
 fn dygma<'a>(board: &'a Board, config: &FirmwareConfig) -> Option<&'a DygmaProfile> {
@@ -58,7 +68,10 @@ pub fn expressible(
     config: &FirmwareConfig,
 ) -> bool {
     match config.family(board) {
-        Family::Zmk | Family::Rmk => true,
+        Family::Zmk => true,
+        Family::Rmk => {
+            rmk(board, config).is_none_or(|rmk| kc_rmk::expressible(binding, project, rmk))
+        }
         Family::Dygma => kc_dygma::expressible(binding, project),
     }
 }
@@ -167,9 +180,20 @@ pub fn generate(
             kc_emit::EmitError::Invalid(problems) => FirmwareError::Invalid(problems),
             other => FirmwareError::Other(other.to_string()),
         }),
-        Family::Rmk => Err(FirmwareError::Other(
-            "RMK firmware generation is not available yet".into(),
-        )),
+        Family::Rmk => {
+            let problems = errors(project, board, config);
+            if !problems.is_empty() {
+                return Err(FirmwareError::Invalid(problems));
+            }
+            let profile = board
+                .profile(&config.profile)
+                .ok_or_else(|| FirmwareError::Other("the board has no such firmware".into()))?;
+            let files = kc_rmk::generate(project, board, profile).map_err(FirmwareError::Other)?;
+            Ok(files
+                .into_iter()
+                .map(|(path, contents)| GeneratedFile { path, contents })
+                .collect())
+        }
         Family::Dygma => Err(FirmwareError::NoBuild(family.name())),
     }
 }
