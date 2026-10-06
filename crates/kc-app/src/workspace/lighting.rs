@@ -264,34 +264,9 @@ impl Workspace {
     pub(super) fn render_lighting(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let muted = theme.muted_foreground;
+        // The Lighting tab is not offered without support, so this is only
+        // seen if the firmware changes while the mode is showing.
         if !self.lighting_supported() {
-            let alternatives = self
-                .board
-                .firmware
-                .iter()
-                .filter(|f| f.lighting.is_some())
-                .map(|f| {
-                    let id = f.id.clone();
-                    chip(
-                        ("switch-firmware", id.len()),
-                        format!("Switch to {}", f.name),
-                        false,
-                        cx,
-                    )
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        let id = id.clone();
-                        this.change("Change Firmware", window, cx, |p| {
-                            p.firmware = id;
-                            Ok(())
-                        });
-                    }))
-                })
-                .collect::<Vec<_>>();
-            let explanation = if alternatives.is_empty() {
-                "Per-key colours need firmware support that is not available for this keyboard yet."
-            } else {
-                "Per-key colours need a community firmware that is still experimental. Switching changes which firmware your layout is built with; you can switch back in Settings."
-            };
             return div()
                 .flex_1()
                 .min_h_0()
@@ -302,14 +277,9 @@ impl Workspace {
                 .gap_3()
                 .p_6()
                 .child(div().text_lg().child("Per-key lighting"))
-                .child(
-                    div()
-                        .max_w(px(560.))
-                        .text_sm()
-                        .text_color(muted)
-                        .child(explanation),
-                )
-                .children(alternatives);
+                .child(div().max_w(px(560.)).text_sm().text_color(muted).child(
+                    "This keyboard's firmware has no per-key colours. The firmware is chosen in Settings.",
+                ));
         }
 
         let palette = Palette {

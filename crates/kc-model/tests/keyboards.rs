@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use kc_boards::Board;
 use kc_model::features::{KeyLight, Rgb, SettingValue};
 use kc_model::keyboards::{
-    hidden, preview_retarget, retarget, Fit, KeyboardError, KeyboardsFileError,
+    hidden, preview_retarget, retarget, Fit, KeyboardError, KeyboardsFileError, Placement,
 };
-use kc_model::{validate, Binding, Device, Keyboards, Param, Project, Severity};
+use kc_model::{validate, Binding, Device, Editor, Keyboards, Param, Project, Severity};
 use kc_zmk::Feature;
 
 const GO60_STOCK: &str = "moergo-zmk-26.09";
@@ -244,6 +244,10 @@ fn retargeting_hides_what_the_firmware_lacks_and_loses_nothing() {
 
     let preview = preview_retarget(&project, &go60, GO60_STOCK).unwrap();
     assert!(preview.hidden.lighting);
+    assert_eq!(
+        preview.summary(),
+        "Per-key colours will be hidden. Hidden parts stay in the project and return with a firmware that has them."
+    );
     assert!(!preview.hidden.pointing);
     assert_eq!(preview.flagged, 0);
     // Previewing changes nothing.
@@ -260,6 +264,10 @@ fn retargeting_hides_what_the_firmware_lacks_and_loses_nothing() {
     // Going back shows the colours again, with nothing hidden.
     let back = preview_retarget(&project, &go60, GO60_PERKEY).unwrap();
     assert!(back.hidden.is_empty());
+    assert_eq!(
+        back.summary(),
+        "Everything in the project works with this firmware."
+    );
     retarget(&mut project, &go60, GO60_PERKEY).unwrap();
     assert_eq!(project, before);
 
@@ -297,6 +305,10 @@ fn retargeting_flags_keys_the_firmware_cannot_build() {
     let preview = preview_retarget(&project, &go60, GO60_PERKEY).unwrap();
     // Only the Studio key is new trouble; underglow exists on both.
     assert_eq!(preview.flagged, 1);
+    assert_eq!(
+        preview.summary(),
+        "One key or behaviour uses a feature this firmware lacks and will be flagged."
+    );
     assert!(preview.hidden.is_empty());
 }
 
@@ -317,4 +329,92 @@ fn hidden_lists_settings_and_pointing_the_firmware_lacks() {
     assert!(bare.pointing);
     assert!(!bare.lighting);
     assert_eq!(bare.settings.len(), 1);
+}
+
+#[test]
+fn the_editor_changes_firmware_outside_the_undo_history() {
+    let go60 = board("moergo-go60");
+    let mut project = Project::new("Mine", &go60);
+    project.firmware = GO60_STOCK.into();
+    let mut editor = Editor::new(project);
+    editor.mark_saved();
+    editor
+        .edit("Add Layer", |p| p.add_layer("Nav").map(|_| ()))
+        .unwrap();
+    editor.mark_saved();
+
+    // The firmware the project already has changes nothing.
+    editor.set_firmware(GO60_STOCK);
+    assert!(!editor.is_dirty());
+
+    editor.set_firmware(GO60_PERKEY);
+    assert_eq!(editor.project().firmware, GO60_PERKEY);
+    assert!(editor.is_dirty());
+
+    // Undo and redo move through the edits, never back to the old firmware.
+    assert_eq!(editor.undo().as_deref(), Some("Add Layer"));
+    assert_eq!(editor.project().firmware, GO60_PERKEY);
+    assert_eq!(editor.project().layers.len(), 1);
+    assert!(editor.is_dirty());
+    editor.redo();
+    assert_eq!(editor.project().firmware, GO60_PERKEY);
+    assert!(editor.is_dirty());
+
+    editor.mark_saved();
+    assert!(!editor.is_dirty());
+}
+
+#[test]
+fn projects_are_placed_under_the_right_keyboard() {
+    let go60 = board("moergo-go60");
+    let imprint = board("cyboard-imprint");
+    let mut project = Project::new("Mine", &go60);
+    project.firmware = GO60_STOCK.into();
+
+    let mut keyboards = Keyboards::default();
+    assert_eq!(keyboards.place(&project, None), Placement::NoKeyboard);
+
+    let other = keyboards
+        .add("Imprint", &imprint, "cyboard-zmk-0.3")
+        .unwrap();
+    assert_eq!(keyboards.place(&project, None), Placement::NoKeyboard);
+    assert_eq!(
+        keyboards.place(&project, Some(other)),
+        Placement::NoKeyboard
+    );
+
+    // The only keyboard of the board is used, switching firmware if needed.
+    let lit = keyboards.add("Lit", &go60, GO60_PERKEY).unwrap();
+    assert_eq!(keyboards.place(&project, None), Placement::Retarget(lit));
+    assert_eq!(
+        keyboards.place(&project, Some(other)),
+        Placement::Retarget(lit)
+    );
+
+    // An exact fit wins over one that needs retargeting...
+    let stock = keyboards.add("Stock", &go60, GO60_STOCK).unwrap();
+    assert_eq!(keyboards.place(&project, None), Placement::Open(stock));
+    // ...unless another keyboard the project suits is the one selected.
+    assert_eq!(
+        keyboards.place(&project, Some(lit)),
+        Placement::Retarget(lit)
+    );
+    assert_eq!(
+        keyboards.place(&project, Some(stock)),
+        Placement::Open(stock)
+    );
+
+    // Two exact fits: the user chooses between those two only.
+    let second = keyboards.add("Stock 2", &go60, GO60_STOCK).unwrap();
+    assert_eq!(
+        keyboards.place(&project, None),
+        Placement::Choose(vec![(stock, Fit::Exact), (second, Fit::Exact)])
+    );
+
+    // A selection that no longer exists is ignored.
+    keyboards.remove(second).unwrap();
+    assert_eq!(
+        keyboards.place(&project, Some(second)),
+        Placement::Open(stock)
+    );
 }

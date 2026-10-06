@@ -10,6 +10,10 @@ use crate::project::{ModelError, Project};
 /// The most undo steps kept.
 const HISTORY_LIMIT: usize = 500;
 
+/// A saved revision no project state has, for changes made outside the
+/// undo history.
+const UNSAVED: u64 = u64::MAX;
+
 #[derive(Debug, Clone)]
 struct Snapshot {
     label: String,
@@ -135,6 +139,21 @@ impl Editor {
 
     pub fn redo_label(&self) -> Option<&str> {
         self.redo.last().map(|s| s.label.as_str())
+    }
+
+    /// Switches the project to another firmware, in every step of its
+    /// history too: the firmware belongs to the keyboard the project is
+    /// open under, so undo never brings the old one back. The project then
+    /// differs from what is on disk.
+    pub fn set_firmware(&mut self, firmware: &str) {
+        if self.project.firmware == firmware {
+            return;
+        }
+        let history = self.undo.iter_mut().chain(&mut self.redo);
+        for project in std::iter::once(&mut self.project).chain(history.map(|s| &mut s.project)) {
+            project.firmware = firmware.to_string();
+        }
+        self.saved_revision = UNSAVED;
     }
 
     /// Records that the project as it stands now is what is on disk.

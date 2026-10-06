@@ -2,19 +2,41 @@
 
 use std::time::Duration;
 
+use kc_model::Device;
 use serialport::{SerialPort, SerialPortType};
+
+/// A USB serial port, and the device it belongs to when the device
+/// reports a serial number.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Port {
+    pub name: String,
+    pub device: Option<Device>,
+}
 
 /// The serial ports that could be a keyboard: USB ones. On macOS each
 /// device shows up twice; the `cu.` form is the one to open.
-pub fn candidate_ports() -> Vec<String> {
-    let mut ports: Vec<String> = serialport::available_ports()
+pub fn candidate_ports() -> Vec<Port> {
+    let mut ports: Vec<Port> = serialport::available_ports()
         .unwrap_or_default()
         .into_iter()
-        .filter(|port| matches!(port.port_type, SerialPortType::UsbPort(_)))
-        .map(|port| port.port_name)
-        .filter(|name| !name.contains("/tty."))
+        .filter_map(|port| match port.port_type {
+            SerialPortType::UsbPort(usb) => Some(Port {
+                name: port.port_name,
+                device: usb
+                    .serial_number
+                    .map(|serial| serial.trim().to_string())
+                    .filter(|serial| !serial.is_empty())
+                    .map(|serial| Device {
+                        vendor: usb.vid,
+                        product: usb.pid,
+                        serial,
+                    }),
+            }),
+            _ => None,
+        })
+        .filter(|port| !port.name.contains("/tty."))
         .collect();
-    ports.sort();
+    ports.sort_by(|a, b| a.name.cmp(&b.name));
     ports
 }
 

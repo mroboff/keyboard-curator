@@ -367,19 +367,18 @@ impl Workspace {
                         cx,
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
-                        let id = id.clone();
-                        this.change("Change Firmware", window, cx, |p| {
-                            p.firmware = id;
-                            Ok(())
-                        });
+                        if this.project().firmware != id {
+                            this.request_firmware(id.clone(), window, cx);
+                        }
                     }))
                 })
                 .collect::<Vec<_>>();
             page = page
                 .child(div().text_lg().child("Firmware"))
-                .child(div().text_xs().text_color(muted).child(
-                    "Which firmware your layout is built with. Features the chosen firmware lacks are hidden.",
-                ))
+                .child(div().text_xs().text_color(muted).child(format!(
+                    "The firmware “{}” runs. It belongs to the keyboard, so changing it applies to every project opened under it. Features the chosen firmware lacks are hidden.",
+                    self.keyboard_name(cx)
+                )))
                 .child(div().flex().flex_col().items_start().gap_1().children(choices));
         }
         let mut group = "";

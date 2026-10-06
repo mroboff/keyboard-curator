@@ -3637,6 +3637,7 @@ dependencies = [
  "gpui-kit",
  "kc-boards",
  "kc-build",
+ "kc-device",
  "kc-emit",
  "kc-flash",
  "kc-import",

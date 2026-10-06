@@ -3,6 +3,7 @@
 
 mod canvas;
 mod flash_view;
+mod library;
 mod shell;
 mod state;
 mod workspace;

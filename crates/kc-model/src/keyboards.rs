@@ -59,6 +59,19 @@ pub enum Fit {
     OtherFirmware,
 }
 
+/// Where a project being opened belongs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Placement {
+    /// Under this keyboard, as it is.
+    Open(KeyboardId),
+    /// Under this keyboard, once switched to its firmware.
+    Retarget(KeyboardId),
+    /// Under one of these; the user chooses.
+    Choose(Vec<(KeyboardId, Fit)>),
+    /// No saved keyboard is of the project's board.
+    NoKeyboard,
+}
+
 impl Keyboard {
     /// Whether `project` can be opened under this keyboard, and how.
     /// `None` when it is for a different board.
@@ -277,6 +290,35 @@ impl Keyboards {
         fits
     }
 
+    /// Decides which keyboard `project` opens under. The selected keyboard
+    /// is used whenever the project suits it, since that is the one being
+    /// worked on; otherwise the saved keyboards of the project's board are
+    /// considered, exact fits first.
+    pub fn place(&self, project: &Project, selected: Option<KeyboardId>) -> Placement {
+        let direct = |(id, fit)| match fit {
+            Fit::Exact => Placement::Open(id),
+            Fit::OtherFirmware => Placement::Retarget(id),
+        };
+        let selected = selected
+            .and_then(|id| self.get(id))
+            .and_then(|k| Some((k.id, k.fit(project)?)));
+        if let Some(fit) = selected {
+            return direct(fit);
+        }
+        let fits = self.fitting(project);
+        let exact: Vec<_> = fits
+            .iter()
+            .copied()
+            .filter(|(_, fit)| *fit == Fit::Exact)
+            .collect();
+        let choices = if exact.is_empty() { fits } else { exact };
+        match choices.as_slice() {
+            [] => Placement::NoKeyboard,
+            [only] => direct(*only),
+            _ => Placement::Choose(choices),
+        }
+    }
+
     /// Restores what a hand-edited or damaged file may have broken: unique
     /// IDs, and no device linked twice. The first keyboard keeps a
     /// contested device.
@@ -410,6 +452,47 @@ pub struct Retarget {
     /// use something the new firmware lacks. These are flagged, not hidden,
     /// because a key cannot be left out of a keymap.
     pub flagged: usize,
+}
+
+impl Retarget {
+    /// What the switch means, in sentences for the user.
+    pub fn summary(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if self.hidden.lighting {
+            parts.push("Per-key colours will be hidden.".into());
+        }
+        if self.hidden.pointing {
+            parts.push("Pointing device configuration will be hidden.".into());
+        }
+        match self.hidden.settings.as_slice() {
+            [] => {}
+            [one] => parts.push(format!("The setting \u{201c}{one}\u{201d} will be hidden.")),
+            many => parts.push(format!(
+                "{} settings will be hidden: {}.",
+                many.len(),
+                many.join(", ")
+            )),
+        }
+        if !self.hidden.is_empty() {
+            parts.push(
+                "Hidden parts stay in the project and return with a firmware that has them.".into(),
+            );
+        }
+        match self.flagged {
+            0 => {}
+            1 => parts.push(
+                "One key or behaviour uses a feature this firmware lacks and will be flagged."
+                    .into(),
+            ),
+            n => parts.push(format!(
+                "{n} keys or behaviours use features this firmware lacks and will be flagged."
+            )),
+        }
+        if parts.is_empty() {
+            parts.push("Everything in the project works with this firmware.".into());
+        }
+        parts.join(" ")
+    }
 }
 
 /// Previews switching `project` to `firmware`, a profile of `board`.

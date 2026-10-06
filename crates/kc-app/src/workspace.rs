@@ -23,17 +23,19 @@ use kc_boards::Board;
 use kc_model::clipboard;
 use kc_model::edit::{self, Hold};
 use kc_model::features::Rgb;
+use kc_model::keyboards::preview_retarget;
 use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::picker::{picker_items, PickerGroup};
 use kc_model::text::{format_binding, parse_binding, LayerStyle};
 use kc_model::{
-    file, validate, BehaviorId, Binding, ComboId, Editor, KeyExpr, LayerId, ModelError, Project,
-    Severity, Slot,
+    file, validate, BehaviorId, Binding, ComboId, Editor, KeyExpr, Keyboard, KeyboardId, LayerId,
+    ModelError, Project, Severity, Slot,
 };
 use kc_zmk::{Feature, Modifier};
 
 use crate::canvas::{self, Device, Frame, Palette};
 use crate::flash_view::FlashView;
+use crate::library::Library;
 use crate::state::AppState;
 use crate::{
     Copy, ExportConfig, Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, Layer7, Layer8, Layer9,
@@ -74,6 +76,34 @@ enum Mode {
     Settings,
     Files,
     Flash,
+}
+
+impl Mode {
+    /// The modes in the order of their tabs, with their labels.
+    const TABS: [(Mode, &'static str, &'static str); 8] = [
+        (Mode::Keyboard, "mode-keyboard", "Keyboard"),
+        (Mode::Lighting, "mode-lighting", "Lighting"),
+        (Mode::Behaviors, "mode-behaviors", "Behaviors"),
+        (Mode::Combos, "mode-combos", "Combos"),
+        (Mode::Pointing, "mode-pointing", "Pointing"),
+        (Mode::Settings, "mode-settings", "Settings"),
+        (Mode::Files, "mode-files", "Generated Files"),
+        (Mode::Flash, "mode-flash", "Build & Flash"),
+    ];
+
+    /// What a firmware must have for the mode to be offered at all. A
+    /// mode the keyboard's firmware cannot use is left out, not disabled.
+    fn requires(self) -> Option<Feature> {
+        match self {
+            Mode::Lighting => Some(Feature::PerKeyLighting),
+            Mode::Pointing => Some(Feature::Pointing),
+            _ => None,
+        }
+    }
+
+    fn available(self, features: &[Feature]) -> bool {
+        self.requires().is_none_or(|f| features.contains(&f))
+    }
 }
 
 /// Where a firmware build has got to.
@@ -150,8 +180,11 @@ pub struct Workspace {
     /// Which generated file the files view shows.
     file_index: usize,
     flash: Entity<FlashView>,
-    /// The local clone of the firmware repository for this project.
-    repo_dir: Option<PathBuf>,
+    /// The saved keyboards, and the one this project is open under. The
+    /// keyboard decides the firmware and holds the folder of the firmware
+    /// repository.
+    library: Entity<Library>,
+    keyboard: KeyboardId,
     build: BuildStatus,
     live: LiveStatus,
     /// The binding inside a behaviour or combo that the picker assigns to,
@@ -199,7 +232,7 @@ pub struct Workspace {
 }
 
 /// A small toggle button, filled when active.
-fn chip(
+pub(crate) fn chip(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     active: bool,
@@ -243,6 +276,8 @@ impl Workspace {
     pub fn new(
         project: Project,
         board: Board,
+        library: Entity<Library>,
+        keyboard: KeyboardId,
         path: Option<PathBuf>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -252,6 +287,12 @@ impl Workspace {
         if path.is_some() {
             editor.mark_saved();
         }
+        // The project is built for the keyboard's firmware, whichever one
+        // it was saved for.
+        if let Some(saved) = library.read(cx).keyboards().get(keyboard) {
+            editor.set_firmware(&saved.firmware);
+        }
+        cx.observe(&library, |_, _, cx| cx.notify()).detach();
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search keys"));
         let binding_input = cx.new(|cx| InputState::new(window, cx).placeholder("&kp A"));
         let layer_name = cx.new(|cx| InputState::new(window, cx).placeholder("Layer name"));
@@ -309,10 +350,6 @@ impl Workspace {
         combos::subscribe(&combo_name, window, cx);
         let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
         lighting::subscribe(&color_picker, cx);
-        let repo_dir = AppState::load()
-            .repos
-            .get(&Self::repo_key(path.as_deref(), &board))
-            .cloned();
         let mut workspace = Self {
             shown: Shown::default(),
             editor,
@@ -322,7 +359,8 @@ impl Workspace {
             mode: Mode::Keyboard,
             file_index: 0,
             flash,
-            repo_dir,
+            library,
+            keyboard,
             build: BuildStatus::Idle,
             live: LiveStatus::Idle,
             slot: None,
@@ -374,6 +412,25 @@ impl Workspace {
         workspace
     }
 
+    /// The saved keyboard this project is open under.
+    pub fn keyboard(&self) -> KeyboardId {
+        self.keyboard
+    }
+
+    fn saved_keyboard<'a>(&self, cx: &'a App) -> Option<&'a Keyboard> {
+        self.library.read(cx).keyboards().get(self.keyboard)
+    }
+
+    fn keyboard_name(&self, cx: &App) -> String {
+        self.saved_keyboard(cx)
+            .map_or_else(String::new, |k| k.name.clone())
+    }
+
+    /// The local clone of the firmware repository the keyboard builds from.
+    fn repo_dir(&self, cx: &App) -> Option<PathBuf> {
+        self.saved_keyboard(cx).and_then(|k| k.repo_dir.clone())
+    }
+
     pub fn project(&self) -> &Project {
         self.editor.project()
     }
@@ -394,9 +451,9 @@ impl Workspace {
         self.path.is_none() || self.editor.is_dirty()
     }
 
-    pub fn title(&self) -> String {
+    pub fn title(&self, cx: &App) -> String {
         let mark = if self.is_dirty() { " — Edited" } else { "" };
-        format!("{}{mark}", self.project().name)
+        format!("{} · {}{mark}", self.project().name, self.keyboard_name(cx))
     }
 
     pub fn save_to(&mut self, path: PathBuf) -> Result<(), file::FileError> {
@@ -645,6 +702,12 @@ impl Workspace {
 
     fn set_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_inputs(cx);
+        // A mode the firmware cannot use has no tab; fall back if asked.
+        let mode = if mode.available(&self.features()) {
+            mode
+        } else {
+            Mode::Keyboard
+        };
         self.mode = mode;
         self.hint = None;
         // Open the editors on something, so they are not blank.
@@ -992,6 +1055,32 @@ impl Workspace {
         .detach();
     }
 
+    /// Which keyboard, board and firmware the project is open under.
+    fn render_keyboard_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (border, muted) = (theme.border, theme.muted_foreground);
+        let firmware = self
+            .board
+            .profile(&self.project().firmware)
+            .map_or_else(String::new, |p| p.name.clone());
+        div()
+            .px_3()
+            .py_2()
+            .flex()
+            .flex_col()
+            .gap_0p5()
+            .border_b_1()
+            .border_color(border)
+            .child(div().text_sm().child(self.keyboard_name(cx)))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(muted)
+                    .child(format!("{} {}", self.board.vendor, self.board.name)),
+            )
+            .child(div().text_xs().text_color(muted).child(firmware))
+    }
+
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted, accent, accent_text, hover) = (
@@ -1080,6 +1169,7 @@ impl Workspace {
             .flex_col()
             .border_r_1()
             .border_color(border)
+            .child(self.render_keyboard_header(cx))
             .child(
                 div()
                     .px_3()
@@ -1609,14 +1699,6 @@ impl Workspace {
         .detach();
     }
 
-    /// The key the firmware repository folder is remembered under.
-    fn repo_key(path: Option<&Path>, board: &Board) -> String {
-        path.map_or_else(
-            || format!("board:{}", board.id),
-            |p| p.display().to_string(),
-        )
-    }
-
     fn choose_repo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let chosen = cx.prompt_for_paths(PathPromptOptions {
             files: false,
@@ -1632,13 +1714,10 @@ impl Workspace {
                 return;
             };
             let _ = this.update(cx, |this, cx| {
-                let mut state = AppState::load();
-                state.repos.insert(
-                    Self::repo_key(this.path.as_deref(), &this.board),
-                    dir.clone(),
-                );
-                state.save();
-                this.repo_dir = Some(dir);
+                let keyboard = this.keyboard;
+                let _ = this.library.update(cx, |library, cx| {
+                    library.change(cx, |k| k.set_repo_dir(keyboard, Some(dir)))
+                });
                 this.build = BuildStatus::Idle;
                 cx.notify();
             });
@@ -1650,7 +1729,7 @@ impl Workspace {
     /// the GitHub build and hands the firmware to the flash view.
     fn build_firmware(&mut self, cx: &mut Context<Self>) {
         let fail = |message: String| BuildStatus::Failed { message, url: None };
-        let Some(dir) = self.repo_dir.clone() else {
+        let Some(dir) = self.repo_dir(cx) else {
             self.build = fail("Choose the folder of your firmware repository first.".into());
             cx.notify();
             return;
@@ -1812,6 +1891,75 @@ impl Workspace {
         .detach();
     }
 
+    /// Why a keyboard that answered must not be updated from this project:
+    /// it is saved as a different keyboard, or is not the device this
+    /// keyboard is linked to. `None` when nothing speaks against it.
+    fn wrong_keyboard(&self, found: &kc_studio::session::Found, cx: &App) -> Option<String> {
+        let device = found.device.as_ref()?;
+        let ours = self.saved_keyboard(cx)?;
+        let keyboards = self.library.read(cx).keyboards();
+        match keyboards.linked_to(device) {
+            Some(linked) if linked.id == ours.id => None,
+            Some(linked) => Some(format!(
+                "The connected keyboard is saved as “{}”, but this project is open under “{}”. Open the project under “{}”, or connect “{}”.",
+                linked.name, ours.name, linked.name, ours.name
+            )),
+            None if ours.device.is_some() => Some(format!(
+                "The connected keyboard is not the one linked to “{}”. Connect that keyboard, or change its link in My Boards.",
+                ours.name
+            )),
+            None => None,
+        }
+    }
+
+    /// Asks before switching the keyboard, and so this project, to another
+    /// firmware.
+    fn request_firmware(&mut self, firmware: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Ok(preview) = preview_retarget(self.project(), &self.board, &firmware) else {
+            return;
+        };
+        let name = self
+            .board
+            .profile(&firmware)
+            .map_or_else(String::new, |p| p.name.clone());
+        let answer = window.prompt(
+            PromptLevel::Info,
+            &format!("Switch “{}” to {name}?", self.keyboard_name(cx)),
+            Some(&format!(
+                "This changes the firmware of the keyboard, for this and every project opened under it. {}",
+                preview.summary()
+            )),
+            &["Cancel", "Switch Firmware"],
+            cx,
+        );
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await == Ok(1) {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.set_firmware(&firmware, window, cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    fn set_firmware(&mut self, firmware: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let (keyboard, board) = (self.keyboard, self.board.clone());
+        let changed = self.library.update(cx, |library, cx| {
+            library.change(cx, |k| k.set_firmware(keyboard, &board, firmware))
+        });
+        if let Err(error) = changed {
+            self.notice = Some(format!("{error}."));
+            cx.notify();
+            return;
+        }
+        self.editor.set_firmware(firmware);
+        self.live = LiveStatus::Idle;
+        if !self.mode.available(&self.features()) {
+            self.mode = Mode::Keyboard;
+        }
+        self.after_change(window, cx);
+    }
+
     /// Looks for a connected keyboard and compares it with the project.
     fn find_keyboard(&mut self, cx: &mut Context<Self>) {
         let project = self.project().clone();
@@ -1824,7 +1972,10 @@ impl Workspace {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.live = match found {
-                    Ok(Some(found)) => LiveStatus::Found(found),
+                    Ok(Some(found)) => match this.wrong_keyboard(&found, cx) {
+                        Some(message) => LiveStatus::Message(message),
+                        None => LiveStatus::Found(found),
+                    },
                     Ok(None) => LiveStatus::Message(
                         "No keyboard answered. Connect the main half by USB; its firmware must be built with ZMK Studio.".into(),
                     ),
@@ -2002,7 +2153,7 @@ impl Workspace {
             theme.success,
         );
         let working = matches!(self.build, BuildStatus::Working(_));
-        let repo = match &self.repo_dir {
+        let repo = match self.repo_dir(cx) {
             Some(dir) => dir.display().to_string(),
             None => "No folder chosen".to_string(),
         };
@@ -2082,10 +2233,16 @@ impl Workspace {
     fn render_mode_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let muted = cx.theme().muted_foreground;
-        let tab = |id: &'static str, label: &'static str, mode: Mode, cx: &mut Context<Self>| {
-            chip(id, label, self.mode == mode, cx)
-                .on_click(cx.listener(move |this, _, window, cx| this.set_mode(mode, window, cx)))
-        };
+        let features = self.features();
+        let tabs = Mode::TABS
+            .into_iter()
+            .filter(|(mode, _, _)| mode.available(&features))
+            .map(|(mode, id, label)| {
+                chip(id, label, self.mode == mode, cx).on_click(
+                    cx.listener(move |this, _, window, cx| this.set_mode(mode, window, cx)),
+                )
+            })
+            .collect::<Vec<_>>();
         div()
             .flex()
             .items_center()
@@ -2094,14 +2251,7 @@ impl Workspace {
             .py_2()
             .border_b_1()
             .border_color(border)
-            .child(tab("mode-keyboard", "Keyboard", Mode::Keyboard, cx))
-            .child(tab("mode-lighting", "Lighting", Mode::Lighting, cx))
-            .child(tab("mode-behaviors", "Behaviors", Mode::Behaviors, cx))
-            .child(tab("mode-combos", "Combos", Mode::Combos, cx))
-            .child(tab("mode-pointing", "Pointing", Mode::Pointing, cx))
-            .child(tab("mode-settings", "Settings", Mode::Settings, cx))
-            .child(tab("mode-files", "Generated Files", Mode::Files, cx))
-            .child(tab("mode-flash", "Build & Flash", Mode::Flash, cx))
+            .children(tabs)
             .child(
                 div()
                     .flex_1()
@@ -2365,11 +2515,62 @@ impl Render for Workspace {
                                 .min_h_0()
                                 .overflow_y_scroll()
                                 .child(self.render_build(cx))
-                                .child(self.render_live(cx))
+                                .when(self.features().contains(&Feature::Studio), |page| {
+                                    page.child(self.render_live(cx))
+                                })
                                 .child(self.flash.clone()),
                         ),
                     })
                     .child(self.render_status(cx)),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Not `super::*`: the GUI toolkit's own `test` macro would replace the
+    // standard one.
+    use super::Mode;
+
+    /// The tabs a firmware profile of a built-in board gets.
+    fn tabs(board: &str, firmware: &str) -> Vec<&'static str> {
+        let boards = kc_boards::built_in().unwrap();
+        let board = boards.iter().find(|b| b.id == board).unwrap();
+        let features = &board.profile(firmware).unwrap().capabilities;
+        Mode::TABS
+            .into_iter()
+            .filter(|(mode, _, _)| mode.available(features))
+            .map(|(_, _, label)| label)
+            .collect()
+    }
+
+    #[test]
+    fn tabs_follow_what_the_firmware_can_do() {
+        let without_lighting = [
+            "Keyboard",
+            "Behaviors",
+            "Combos",
+            "Pointing",
+            "Settings",
+            "Generated Files",
+            "Build & Flash",
+        ];
+        assert_eq!(tabs("moergo-go60", "moergo-zmk-26.09"), without_lighting);
+        assert_eq!(tabs("cyboard-imprint", "cyboard-zmk-0.3"), without_lighting);
+
+        for (board, firmware) in [
+            ("moergo-go60", "moergo-zmk-perkey"),
+            ("cyboard-imprint", "kc-zmk-0.3-perkey"),
+        ] {
+            let tabs = tabs(board, firmware);
+            assert_eq!(tabs.len(), 8);
+            assert_eq!(tabs[1], "Lighting");
+        }
+
+        // A firmware with nothing optional keeps the modes every ZMK has.
+        assert!(!Mode::Lighting.available(&[]));
+        assert!(!Mode::Pointing.available(&[]));
+        assert!(Mode::Keyboard.available(&[]));
+        assert!(Mode::Flash.available(&[]));
     }
 }

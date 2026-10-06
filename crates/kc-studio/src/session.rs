@@ -1,7 +1,7 @@
 //! Whole operations on a connected keyboard, each opening the port, doing
 //! its work and closing it again.
 
-use kc_model::{Binding, Project};
+use kc_model::{Binding, Device, Project};
 
 use crate::client::{Client, StudioError};
 use crate::codec::{compare, decode, BehaviorTable, Comparison};
@@ -11,6 +11,8 @@ use crate::serial;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Found {
     pub port: String,
+    /// The USB device behind the port, when it reports a serial number.
+    pub device: Option<Device>,
     pub name: String,
     pub unlocked: bool,
     /// How the project differs from the keyboard, once it is unlocked.
@@ -27,7 +29,7 @@ fn open(port: &str) -> Result<Client<Box<dyn serialport::SerialPort>>, StudioErr
 /// `project` differs from what it is running.
 pub fn find(project: &Project) -> Result<Option<Found>, StudioError> {
     for port in serial::candidate_ports() {
-        let Ok(mut client) = open(&port) else {
+        let Ok(mut client) = open(&port.name) else {
             continue;
         };
         // Anything that does not answer is some other serial device.
@@ -42,7 +44,8 @@ pub fn find(project: &Project) -> Result<Option<Found>, StudioError> {
             None
         };
         return Ok(Some(Found {
-            port,
+            port: port.name,
+            device: port.device,
             name,
             unlocked,
             comparison,

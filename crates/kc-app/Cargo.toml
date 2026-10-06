@@ -20,6 +20,7 @@ dirs = "7.0.0"
 gpui-kit = "=0.7.0"
 kc-boards = { version = "0.1.0", path = "../kc-boards" }
 kc-build = { version = "0.1.0", path = "../kc-build" }
+kc-device = { version = "0.1.0", path = "../kc-device" }
 kc-emit = { version = "0.1.0", path = "../kc-emit" }
 kc-flash = { version = "0.1.0", path = "../kc-flash" }
 kc-import = { version = "0.1.0", path = "../kc-import" }

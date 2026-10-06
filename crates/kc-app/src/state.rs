@@ -1,10 +1,11 @@
-//! App state that outlives a session: recent projects and the window frame.
+//! App state that outlives a session: the keyboard last worked on and the
+//! window frame. Saved keyboards themselves live in the library.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use kc_model::KeyboardId;
 
 use serde::{Deserialize, Serialize};
-
-const RECENT_LIMIT: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WindowFrame {
@@ -17,12 +18,17 @@ pub struct WindowFrame {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppState {
+    /// The keyboard selected on the welcome screen.
+    pub keyboard: Option<KeyboardId>,
+    /// Projects opened before keyboards were saved. Each moves to its
+    /// keyboard's own list when it is next opened.
     pub recent: Vec<PathBuf>,
     pub window: Option<WindowFrame>,
     /// The folder the ZMK config was last exported to.
     pub export_dir: Option<PathBuf>,
-    /// The firmware repository folder used for each project, keyed by the
-    /// project file's path.
+    /// Firmware repository folders from before they were kept per
+    /// keyboard, keyed by project path or `board:<id>`. A keyboard without
+    /// a folder adopts the one its project used.
     pub repos: std::collections::BTreeMap<String, PathBuf>,
 }
 
@@ -62,15 +68,16 @@ impl AppState {
         }
     }
 
-    /// Moves `path` to the front of the recent list.
-    pub fn note_recent(&mut self, path: PathBuf) {
-        self.recent.retain(|p| *p != path);
-        self.recent.insert(0, path);
-        self.recent.truncate(RECENT_LIMIT);
+    pub fn forget_recent(&mut self, path: &Path) {
+        self.recent.retain(|p| p != path);
     }
 
-    pub fn forget_recent(&mut self, path: &PathBuf) {
-        self.recent.retain(|p| p != path);
+    /// The repository folder remembered for a project from before folders
+    /// were kept per keyboard: the project's own, or else its board's.
+    pub fn earlier_repo(&self, path: Option<&Path>, board: &str) -> Option<PathBuf> {
+        path.and_then(|p| self.repos.get(&p.display().to_string()))
+            .or_else(|| self.repos.get(&format!("board:{board}")))
+            .cloned()
     }
 }
 
@@ -79,16 +86,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn recent_projects_are_deduplicated_and_capped() {
+    fn earlier_recent_projects_are_forgotten_one_at_a_time() {
+        let mut state = AppState {
+            recent: vec!["/p/a".into(), "/p/b".into()],
+            ..AppState::default()
+        };
+        state.forget_recent(&PathBuf::from("/p/a"));
+        assert_eq!(state.recent, [PathBuf::from("/p/b")]);
+    }
+
+    #[test]
+    fn earlier_repository_folders_are_found_by_project_then_board() {
         let mut state = AppState::default();
-        for i in 0..12 {
-            state.note_recent(PathBuf::from(format!("/p/{i}")));
-        }
-        state.note_recent(PathBuf::from("/p/5"));
-        assert_eq!(state.recent.len(), RECENT_LIMIT);
-        assert_eq!(state.recent[0], PathBuf::from("/p/5"));
-        assert_eq!(state.recent.iter().filter(|p| p.ends_with("5")).count(), 1);
-        state.forget_recent(&PathBuf::from("/p/5"));
-        assert_eq!(state.recent[0], PathBuf::from("/p/11"));
+        state.repos.insert("/p/a.kcproj".into(), "/repos/a".into());
+        state
+            .repos
+            .insert("board:moergo-go60".into(), "/repos/go60".into());
+        let a = PathBuf::from("/p/a.kcproj");
+        let b = PathBuf::from("/p/b.kcproj");
+        assert_eq!(
+            state.earlier_repo(Some(&a), "moergo-go60"),
+            Some("/repos/a".into())
+        );
+        assert_eq!(
+            state.earlier_repo(Some(&b), "moergo-go60"),
+            Some("/repos/go60".into())
+        );
+        assert_eq!(state.earlier_repo(Some(&b), "cyboard-imprint"), None);
+        assert_eq!(
+            state.earlier_repo(None, "moergo-go60"),
+            Some("/repos/go60".into())
+        );
     }
 }
