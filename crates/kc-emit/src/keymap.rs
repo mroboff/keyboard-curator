@@ -385,11 +385,12 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
         includes.push("dt-bindings/zmk/input_transform.h");
     }
     // Unless custom devicetree already defines it.
-    let right_click = project
-        .pointing
-        .iter()
-        .flat_map(|d| d.all_processors())
-        .any(|p| *p == InputProcessor::RightClick)
+    let right_click = features.contains(&Feature::Pointing)
+        && project
+            .pointing
+            .iter()
+            .flat_map(|d| d.all_processors())
+            .any(|p| *p == InputProcessor::RightClick)
         && !project
             .raw
             .devicetree
@@ -566,7 +567,13 @@ pub fn keymap(project: &Project, board: &Board) -> Result<String, EmitError> {
     w.line(1, "};");
     w.line(0, "};");
 
-    for device in &project.pointing {
+    // Kept in the project but left out for firmware without pointing.
+    let pointing = if features.contains(&Feature::Pointing) {
+        project.pointing.as_slice()
+    } else {
+        &[]
+    };
+    for device in pointing {
         w.line(0, "");
         w.line(0, &format!("&{} {{", device.listener));
         let list = |w: &Writer, processors: &[InputProcessor]| {

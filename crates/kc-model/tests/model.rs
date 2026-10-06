@@ -309,7 +309,8 @@ fn validation_reports_what_the_firmware_would_reject() {
     assert!(found("refers to a layer that no longer exists"));
     assert!(found("&bl is not supported"));
     assert!(found("brightness 80 is above this board's limit of 50"));
-    assert!(found("per-key lighting is not supported"));
+    // Colours on firmware without per-key lighting are kept but hidden.
+    assert!(!found("per-key lighting"));
     assert!(found("a combo needs at least two keys"));
     assert!(found("uses key position 200"));
 
@@ -1072,10 +1073,9 @@ fn led_check_patterns_and_unverified_maps() {
     let mut p = Project::from_template("Check", &imprint);
     let base = p.layers[0].id;
     p.lighting_mut(base).unwrap().keys = rows;
-    // The stock firmware has no per-key lighting.
-    assert!(errors(&p, &imprint)
-        .iter()
-        .any(|e| e.contains("per-key lighting is not supported")));
+    // The stock firmware has no per-key lighting; the colours are kept
+    // out of sight rather than reported.
+    assert!(errors(&p, &imprint).is_empty());
     p.firmware = "kc-zmk-0.3-perkey".into();
     assert!(errors(&p, &imprint).is_empty());
     let problems = validate(&p, &imprint);

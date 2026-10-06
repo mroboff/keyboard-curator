@@ -39,6 +39,14 @@ pub fn conf(project: &Project, profile: &FirmwareProfile) -> String {
         }
     }
     for (key, value) in &settings {
+        // A setting for a feature this firmware lacks stays in the project
+        // but is not generated.
+        let unsupported = kc_zmk::settings::setting_for(key)
+            .and_then(|setting| setting.requires)
+            .is_some_and(|feature| !profile.capabilities.contains(&feature));
+        if unsupported {
+            continue;
+        }
         let value = match value {
             SettingValue::Bool(true) => "y".to_string(),
             SettingValue::Bool(false) => "n".to_string(),

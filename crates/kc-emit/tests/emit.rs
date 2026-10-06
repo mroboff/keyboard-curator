@@ -355,11 +355,11 @@ fn per_key_lighting_is_written_for_firmware_that_has_it() {
     project.lighting_mut(nav).unwrap().keys[12] = KeyLight::Color(Rgb(0, 0, 255));
     project.lighting_mut(nav).unwrap().fade_delay = Some(15);
 
-    // The stock firmware has no per-key lighting, so the project is refused.
-    assert!(matches!(
-        generate(&project, &go60),
-        Err(EmitError::Invalid(_))
-    ));
+    // The stock firmware has no per-key lighting, so the colours stay in
+    // the project and out of the generated files.
+    let stock = generate(&project, &go60).unwrap();
+    assert!(!file(&stock, "config/go60.keymap").contains("underglow-layer"));
+    assert!(!file(&stock, "config/go60.conf").contains("RGB_LAYER"));
 
     project.firmware = "moergo-zmk-perkey".into();
     let files = generate(&project, &go60).unwrap();
@@ -433,4 +433,29 @@ fn the_imprint_lighting_firmware_gets_its_led_map_from_the_config() {
     let files = generate(&lit, &go60).unwrap();
     assert!(!files.iter().any(|f| f.path.ends_with(".overlay")));
     assert!(!file(&files, "build.yaml").contains("EXTRA_DTC_OVERLAY_FILE"));
+}
+
+#[test]
+fn settings_for_features_the_firmware_lacks_are_left_out() {
+    let go60 = board("moergo-go60");
+    let mut project = Project::new("Mine", &go60);
+    project.settings.insert(
+        "CONFIG_ZMK_STUDIO_LOCKING".into(),
+        SettingValue::Bool(false),
+    );
+    project
+        .settings
+        .insert("CONFIG_ZMK_SLEEP".into(), SettingValue::Bool(true));
+
+    project.firmware = "moergo-zmk-26.09".into();
+    let conf = file(&generate(&project, &go60).unwrap(), "config/go60.conf");
+    assert!(conf.contains("CONFIG_ZMK_STUDIO_LOCKING=n"));
+
+    // The per-key firmware has no ZMK Studio; the setting stays in the
+    // project for when it is opened with a firmware that does.
+    project.firmware = "moergo-zmk-perkey".into();
+    let conf = file(&generate(&project, &go60).unwrap(), "config/go60.conf");
+    assert!(!conf.contains("STUDIO"));
+    assert!(conf.contains("CONFIG_ZMK_SLEEP=y"));
+    assert!(project.settings.contains_key("CONFIG_ZMK_STUDIO_LOCKING"));
 }

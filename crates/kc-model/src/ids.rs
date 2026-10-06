@@ -25,3 +25,7 @@ id!(
     /// Identifies a combo.
     ComboId
 );
+id!(
+    /// Identifies one of the user's saved keyboards.
+    KeyboardId
+);

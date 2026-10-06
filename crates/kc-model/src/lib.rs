@@ -14,6 +14,7 @@ pub mod editor;
 pub mod features;
 pub mod file;
 pub mod ids;
+pub mod keyboards;
 pub mod keycap;
 pub mod lighting;
 pub mod picker;
@@ -23,6 +24,7 @@ pub mod validate;
 
 pub use binding::{BehaviorRef, Binding, KeyExpr, Param};
 pub use editor::Editor;
-pub use ids::{BehaviorId, ComboId, LayerId};
+pub use ids::{BehaviorId, ComboId, KeyboardId, LayerId};
+pub use keyboards::{Device, Keyboard, Keyboards};
 pub use project::{Layer, Location, ModelError, Project, Slot};
 pub use validate::{validate, Problem, Severity};

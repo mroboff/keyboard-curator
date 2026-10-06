@@ -362,12 +362,12 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
 
     let listeners: Vec<&str> = board.pointing.iter().map(|d| d.listener.as_str()).collect();
     for device in &project.pointing {
+        // On firmware without pointing this is kept in the project but not
+        // generated, so there is nothing to check.
+        if !c.features.contains(&Feature::Pointing) {
+            break;
+        }
         let location = Location::Pointing(device.listener.clone());
-        c.feature(
-            &location,
-            "pointing device configuration",
-            Some(Feature::Pointing),
-        );
         // The mouse keys have listeners on every firmware with pointing.
         let mouse_keys = kc_zmk::pointing::mouse_key_listener(&device.listener).is_some();
         if !mouse_keys && !listeners.contains(&device.listener.as_str()) {
@@ -393,8 +393,10 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
     for lighting in &project.lighting {
         let location = Location::Lighting(lighting.layer);
         c.layer(&location, lighting.layer);
-        if lighting.keys.iter().any(|k| *k != KeyLight::Inherit) {
-            c.feature(&location, "per-key lighting", Some(Feature::PerKeyLighting));
+        // Colours for firmware without per-key lighting are kept in the
+        // project but not generated.
+        if !c.features.contains(&Feature::PerKeyLighting) {
+            continue;
         }
         if lighting.keys.iter().any(
             |k| matches!(k, KeyLight::Battery { percent, .. } if ![20, 40, 60, 80].contains(percent)),
@@ -429,10 +431,11 @@ pub fn validate(project: &Project, board: &Board) -> Vec<Problem> {
 
     // Per-key colours are one of the lighting effects. Unless the firmware
     // starts in it, a key has to cycle to it once.
-    let lit = project
-        .lighting
-        .iter()
-        .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit));
+    let lit = c.features.contains(&Feature::PerKeyLighting)
+        && project
+            .lighting
+            .iter()
+            .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit));
     let starts_lit = board
         .profile(&project.firmware)
         .and_then(|p| p.lighting.as_ref())
