@@ -8,7 +8,7 @@ use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::lighting::{by_key_type, display_color, effective};
 use kc_zmk::Feature;
 
-use super::{chip, section_title, Workspace};
+use super::{chip, heading, help, section_title, Workspace};
 use crate::canvas::{self, Frame, Palette};
 
 /// What painting a key gives it.
@@ -250,7 +250,7 @@ impl Workspace {
                     ))
                     .children(others),
             )
-            .child(div().text_xs().text_color(muted).child(format!(
+            .child(help(format!(
                 "Click or drag across keys to paint. Lock lights show the chosen color while the lock is on; battery lights turn red below the level. Colors are shown at full strength; the keyboard limits brightness to {}%.{}",
                 self.board.brightness_cap,
                 if self.starts_lit() {
@@ -258,7 +258,7 @@ impl Workspace {
                 } else {
                     " After flashing, press the key that changes the lighting effect until these colors appear; the keyboard remembers."
                 }
-            )))
+            ), cx))
     }
 
     pub(super) fn render_lighting(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -276,7 +276,7 @@ impl Workspace {
                 .justify_center()
                 .gap_3()
                 .p_6()
-                .child(div().text_lg().child("Per-key lighting"))
+                .child(heading("Per-key lighting", cx))
                 .child(div().max_w(px(560.)).text_sm().text_color(muted).child(
                     "This board's firmware has no per-key colors. The firmware is chosen on the board's page.",
                 ));

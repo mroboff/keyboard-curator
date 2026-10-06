@@ -12,6 +12,8 @@ use kc_boards::board::Side;
 use kc_boards::Board;
 use kc_flash::{Bootloader, Half};
 
+use crate::workspace::{help, subheading};
+
 fn side_name(side: Side) -> &'static str {
     match side {
         Side::Left => "left",
@@ -298,13 +300,11 @@ impl Render for FlashView {
                     .flex()
                     .flex_col()
                     .gap_4()
-                    .child(div().text_lg().child(format!(
+                    .child(subheading(format!(
                         "Flash the {} {}",
                         self.board.vendor, self.board.name
-                    )))
-                    .child(div().text_sm().text_color(muted).child(
-                        "Firmware from a build appears here on its own. You can also choose .uf2 files yourself, one for each half. Each half is flashed separately, in the order shown.",
-                    ))
+                    ), cx))
+                    .child(help("Firmware from a build appears here on its own. You can also choose .uf2 files yourself, one for each half. Each half is flashed separately, in the order shown.", cx))
                     .child(
                         div()
                             .flex()

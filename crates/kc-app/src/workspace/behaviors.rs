@@ -14,7 +14,7 @@ use kc_model::text::{format_binding, LayerStyle};
 use kc_model::{BehaviorId, BehaviorRef, Binding, KeyExpr, ModelError, Slot};
 use kc_zmk::Modifier;
 
-use super::{badge, chip, section_title, Workspace};
+use super::{badge, chip, heading, help, section_title, Workspace};
 use crate::canvas::{self, Frame, Palette};
 
 /// The built-in behaviors a hold-tap or sticky key can wrap.
@@ -560,9 +560,7 @@ impl Workspace {
                     })),
             )
             .child(section_title("KEYS THAT CAN TRIGGER THE HOLD", cx))
-            .child(div().text_xs().text_color(muted).child(
-                "With none chosen, any key can. Click keys to choose, or pick a hand: home-row mods usually hold only for keys on the other hand.",
-            ))
+            .child(help("With none chosen, any key can. Click keys to choose, or pick a hand: home-row mods usually hold only for keys on the other hand.", cx))
             .child(
                 div()
                     .flex()
@@ -1042,9 +1040,7 @@ impl Workspace {
             .gap_3();
         let selected = self.behavior.and_then(|id| self.project().behavior(id));
         let form = match selected {
-            None => form.child(div().text_sm().text_color(muted).child(
-                "Behaviors are keys with more than one job: a hold-tap does one thing when held and another when tapped, a tap-dance counts taps, a macro plays a sequence. Create one on the left, then assign it from the Custom tab of the key picker.",
-            )),
+            None => form.child(help("Behaviors are keys with more than one job: a hold-tap does one thing when held and another when tapped, a tap-dance counts taps, a macro plays a sequence. Create one on the left, then assign it from the Custom tab of the key picker.", cx)),
             Some(def) => {
                 let id = def.id;
                 let uses = self.project().behavior_references(id).len();
@@ -1061,7 +1057,7 @@ impl Workspace {
                         .flex()
                         .items_baseline()
                         .gap_3()
-                        .child(div().text_lg().child(def.kind.name()))
+                        .child(heading(def.kind.name(), cx))
                         .child(div().flex_1().text_sm().text_color(muted).child(def.kind.summary())),
                 )
                 .child(

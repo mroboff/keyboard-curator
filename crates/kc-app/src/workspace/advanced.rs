@@ -8,7 +8,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use kc_model::features::ConditionalLayer;
 
-use super::{chip, section_title, Workspace};
+use super::{chip, heading, help, section_title, Workspace};
 
 pub(super) fn subscribe(
     raw_behaviors: &Entity<TextareaState>,
@@ -172,10 +172,8 @@ impl Workspace {
             .flex()
             .flex_col()
             .gap_2()
-            .child(div().text_lg().child("Layer rules"))
-            .child(div().text_sm().text_color(muted).child(
-                "Turn a layer on automatically while a combination of other layers is active, such as an Adjust layer while Lower and Raise are both held.",
-            ))
+            .child(heading("Layer rules", cx))
+            .child(help("Turn a layer on automatically while a combination of other layers is active, such as an Adjust layer while Lower and Raise are both held.", cx))
             .children(rules)
             .child(chip("rule-add", "New Rule", false, cx).on_click(cx.listener(|this, _, window, cx| {
                 this.change("Add Layer Rule", window, cx, |p| {
@@ -237,14 +235,10 @@ impl Workspace {
             .flex_col()
             .gap_3()
             .child(self.render_rules(cx))
-            .child(div().pt_3().text_lg().child("Custom devicetree"))
-            .child(div().text_sm().text_color(muted).child(
-                "Text added here is written into the keymap file as it is, for anything the editor does not cover. Behaviors defined here appear in the key picker's Custom tab. Firmware settings are on the board's page.",
-            ))
+            .child(heading("Custom devicetree", cx).pt_8())
+            .child(help("Text added here is written into the keymap file as it is, for anything the editor does not cover. Behaviors defined here appear in the key picker's Custom tab. Firmware settings are on the board's page.", cx))
             .when(!starters.is_empty(), |page| {
-                page.child(div().text_xs().text_color(muted).child(
-                    "This board's firmware has add-ons whose behaviors you define here. A starter gives you a working example to change; the behavior then appears in the key picker's Custom tab.",
-                ))
+                page.child(help("This board's firmware has add-ons whose behaviors you define here. A starter gives you a working example to change; the behavior then appears in the key picker's Custom tab.", cx))
                 .child(div().flex().flex_wrap().gap_1().children(starters))
             })
             .child(area("CUSTOM BEHAVIORS", "Devicetree nodes placed inside the keymap's behaviors section.", &self.raw_behaviors, cx))

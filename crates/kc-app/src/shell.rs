@@ -20,7 +20,7 @@ use crate::board_page::{BoardEvent, BoardPage, Section};
 use crate::canvas::{self, Frame, Palette};
 use crate::library::Library;
 use crate::state::{default_project_dir, AppState, Appearance, ThemeId, WindowFrame};
-use crate::workspace::{chip, display, plinth, Workspace, WorkspaceEvent};
+use crate::workspace::{chip, display, heading, plinth, Workspace, WorkspaceEvent};
 use crate::{
     CloseProject, ExportConfig, ImportProject, NewProject, OpenProject, Redo, Save, SaveAs, Undo,
 };
@@ -1453,7 +1453,7 @@ impl Shell {
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().text_xl().child(title))
+            .child(heading(title, cx))
             .when(form.device.is_none(), |page| {
                 page.child(div().text_sm().text_color(muted).child(
                     "The keyboard does not need to be connected, or even one you own.",

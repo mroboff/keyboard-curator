@@ -291,11 +291,13 @@ pub(crate) fn tab(
     let (accent, text, muted) = (theme.primary, theme.foreground, theme.muted_foreground);
     div()
         .id(id)
-        .h_9()
+        .h_11()
         .flex()
+        .flex_shrink_0()
         .items_center()
         .border_b_2()
-        .text_sm()
+        .font_family(crate::theme::look(cx).display_font.clone())
+        .text_size(px(15.))
         .cursor_pointer()
         .when(active, |tab| {
             tab.border_color(accent)
@@ -309,6 +311,49 @@ pub(crate) fn tab(
                 .hover(|tab| tab.text_color(text))
         })
         .child(label.into())
+}
+
+/// The title of a page.
+pub(crate) fn heading(text: impl Into<SharedString>, cx: &App) -> Div {
+    display(text, 28., cx)
+}
+
+/// The title of a part of a page.
+pub(crate) fn subheading(text: impl Into<SharedString>, cx: &App) -> Div {
+    display(text, 20., cx)
+}
+
+/// A paragraph that explains what is on the page, set for reading.
+pub(crate) fn help(text: impl Into<SharedString>, cx: &App) -> Div {
+    div()
+        .max_w(px(660.))
+        .text_sm()
+        .line_height(relative(1.5))
+        .text_color(cx.theme().muted_foreground)
+        .child(text.into())
+}
+
+/// A surface for one thing among several, such as a firmware, an add-on
+/// or a layout. The chosen one is ringed in the accent color.
+pub(crate) fn card(chosen: bool, cx: &App) -> Div {
+    let colors = crate::theme::look(cx).colors;
+    let accent = cx.theme().primary;
+    div()
+        .px_5()
+        .py_4()
+        .rounded_xl()
+        .bg(colors.plinth)
+        .border_1()
+        .border_color(if chosen { accent } else { colors.plinth_border })
+        .when(chosen, |card| {
+            card.shadow(vec![BoxShadow {
+                color: accent,
+                offset: point(px(0.), px(0.)),
+                blur_radius: px(0.),
+                spread_radius: px(1.),
+                inset: false,
+            }])
+        })
 }
 
 /// Text in the theme's display face, for headings and figures.
@@ -2013,7 +2058,7 @@ impl Workspace {
             .rounded_lg()
             .border_1()
             .border_color(border)
-            .child(div().text_lg().child(format!("Apply to “{name}”")))
+            .child(heading(format!("Apply to “{name}”"), cx))
             .child(div().text_sm().text_color(muted).child(if self.features().contains(&Feature::Build) {
                 format!("Makes this the layout “{name}” is built with, saving it first, and takes you to the board's Build & Flash. The board's firmware and settings are not changed.")
             } else {
@@ -2128,7 +2173,7 @@ impl Workspace {
 
     fn render_live(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted, success) = (theme.border, theme.muted_foreground, theme.success);
+        let (border, success) = (theme.border, theme.success);
         let working = matches!(self.live, LiveStatus::Working(_));
         let panel = div()
             .w(px(640.))
@@ -2139,10 +2184,8 @@ impl Workspace {
             .rounded_lg()
             .border_1()
             .border_color(border)
-            .child(div().text_lg().child("Update the keyboard directly"))
-            .child(div().text_sm().text_color(muted).child(
-                "With firmware built for ZMK Studio, changes to what keys do can be sent over USB in a moment, without a build. New layers, behaviors, combos, lighting and settings still need a build.",
-            ))
+            .child(heading("Update the keyboard directly", cx))
+            .child(help("With firmware built for ZMK Studio, changes to what keys do can be sent over USB in a moment, without a build. New layers, behaviors, combos, lighting and settings still need a build.", cx))
             .when(!working, |panel| {
                 panel.child(
                     div().flex().child(
@@ -2239,9 +2282,8 @@ impl Workspace {
         div()
             .flex()
             .items_center()
-            .gap_5()
-            .px_4()
-            .pt_1()
+            .gap_6()
+            .px_5()
             .border_b_1()
             .border_color(border)
             .children(tabs)

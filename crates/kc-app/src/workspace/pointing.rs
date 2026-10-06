@@ -8,7 +8,7 @@ use kc_model::features::{InputProcessor, PointingConfig, PointingOverride, Point
 use kc_model::LayerId;
 use kc_zmk::Feature;
 
-use super::{chip, section_title, Workspace};
+use super::{chip, heading, help, section_title, Workspace};
 
 /// Speeds offered, as a label and a `multiplier / divisor` scale.
 const SPEEDS: [(&str, (u32, u32)); 7] = [
@@ -181,13 +181,10 @@ impl Workspace {
         processors: &[InputProcessor],
         cx: &mut Context<Self>,
     ) -> Div {
-        let muted = cx.theme().muted_foreground;
         let native_scroll = device.native_scroll;
         let column = div().flex().flex_col().gap_2();
         let Some(current) = PointingProfile::from_processors(processors, native_scroll) else {
-            return column.child(div().text_sm().text_color(muted).child(
-                "This has processing the editor does not model, so it is left as it is. Choosing an option above replaces it.",
-            ));
+            return column.child(help("This has processing the editor does not model, so it is left as it is. Choosing an option above replaces it.", cx));
         };
 
         // A chip that applies a change to the current settings.
@@ -387,7 +384,7 @@ impl Workspace {
             .rounded_lg()
             .border_1()
             .border_color(border)
-            .child(div().text_lg().child(device.name.clone()))
+            .child(heading(device.name.clone(), cx))
             .child(
                 div()
                     .flex()

@@ -22,7 +22,7 @@ use crate::library::Library;
 use crate::shell::connection_hint;
 use crate::state::AppState;
 use crate::tester::KeyTester;
-use crate::workspace::{chip, display, tab};
+use crate::workspace::{badge, card, chip, display, heading, help, subheading, tab};
 
 const KEYBOARD_NAME: &str = "CONFIG_ZMK_KEYBOARD_NAME";
 
@@ -940,14 +940,25 @@ impl BoardPage {
         div()
             .flex()
             .items_center()
-            .gap_4()
+            .gap_8()
+            .py_3()
+            .border_b_1()
+            .border_color(cx.theme().border)
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(div().text_sm().child(setting.name))
-                    .child(div().text_xs().text_color(muted).child(setting.description)),
+                    .gap_0p5()
+                    .child(div().font_weight(FontWeight::MEDIUM).child(setting.name))
+                    .child(
+                        div()
+                            .text_sm()
+                            .line_height(relative(1.4))
+                            .text_color(muted)
+                            .child(setting.description),
+                    ),
             )
             .child(controls)
     }
@@ -955,27 +966,22 @@ impl BoardPage {
     /// Which firmware the board runs, family by family.
     fn render_firmware(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
-        let (muted, border, accent, warning) = (
-            theme.muted_foreground,
-            theme.border,
-            theme.primary,
-            theme.warning,
-        );
+        let (muted, accent, warning) = (theme.muted_foreground, theme.primary, theme.warning);
         let mut page = div()
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().text_lg().child("Firmware"))
-            .child(div().text_xs().text_color(muted).child(
-                "The firmware this board runs, or will be built with. It decides which settings the board has and what the layout editor offers. Layouts are not changed by it: what a firmware lacks is kept out of sight, and settings a firmware lacks are kept the same way.",
-            ));
+            .child(heading("Firmware", cx))
+            .child(help(
+                "The firmware this board runs, or will be built with. It decides which settings the board has and what the layout editor offers. Layouts are not changed by it: what a firmware lacks is kept out of sight, and settings a firmware lacks are kept the same way.", cx));
         for family in self.board.families() {
             page = page.child(
                 div()
-                    .pt_2()
-                    .text_sm()
+                    .pt_4()
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD)
                     .text_color(muted)
-                    .child(family.name()),
+                    .child(family.name().to_uppercase()),
             );
             for (index, profile) in self
                 .board
@@ -989,16 +995,11 @@ impl BoardPage {
                 let notes = profile
                     .notes
                     .iter()
-                    .map(|note| div().text_xs().text_color(muted).child(note.clone()))
+                    .map(|note| div().text_sm().text_color(muted).child(note.clone()))
                     .collect::<Vec<_>>();
                 page = page.child(
-                    div()
+                    card(chosen, cx)
                         .id(("firmware", index))
-                        .px_3()
-                        .py_2()
-                        .rounded_md()
-                        .border_1()
-                        .border_color(if chosen { accent } else { border })
                         .cursor_pointer()
                         .flex()
                         .flex_col()
@@ -1008,14 +1009,10 @@ impl BoardPage {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(div().text_sm().child(profile.name.clone()))
-                                .when(chosen, |row| {
-                                    row.child(div().text_xs().text_color(accent).child("Selected"))
-                                })
+                                .child(display(profile.name.clone(), 18., cx))
+                                .when(chosen, |row| row.child(badge("Selected", accent)))
                                 .when(profile.experimental, |row| {
-                                    row.child(
-                                        div().text_xs().text_color(warning).child("Experimental"),
-                                    )
+                                    row.child(badge("Experimental", warning))
                                 }),
                         )
                         .children(notes)
@@ -1036,12 +1033,7 @@ impl BoardPage {
     /// The add-ons the chosen ZMK can take, each with what it is for.
     fn render_addons(&self, config: &FirmwareConfig, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
-        let (muted, border, accent, warning) = (
-            theme.muted_foreground,
-            theme.border,
-            theme.primary,
-            theme.warning,
-        );
+        let (muted, warning) = (theme.muted_foreground, theme.warning);
         let catalog = kc_zmk::addons::catalog();
         let zephyr = self
             .board
@@ -1051,14 +1043,14 @@ impl BoardPage {
             format!(" The list was last refreshed on {date}.")
         });
         let mut section = div()
-            .pt_4()
+            .pt_10()
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().text_lg().child("Add-ons"))
-            .child(div().text_xs().text_color(muted).child(format!(
+            .child(subheading("Add-ons", cx))
+            .child(help(format!(
                 "Extras from the ZMK community that can be built into this firmware. Each is pinned to a version made for this ZMK. They are other people's code: read the notes, and expect to test.{checked}"
-            )));
+            ), cx));
         for (index, addon) in catalog
             .addons
             .iter()
@@ -1077,15 +1069,10 @@ impl BoardPage {
             let notes = addon
                 .notes
                 .iter()
-                .map(|note| div().text_xs().text_color(muted).child(format!("• {note}")))
+                .map(|note| div().text_sm().text_color(muted).child(format!("• {note}")))
                 .collect::<Vec<_>>();
             section = section.child(
-                div()
-                    .px_3()
-                    .py_2()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(if on { accent } else { border })
+                card(on, cx)
                     .flex()
                     .flex_col()
                     .gap_1()
@@ -1094,14 +1081,9 @@ impl BoardPage {
                             .flex()
                             .items_center()
                             .gap_2()
-                            .child(div().flex_1().min_w_0().text_sm().child(addon.name.clone()))
+                            .child(display(addon.name.clone(), 18., cx).flex_1().min_w_0())
                             .when(addon.archived, |row| {
-                                row.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(warning)
-                                        .child("No longer maintained"),
-                                )
+                                row.child(badge("No longer maintained", warning))
                             })
                             .child(
                                 chip(("addon-page", index), "Its Page", false, cx)
@@ -1125,7 +1107,8 @@ impl BoardPage {
                     .child(div().text_sm().child(addon.summary.clone()))
                     .child(
                         div()
-                            .text_xs()
+                            .text_sm()
+                            .text_color(muted)
                             .child(format!("People use it for: {}", addon.uses)),
                     )
                     .children(notes),
@@ -1165,14 +1148,13 @@ impl BoardPage {
                 .child("Building from the chosen firmware's own source."),
         };
         div()
-            .pt_4()
+            .pt_10()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(div().text_lg().child("Custom source"))
-            .child(div().text_xs().text_color(muted).child(
-                "Builds from another ZMK repository and revision in place of the chosen firmware's own, for trying a fork or an unmerged feature. The app still assumes the firmware chosen above when deciding what to offer, so choose the closest one. ZMK takes one source: several unmerged features can only be combined in a fork that merges them.",
-            ))
+            .gap_3()
+            .child(subheading("Custom source", cx))
+            .child(help(
+                "Builds from another ZMK repository and revision in place of the chosen firmware's own, for trying a fork or an unmerged feature. The app still assumes the firmware chosen above when deciding what to offer, so choose the closest one. ZMK takes one source: several unmerged features can only be combined in a fork that merges them.", cx))
             .child(
                 div()
                     .flex()
@@ -1204,10 +1186,10 @@ impl BoardPage {
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().text_lg().child("Settings"))
-            .child(div().text_xs().text_color(muted).child(format!(
+            .child(heading("Settings", cx))
+            .child(help(format!(
                 "Settings of {firmware}, the firmware chosen under Firmware. They belong to the board, and apply whichever layout it is built with."
-            )));
+            ), cx));
         if config.family(&self.board) != Family::Zmk {
             return page.child(
                 div()
@@ -1223,25 +1205,28 @@ impl BoardPage {
             }
             if setting.group != group {
                 group = setting.group;
-                page = page.child(div().pt_3().text_lg().child(group));
+                page = page.child(subheading(group, cx).pt_8());
                 if group == "Lighting" {
-                    page = page.child(div().text_xs().text_color(muted).child(format!(
-                        "This keyboard's brightness is limited to {}% to protect it.",
-                        self.board.brightness_cap
-                    )));
+                    page = page.child(help(
+                        format!(
+                            "This keyboard's brightness is limited to {}% to protect it.",
+                            self.board.brightness_cap
+                        ),
+                        cx,
+                    ));
                 }
             }
             page = page.child(self.render_setting(setting, config, cx));
         }
-        page.child(div().pt_3().text_lg().child("Custom settings"))
-            .child(
+        page.child(subheading("Custom settings", cx).pt_8()).child(
             div()
                 .flex()
                 .flex_col()
                 .gap_1()
                 .child(section_title("EXTRA SETTINGS", cx))
-                .child(div().text_xs().text_color(muted).child(
+                .child(help(
                     "Lines added to the .conf file as they are, such as CONFIG_ZMK_USB_LOGGING=y.",
+                    cx,
                 ))
                 .child(Textarea::new(&self.raw_conf).h(px(140.))),
         )
@@ -1250,46 +1235,26 @@ impl BoardPage {
     /// The layouts used with the board, and which one it is built with.
     fn render_layouts(&self, saved: &Keyboard, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
-        let (muted, border, success, danger) = (
-            theme.muted_foreground,
-            theme.border,
-            theme.success,
-            theme.danger,
-        );
+        let (muted, success, danger) = (theme.muted_foreground, theme.success, theme.danger);
         let id = self.keyboard;
         let row = |name: String, detail: String, current: bool, missing: bool| {
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .px_3()
-                .py_2()
-                .rounded_md()
-                .border_1()
-                .border_color(border)
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(div().text_sm().child(name))
-                                .when(current, |line| {
-                                    line.child(div().text_xs().text_color(success).child("Current"))
-                                })
-                                .when(missing, |line| {
-                                    line.child(
-                                        div().text_xs().text_color(danger).child("File not found"),
-                                    )
-                                }),
-                        )
-                        .child(div().text_xs().text_color(muted).child(detail)),
-                )
+            card(current, cx).flex().items_center().gap_3().child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(display(name, 18., cx))
+                            .when(current, |line| line.child(badge("Current", success)))
+                            .when(missing, |line| line.child(badge("File not found", danger))),
+                    )
+                    .child(div().text_xs().text_color(muted).child(detail)),
+            )
         };
         let factory = row(
             "Factory layout".into(),
@@ -1349,10 +1314,9 @@ impl BoardPage {
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().text_lg().child("Layouts"))
-            .child(div().text_xs().text_color(muted).child(
-                "A layout is what the keys do: layers, behaviors, combos, colors and pointing. This board can have any number of them. The current one goes into the firmware when it is built.",
-            ))
+            .child(heading("Layouts", cx))
+            .child(help(
+                "A layout is what the keys do: layers, behaviors, combos, colors and pointing. This board can have any number of them. The current one goes into the firmware when it is built.", cx))
             .child(
                 div()
                     .flex()
@@ -1384,30 +1348,19 @@ impl BoardPage {
 
     fn render_build(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted, danger, success) = (
-            theme.border,
-            theme.muted_foreground,
-            theme.danger,
-            theme.success,
-        );
+        let (danger, success) = (theme.danger, theme.success);
         let working = matches!(self.build, BuildStatus::Working(_));
         let repo = match self.repo_dir(cx) {
             Some(dir) => dir.display().to_string(),
             None => "No folder chosen".to_string(),
         };
-        let panel = div()
+        let panel = card(false, cx)
             .w(px(640.))
             .flex()
             .flex_col()
             .gap_3()
-            .p_4()
-            .rounded_lg()
-            .border_1()
-            .border_color(border)
-            .child(div().text_lg().child("Build the firmware"))
-            .child(div().text_sm().text_color(muted).child(
-                "Your layout is pushed to a firmware repository on GitHub, which builds it. Choose the folder of that repository, or an empty folder to have a private one created.",
-            ))
+            .child(subheading("Build the firmware", cx))
+            .child(help("Your layout is pushed to a firmware repository on GitHub, which builds it. Choose the folder of that repository, or an empty folder to have a private one created.", cx))
             .child(
                 div()
                     .flex()
@@ -1459,20 +1412,14 @@ impl BoardPage {
                     })
             }
         };
-        div()
-            .w_full()
-            .flex()
-            .justify_center()
-            .pt_6()
-            .pb_4()
-            .child(panel)
+        div().w_full().flex().pt_6().pb_4().child(panel)
     }
 
     /// Reading from and writing to a keyboard whose firmware is configured
     /// live.
     fn render_keyboard_section(&self, saved: &Keyboard, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
-        let (muted, border) = (theme.muted_foreground, theme.border);
+        let muted = theme.muted_foreground;
         let current = match &saved.current {
             Some(path) => format!(
                 "The current layout is “{}”.",
@@ -1482,22 +1429,17 @@ impl BoardPage {
             None => "This board has no current layout yet.".to_string(),
         };
         let panel = |title: &'static str, text: String| {
-            div()
+            card(false, cx)
                 .w(px(640.))
                 .flex()
                 .flex_col()
                 .gap_3()
-                .p_4()
-                .rounded_lg()
-                .border_1()
-                .border_color(border)
-                .child(div().text_lg().child(title))
+                .child(subheading(title, cx))
                 .child(div().text_sm().text_color(muted).child(text))
         };
         div()
             .flex()
             .flex_col()
-            .items_center()
             .gap_4()
             .child(
                 panel(
@@ -1546,7 +1488,6 @@ impl BoardPage {
         config: &FirmwareConfig,
         cx: &mut Context<Self>,
     ) -> Div {
-        let muted = cx.theme().muted_foreground;
         let firmware = self
             .board
             .profile(&config.profile)
@@ -1572,7 +1513,6 @@ impl BoardPage {
         div()
             .flex()
             .flex_col()
-            .items_center()
             .child(
                 div()
                     .w(px(640.))
@@ -1582,9 +1522,7 @@ impl BoardPage {
                     .child(div().text_sm().child(format!(
                         "This builds {firmware} with {settings} and {layout}."
                     )))
-                    .child(div().text_xs().text_color(muted).child(
-                        "Change the firmware under Firmware, its settings under Settings, and which layout is built in under Layouts.",
-                    ))
+                    .child(help("Change the firmware under Firmware, its settings under Settings, and which layout is built in under Layouts.", cx))
                     .child(
                         div().flex().child(
                             Button::new("export-config")
@@ -1626,9 +1564,7 @@ impl Render for BoardPage {
                 "Linked to a device that is not connected by USB (serial {}).",
                 device.serial
             )),
-            (None, _) => div().text_sm().text_color(muted).child(
-                "Not linked to a device. Linking lets the app recognize this keyboard when it is connected.",
-            ),
+            (None, _) => help("Not linked to a device. Linking lets the app recognize this keyboard when it is connected.", cx),
         };
         let link = if saved.device.is_some() {
             let id = self.keyboard;
@@ -1677,11 +1613,9 @@ impl Render for BoardPage {
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
-                .p_6()
-                .flex()
-                .flex_col()
-                .items_center()
-                .child(div().w(px(760.)).child(content))
+                .px_10()
+                .py_8()
+                .child(div().w_full().max_w(px(820.)).child(content))
                 .into_any_element(),
             None => div()
                 .flex_1()
@@ -1697,44 +1631,62 @@ impl Render for BoardPage {
                 div()
                     .flex()
                     .items_center()
-                    .gap_3()
-                    .px_4()
-                    .py_3()
-                    .border_b_1()
-                    .border_color(border)
+                    .gap_2()
+                    .px_10()
+                    .pt_5()
                     .child(chip("back", "‹ My Boards", false, cx).on_click(cx.listener(
                         |this, _, _, cx| {
                             this.commit_inputs(cx);
                             cx.emit(BoardEvent::Back);
                         },
                     )))
-                    .child(div().w_64().child(Input::new(&self.name)))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(display(
-                                format!("{} {} · {firmware}", self.board.vendor, self.board.name),
-                                15.,
-                                cx,
-                            ))
-                            .child(device),
-                    )
+                    .child(div().flex_1())
                     .child(link)
                     .child(
                         chip("remove", "Remove…", false, cx)
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(BoardEvent::Remove))),
                     ),
             )
+            // The board's name, large, with what it is under it; the field
+            // that renames it sits to the side.
+            .child(
+                div()
+                    .flex()
+                    .items_end()
+                    .gap_8()
+                    .px_10()
+                    .pt_4()
+                    .pb_5()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(display(saved.name.clone(), 40., cx))
+                            .child(div().text_color(muted).child(format!(
+                                "{} {} · {firmware}",
+                                self.board.vendor, self.board.name
+                            )))
+                            .child(device),
+                    )
+                    .child(
+                        div()
+                            .w_64()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(section_title("NAME", cx))
+                            .child(Input::new(&self.name)),
+                    ),
+            )
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap_5()
-                    .px_4()
-                    .pt_1()
+                    .gap_7()
+                    .px_10()
                     .border_b_1()
                     .border_color(border)
                     .child(tab("section-firmware", "Firmware", Section::Firmware, cx))
