@@ -20,15 +20,15 @@ cargo run -p kc-app
 
 ```sh
 cargo run -p kc-app                      # My Boards
-cargo run -p kc-app -- my-layout.kcproj  # open a project
+cargo run -p kc-app -- my-layout.kcproj  # open a layout
 ```
 
-- **My Boards**: the welcome screen lists your keyboards. Each has a board model and the firmware it runs, and can be linked to the physical keyboard on USB so the app recognizes it. A keyboard does not need to be connected, or even owned. Projects are created, opened and imported under a keyboard, and the editor shows only what that keyboard's firmware supports.
-- **Keyboard**: select keys, pick bindings, edit layers.
-- **Generated Files**: the zmk-config files the project produces, and any problems.
-- **Lighting, Behaviors, Combos, Pointing, Settings**: per-key colors, hold-taps, macros and the rest.
-- **File > Import Keymap**: opens an existing `.keymap` file or a MoErgo Layout Editor export as a new project.
-- **Build & Flash**: pushes the config to a firmware repository on GitHub, waits for the build and flashes each half. With firmware built for ZMK Studio, it can also send key changes over USB without a build. Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
+Configuration is in two levels. A **board** is one of your keyboards: its firmware and that firmware's settings. A **layout** is what the keys do, and a board can have any number of them.
+
+- **My Boards**: the welcome screen lists your boards. A board does not need to be connected, or even owned; one that is on USB can be linked so the app recognizes it.
+- **A board's page** has three parts. *Firmware* chooses the firmware and adjusts its settings. *Layouts* creates, opens and imports layouts, and marks the current one. *Build & Flash* pushes the config to a firmware repository on GitHub, waits for the build and flashes each half; it builds the board's settings with the current layout, or the factory layout if none has been applied. Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
+- **The layout editor** edits one layout: keys, layers, behaviors, combos, per-key colors, pointing, layer rules. It shows only what the board's firmware supports. *Apply* makes the layout the board's current one; with firmware built for ZMK Studio it can also send key changes over USB without a build.
+- **Import a Keymap**, on a board's page, opens an existing `.keymap` file or a MoErgo Layout Editor export as a new layout. Firmware settings found with it are offered to the board.
 
 `fixtures/` holds a generated config for each board. CI builds them with the real ZMK toolchain; after an intended change to the emitter, refresh them with `UPDATE_FIXTURES=1 cargo test -p kc-emit --test fixtures`.
 
@@ -38,7 +38,7 @@ A Cargo workspace under `crates/`. Only `kc-app` may depend on the GUI framework
 
 | Crate | Responsibility |
 |---|---|
-| `kc-model` | The project: layers, bindings, behaviors, combos, macros, pointing, lighting, settings; edit commands with undo/redo. Also the user's saved keyboards |
+| `kc-model` | The layout: layers, bindings, behaviors, combos, macros, pointing, lighting; edit commands with undo/redo. Also the user's saved boards and their firmware settings |
 | `kc-zmk` | ZMK knowledge as data: keycodes, behavior catalog, Kconfig options |
 | `kc-boards` | Board definitions: physical layouts, LED maps, firmware profiles |
 | `kc-emit` | Generates `.keymap`, `.conf`, `west.yml` and `build.yaml` |

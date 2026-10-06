@@ -14,7 +14,7 @@ A Cargo workspace under `crates/`:
 
 | Crate | Responsibility |
 |---|---|
-| `kc-model` | Project model and edit commands (undo/redo, validation, save/load); the user's saved keyboards |
+| `kc-model` | Layout model and edit commands (undo/redo, validation, save/load); the user's saved boards and their firmware configuration |
 | `kc-zmk` | ZMK keycodes, behavior catalog, Kconfig catalog |
 | `kc-boards` | Board definitions as embedded data |
 | `kc-emit` | Generates the ZMK config files |
@@ -28,13 +28,14 @@ A Cargo workspace under `crates/`:
 ## Rules
 
 - **Only `kc-app` depends on GPUI.** All logic lives in UI-independent crates. `ci/check-gui-boundary.sh` enforces this.
-- **The app's project file is the source of truth**; ZMK config files are generated from it, never edited in place.
+- **The app's own files are the source of truth** (layout files and the saved boards); ZMK config files are generated from them, never edited in place.
 - **Layers are referenced by stable ID**, never by index. The emitter resolves IDs to indices.
 - **Firmware differences are data** (firmware profiles in board definitions), not code branches.
-- **Projects are opened under a saved keyboard** ("My Boards"), which decides the firmware. A project file still records its board and firmware; opening it under a keyboard with another firmware of that board switches it over.
-- **What a firmware lacks is hidden, never deleted**: colors, pointing configuration and settings stay in the project, out of the UI and out of the generated config. Key bindings that need a missing feature are flagged instead.
-- **A physical device is linked to at most one saved keyboard.** The keyboard store enforces it.
-- In code a saved keyboard is a "keyboard"; "profile" means a firmware profile.
+- **Boards own the firmware; layouts own the keymap.** A saved board ("My Boards") holds the firmware choice, every firmware setting, custom `.conf` lines, the build repository, the linked device and its list of layouts with one current. A layout file (`.kcproj`, the `Project` type) holds only what goes in the `.keymap`. Nothing about the firmware goes in a layout, and changing a board never touches a layout file.
+- **Firmware work happens on the board's page** (settings, Build & Flash, Export); the layout editor only edits a layout and applies it to its board.
+- **What a firmware lacks is hidden, never deleted**: colors and pointing configuration stay in the layout, and settings stay on the board, out of the UI and out of the generated config. Key bindings that need a missing feature are flagged instead.
+- **A physical device is linked to at most one saved board.** The store enforces it.
+- In code a saved board is a "keyboard" and a layout is a "project"; "profile" means a firmware profile. The UI says "board" and "layout".
 - **American spelling everywhere**: UI text, messages, comments and docs (behavior, color, recognize, center, catalog). The exceptions are other people's names for things, such as GitHub's `cancelled` run conclusion and vendored ZMK files.
 - **Board limits are hard limits**: LED brightness is capped at 40 on the Go60 (warranty) and 50 on the Imprint.
 
