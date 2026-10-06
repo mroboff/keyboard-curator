@@ -3680,6 +3680,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kc-dygma"
+version = "0.1.0"
+dependencies = [
+ "kc-boards",
+ "kc-model",
+ "kc-zmk",
+ "serde",
+ "serde_json",
+ "serialport",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "kc-emit"
 version = "0.1.0"
 dependencies = [
@@ -3694,6 +3707,7 @@ name = "kc-firmware"
 version = "0.1.0"
 dependencies = [
  "kc-boards",
+ "kc-dygma",
  "kc-emit",
  "kc-model",
  "thiserror 2.0.21",

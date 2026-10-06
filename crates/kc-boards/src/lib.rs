@@ -12,6 +12,7 @@ pub use board::{Board, BoardError, Delivery, Family};
 const BUILT_IN: &[&str] = &[
     include_str!("../boards/cyboard-imprint.toml"),
     include_str!("../boards/moergo-go60.toml"),
+    include_str!("../boards/dygma-defy.toml"),
 ];
 
 /// Every board that ships with the app.

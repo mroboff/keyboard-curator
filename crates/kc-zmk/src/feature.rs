@@ -40,6 +40,8 @@ pub enum Feature {
     StickyKeys,
     /// Devicetree text carried into the generated keymap as it is.
     Devicetree,
+    /// The firmware is built from generated files, which can be shown.
+    Build,
     /// `&num_word` and auto layers, from the zmk-auto-layer add-on.
     AutoLayer,
     /// Leader keys, from the zmk-leader-key add-on.

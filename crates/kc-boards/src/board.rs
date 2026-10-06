@@ -203,14 +203,17 @@ impl Family {
     /// its own capabilities.
     pub fn base_features(self) -> &'static [Capability] {
         use Capability::{
-            Combos, Devicetree, HoldTaps, LayerRules, Macros, ModMorph, StickyKeys, TapDance,
+            Build, Combos, Devicetree, HoldTaps, LayerRules, Macros, ModMorph, StickyKeys, TapDance,
         };
         match self {
             Family::Zmk => &[
-                Combos, LayerRules, Macros, TapDance, ModMorph, HoldTaps, StickyKeys, Devicetree,
+                Build, Combos, LayerRules, Macros, TapDance, ModMorph, HoldTaps, StickyKeys,
+                Devicetree,
             ],
-            Family::Rmk => &[Combos, Macros, TapDance],
-            Family::Dygma => &[Macros, TapDance],
+            Family::Rmk => &[Build, Combos, Macros, TapDance],
+            // Dygma's superkeys and macros are kept as the keyboard has
+            // them, and are not edited yet.
+            Family::Dygma => &[],
         }
     }
 }
@@ -254,8 +257,32 @@ pub struct FirmwareProfile {
     pub capabilities: Vec<Capability>,
     /// How per-key lighting is written for this firmware, when it has it.
     pub lighting: Option<LightingBackend>,
+    /// How this board's keys and lights are laid out in Dygma's firmware.
+    /// Dygma only, and required for it.
+    pub dygma: Option<DygmaProfile>,
     #[serde(default)]
     pub builds: Vec<BuildTarget>,
+}
+
+/// Where a board's keys and lights sit in Dygma's firmware, which stores a
+/// keymap as a fixed grid of slots and colors as palette entries per light.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DygmaProfile {
+    /// How many layers the keyboard holds. Always all of them.
+    pub layers: usize,
+    /// Slots per layer in the keymap grid, used or not.
+    pub slots: usize,
+    /// Colors in the palette.
+    pub palette: usize,
+    /// Whether palette colors carry a white channel after red, green, blue.
+    pub rgbw: bool,
+    /// Lights per layer in the color map: those under keys, then underglow.
+    pub leds: usize,
+    /// For each key of the default layout, its slot in the keymap grid.
+    pub key_slots: Vec<usize>,
+    /// For each key of the default layout, the light under it.
+    pub key_leds: Vec<usize>,
 }
 
 impl FirmwareProfile {
@@ -329,6 +356,8 @@ pub enum BoardError {
         "ZMK firmware profile `{0}` needs `zmk`, `config_name`, `workflow` and at least one build"
     )]
     IncompleteZmk(String),
+    #[error("Dygma firmware profile `{0}` needs a `dygma` section giving every key of the default layout a different slot and light, within range")]
+    BadDygma(String),
     #[error("starter_keys has {found} entries, but the default layout has {keys} keys")]
     StarterKeyCount { found: usize, keys: usize },
     #[error("starter key `{0}` is not a ZMK keycode")]
@@ -477,6 +506,25 @@ impl Board {
                     || profile.builds.is_empty())
             {
                 return Err(BoardError::IncompleteZmk(profile.id.clone()));
+            }
+            if profile.family == Family::Dygma {
+                let keys = self
+                    .layout(&self.default_layout)
+                    .map_or(0, |l| l.keys.len());
+                let sound = profile.dygma.as_ref().is_some_and(|d| {
+                    let distinct = |list: &[usize], limit: usize| {
+                        list.len() == keys
+                            && list.iter().all(|n| *n < limit)
+                            && list.iter().collect::<HashSet<_>>().len() == keys
+                    };
+                    d.layers > 0
+                        && d.palette > 0
+                        && distinct(&d.key_slots, d.slots)
+                        && distinct(&d.key_leds, d.leds)
+                });
+                if !sound {
+                    return Err(BoardError::BadDygma(profile.id.clone()));
+                }
             }
             for build in &profile.builds {
                 if !has(build.side) {

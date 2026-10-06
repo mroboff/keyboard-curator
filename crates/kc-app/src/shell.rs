@@ -221,6 +221,22 @@ impl Shell {
             BoardEvent::ChooseLayout => self.open(&OpenProject, window, cx),
             BoardEvent::Import => self.import(&ImportProject, window, cx),
             BoardEvent::Remove => self.remove_keyboard(id, window, cx),
+            BoardEvent::Loaded(project) => {
+                let Some(board) = self.boards.iter().find(|b| b.id == project.board).cloned()
+                else {
+                    return;
+                };
+                let pending = Pending {
+                    project: (**project).clone(),
+                    board,
+                    path: None,
+                    notice: Some(
+                        "Read from the keyboard. Save it to keep it as a layout file.".into(),
+                    ),
+                    carried: Carried::default(),
+                };
+                self.open_editor(pending, id, window, cx);
+            }
         }
     }
 

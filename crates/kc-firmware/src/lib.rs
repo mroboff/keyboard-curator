@@ -10,8 +10,9 @@
 pub use kc_boards::{Delivery, Family};
 pub use kc_emit::GeneratedFile;
 
+use kc_boards::board::DygmaProfile;
 use kc_boards::Board;
-use kc_model::{FirmwareConfig, Problem, Project, Severity};
+use kc_model::{Binding, FirmwareConfig, Problem, Project, Severity};
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum FirmwareError {
@@ -29,9 +30,119 @@ pub enum FirmwareError {
 /// firmware would have, and those that come from what this family cannot
 /// express.
 pub fn check(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<Problem> {
-    let problems = kc_model::validate(project, board, config);
+    let mut problems = kc_model::validate(project, board, config);
     match config.family(board) {
-        Family::Zmk | Family::Rmk | Family::Dygma => problems,
+        Family::Zmk | Family::Rmk => {}
+        Family::Dygma => {
+            // The general check's advice is about ZMK builds; only what is
+            // wrong with the layout itself carries over.
+            problems.retain(|p| p.severity == Severity::Error);
+            if let Some(dygma) = dygma(board, config) {
+                problems.extend(kc_dygma::check(project, dygma));
+            }
+        }
+    }
+    problems
+}
+
+fn dygma<'a>(board: &'a Board, config: &FirmwareConfig) -> Option<&'a DygmaProfile> {
+    board.profile(&config.profile)?.dygma.as_ref()
+}
+
+/// Whether a binding can be used with a board's firmware at all, so that
+/// the editor offers only what works.
+pub fn expressible(
+    binding: &Binding,
+    project: &Project,
+    board: &Board,
+    config: &FirmwareConfig,
+) -> bool {
+    match config.family(board) {
+        Family::Zmk | Family::Rmk => true,
+        Family::Dygma => kc_dygma::expressible(binding, project),
+    }
+}
+
+/// Firmware configured on the running keyboard: reading a layout from it
+/// and writing one to it.
+pub mod live {
+    use std::path::{Path, PathBuf};
+
+    use kc_boards::Board;
+    use kc_model::{Device, FirmwareConfig, Project};
+
+    use super::{dygma, Family};
+
+    /// What applying a layout did.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Applied {
+        /// Whether anything had to be written.
+        pub changed: bool,
+        /// Where the keyboard's earlier configuration was saved, when
+        /// something was written.
+        pub backup: Option<PathBuf>,
+    }
+
+    fn not_live(board: &Board, config: &FirmwareConfig) -> String {
+        format!(
+            "{} firmware is built and flashed, not configured on the keyboard",
+            config.family(board).name()
+        )
+    }
+
+    /// Reads the connected keyboard's configuration as a new layout.
+    /// Nothing is written to the keyboard.
+    pub fn read(
+        board: &Board,
+        config: &FirmwareConfig,
+        device: Option<&Device>,
+    ) -> Result<Project, String> {
+        match (config.family(board), dygma(board, config)) {
+            (Family::Dygma, Some(profile)) => {
+                let image = kc_dygma::read(board, device).map_err(|e| e.to_string())?;
+                image
+                    .to_project(&format!("{} Layout", board.name), board, profile)
+                    .map_err(|e| e.to_string())
+            }
+            _ => Err(not_live(board, config)),
+        }
+    }
+
+    /// Writes a layout to the connected keyboard. What the keyboard held
+    /// before is saved into `backups` first, and nothing is written unless
+    /// that succeeds.
+    pub fn apply(
+        project: &Project,
+        board: &Board,
+        config: &FirmwareConfig,
+        device: Option<&Device>,
+        backups: &Path,
+    ) -> Result<Applied, String> {
+        match (config.family(board), dygma(board, config)) {
+            (Family::Dygma, Some(profile)) => {
+                let mut saved = None;
+                let applied = kc_dygma::apply(project, board, profile, device, |before| {
+                    std::fs::create_dir_all(backups)?;
+                    let stamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs());
+                    let path = backups.join(format!(
+                        "{}-{}-{stamp}.json",
+                        board.id,
+                        before.chip_id.trim()
+                    ));
+                    std::fs::write(&path, before.to_json())?;
+                    saved = Some(path);
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+                Ok(Applied {
+                    changed: !applied.sent.is_empty(),
+                    backup: saved,
+                })
+            }
+            _ => Err(not_live(board, config)),
+        }
     }
 }
 

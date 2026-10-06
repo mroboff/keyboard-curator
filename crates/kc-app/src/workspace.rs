@@ -99,11 +99,26 @@ impl Mode {
             // Layer rules and custom devicetree both need a firmware built
             // from devicetree.
             Mode::Advanced => Some(Feature::Devicetree),
+            // Firmware configured on the keyboard has no files to show.
+            Mode::Files => Some(Feature::Build),
             _ => None,
         }
     }
 
     fn available(self, features: &[Feature]) -> bool {
+        // The behavior editors are for behaviors the user defines; a
+        // firmware with none of those kinds has nothing to edit there.
+        if self == Mode::Behaviors {
+            return [
+                Feature::Macros,
+                Feature::TapDance,
+                Feature::ModMorph,
+                Feature::HoldTaps,
+                Feature::StickyKeys,
+            ]
+            .iter()
+            .any(|f| features.contains(f));
+        }
         self.requires().is_none_or(|f| features.contains(&f))
     }
 }
@@ -1349,7 +1364,13 @@ impl Workspace {
     fn render_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted, hover) = (theme.border, theme.muted_foreground, theme.secondary);
-        let items = picker_items(self.project(), &self.features());
+        // Only what the board's firmware has something for is offered.
+        let items: Vec<_> = picker_items(self.project(), &self.features())
+            .into_iter()
+            .filter(|item| {
+                kc_firmware::expressible(&item.binding, self.project(), &self.board, &self.config)
+            })
+            .collect();
         let query = self.search.read(cx).value().trim().to_string();
         let searching = !query.is_empty();
 
@@ -1700,9 +1721,11 @@ impl Workspace {
             .border_1()
             .border_color(border)
             .child(div().text_lg().child(format!("Apply to “{name}”")))
-            .child(div().text_sm().text_color(muted).child(format!(
-                "Makes this the layout “{name}” is built with, saving it first, and takes you to the board's Build & Flash. The board's firmware and settings are not changed.",
-            )))
+            .child(div().text_sm().text_color(muted).child(if self.features().contains(&Feature::Build) {
+                format!("Makes this the layout “{name}” is built with, saving it first, and takes you to the board's Build & Flash. The board's firmware and settings are not changed.")
+            } else {
+                format!("Makes this the layout of “{name}”, saving it first, and takes you to the board's Keyboard tab, where it is written to the keyboard.")
+            }))
             .child(
                 div().flex().child(
                     Button::new("apply-layout")
@@ -2257,6 +2280,14 @@ mod tests {
         assert!(!Mode::Pointing.available(&[]));
         assert!(!Mode::Combos.available(&[]));
         assert!(!Mode::Advanced.available(&[]));
+        assert!(!Mode::Behaviors.available(&[]));
+        assert!(!Mode::Files.available(&[]));
+
+        // Dygma's firmware is configured live: keys and colors, no files.
+        assert_eq!(
+            tabs("dygma-defy", "dygma-defy"),
+            ["Keyboard", "Lighting", "Apply"]
+        );
         assert!(Mode::Keyboard.available(&[]));
         assert!(Mode::Apply.available(&[]));
     }

@@ -51,6 +51,8 @@ pub enum BoardEvent {
     Import,
     /// Remove this board, after asking.
     Remove,
+    /// Open a layout that was just read from the keyboard, unsaved.
+    Loaded(Box<Project>),
 }
 
 impl EventEmitter<BoardEvent> for BoardPage {}
@@ -86,6 +88,11 @@ pub struct BoardPage {
     source_revision: Entity<InputState>,
     flash: Entity<FlashView>,
     build: BuildStatus,
+    /// What reading from or applying to a live-configured keyboard is
+    /// doing, or how it went.
+    live: Option<String>,
+    /// True while the keyboard is being read or written.
+    live_busy: bool,
     /// A short message about the last action.
     notice: Option<String>,
     /// The saved name, announced name and custom settings the text fields
@@ -154,6 +161,8 @@ impl BoardPage {
             source_revision,
             flash,
             build: BuildStatus::Idle,
+            live: None,
+            live_busy: false,
             notice: None,
             seen: None,
         };
@@ -372,12 +381,120 @@ impl BoardPage {
         .detach();
     }
 
+    // Live configuration
+
+    /// Reads the connected keyboard's configuration and opens it as a new,
+    /// unsaved layout. Nothing is written to the keyboard.
+    fn read_keyboard(&mut self, cx: &mut Context<Self>) {
+        let (board, config) = (self.board.clone(), self.config(cx));
+        let device = self.saved(cx).and_then(|k| k.device.clone());
+        self.live = Some("Reading the keyboard…".into());
+        self.live_busy = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let read = cx
+                .background_executor()
+                .spawn(async move { kc_firmware::live::read(&board, &config, device.as_ref()) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.live_busy = false;
+                match read {
+                    Ok(project) => {
+                        this.live =
+                            Some("Read the keyboard's configuration into a new layout.".into());
+                        cx.emit(BoardEvent::Loaded(Box::new(project)));
+                    }
+                    Err(error) => this.live = Some(format!("{error}.")),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Writes the board's current layout to the connected keyboard, after
+    /// asking. What the keyboard held is saved to disk first.
+    fn apply_to_keyboard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let layout = match self.layout(cx) {
+            Ok(layout) => layout,
+            Err(message) => {
+                self.live = Some(message);
+                cx.notify();
+                return;
+            }
+        };
+        let Some(saved) = self.saved(cx).cloned() else {
+            return;
+        };
+        let Some(backups) = dirs::config_dir().map(|d| d.join("Keyboard Curator").join("backups"))
+        else {
+            return;
+        };
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            &format!("Write “{}” to the keyboard?", layout.name),
+            Some(&format!(
+                "This changes “{}” at once: its keys and the colors under them on every layer. Superkeys, macros, underglow and settings are left as they are. What the keyboard holds now is saved first, in {}.",
+                saved.name,
+                backups.display()
+            )),
+            &["Cancel", "Write to Keyboard"],
+            cx,
+        );
+        let (board, config) = (self.board.clone(), saved.firmware.clone());
+        cx.spawn(async move |this, cx| {
+            if answer.await != Ok(1) {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.live = Some("Writing to the keyboard…".into());
+                this.live_busy = true;
+                cx.notify();
+            });
+            let applied = cx
+                .background_executor()
+                .spawn(async move {
+                    kc_firmware::live::apply(
+                        &layout,
+                        &board,
+                        &config,
+                        saved.device.as_ref(),
+                        &backups,
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.live_busy = false;
+                this.live = Some(match applied {
+                    Ok(applied) if !applied.changed => {
+                        "The keyboard already holds this layout. Nothing was written.".to_string()
+                    }
+                    Ok(applied) => format!(
+                        "Written to the keyboard. Its earlier configuration is saved in {}.",
+                        applied
+                            .backup
+                            .map_or_else(String::new, |path| path.display().to_string())
+                    ),
+                    Err(error) => format!("Nothing more was written: {error}."),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     // Building
 
     /// The layout the firmware is built with: the board's current one, or
     /// the factory layout when none has been applied.
     fn layout(&self, cx: &App) -> Result<Project, String> {
         let Some(path) = self.saved(cx).and_then(|k| k.current.clone()) else {
+            if self.config(cx).family(&self.board).delivery() == Delivery::Live {
+                return Err(
+                    "This board has no current layout. Read the keyboard's own, or make one current under Layouts."
+                        .into(),
+                );
+            }
             return Ok(Project::from_template(
                 format!("{} factory layout", self.board.name),
                 &self.board,
@@ -1210,7 +1327,10 @@ impl BoardPage {
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(BoardEvent::Import))),
                     ),
             )
-            .child(factory)
+            .when(
+                saved.firmware.family(&self.board).delivery() == Delivery::Build,
+                |page| page.child(factory),
+            )
             .children(rows)
     }
 
@@ -1298,6 +1418,77 @@ impl BoardPage {
             .pt_6()
             .pb_4()
             .child(panel)
+    }
+
+    /// Reading from and writing to a keyboard whose firmware is configured
+    /// live.
+    fn render_keyboard_section(&self, saved: &Keyboard, cx: &mut Context<Self>) -> Div {
+        let theme = cx.theme();
+        let (muted, border) = (theme.muted_foreground, theme.border);
+        let current = match &saved.current {
+            Some(path) => format!(
+                "The current layout is “{}”.",
+                path.file_stem()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+            ),
+            None => "This board has no current layout yet.".to_string(),
+        };
+        let panel = |title: &'static str, text: String| {
+            div()
+                .w(px(640.))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .p_4()
+                .rounded_lg()
+                .border_1()
+                .border_color(border)
+                .child(div().text_lg().child(title))
+                .child(div().text_sm().text_color(muted).child(text))
+        };
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap_4()
+            .child(
+                panel(
+                    "Read from the keyboard",
+                    "Opens what the keyboard holds now as a new layout: every layer's keys and the colors under them. Nothing is written to the keyboard. Close Dygma's Bazecor first; only one program can talk to the keyboard at a time.".into(),
+                )
+                .when(!self.live_busy, |panel| {
+                    panel.child(
+                        div().flex().child(
+                            Button::new("read-keyboard")
+                                .primary()
+                                .label("Read From Keyboard")
+                                .on_click(cx.listener(|this, _, _, cx| this.read_keyboard(cx))),
+                        ),
+                    )
+                }),
+            )
+            .child(
+                panel(
+                    "Apply to the keyboard",
+                    format!(
+                        "{current} Applying writes it to the keyboard at once, with no build. Only keys and the colors under them are written, and only if they differ; superkeys, macros, underglow and settings stay as they are. The keyboard's configuration is saved to disk first."
+                    ),
+                )
+                .when(!self.live_busy && saved.current.is_some(), |panel| {
+                    panel.child(
+                        div().flex().child(
+                            Button::new("apply-keyboard")
+                                .label("Apply To Keyboard…")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.apply_to_keyboard(window, cx);
+                                })),
+                        ),
+                    )
+                }),
+            )
+            .when_some(self.live.clone(), |page, status| {
+                page.child(div().w(px(640.)).text_sm().child(status))
+            })
     }
 
     /// Building the firmware, exporting its config and flashing it.
@@ -1417,7 +1608,10 @@ impl Render for BoardPage {
             Section::Firmware => self.render_firmware(&config, cx),
             Section::Settings => self.render_settings(&config, cx),
             Section::Layouts => self.render_layouts(&saved, cx),
-            Section::Build => self.render_build_section(&saved, &config, cx),
+            Section::Build => match config.family(&self.board).delivery() {
+                Delivery::Build => self.render_build_section(&saved, &config, cx),
+                Delivery::Live => self.render_keyboard_section(&saved, cx),
+            },
         };
         div()
             .size_full()
