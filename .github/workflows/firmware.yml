@@ -36,6 +36,7 @@ jobs:
           - cyboard-imprint-lighting
           - cyboard-imprint-addons
           - cyboard-imprint-addons-sequences
+          - cyboard-imprint-tailorkey
           - moergo-go60
           - moergo-go60-factory
           - moergo-go60-lighting

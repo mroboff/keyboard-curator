@@ -95,6 +95,8 @@ pub enum ModelError {
     LabelTaken(String),
     #[error("the board `{board}` has no layout `{layout}`")]
     NoSuchLayout { board: String, layout: String },
+    #[error("the key map has {given} entries for {keys} keys")]
+    KeyMapSize { given: usize, keys: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -121,40 +123,93 @@ pub struct Project {
     next_id: u32,
 }
 
-/// The vendors' factory layouts, as projects. Regenerate one with the
-/// `make_template` example when a vendor changes theirs.
-const TEMPLATES: &[(&str, &str)] = &[
-    (
-        "cyboard-imprint",
-        include_str!("../templates/cyboard-imprint.kcproj"),
-    ),
-    (
-        "moergo-go60",
-        include_str!("../templates/moergo-go60.kcproj"),
-    ),
-    (
-        "moergo-glove80",
-        include_str!("../templates/moergo-glove80.kcproj"),
-    ),
+/// A layout to start a new project from: a vendor's factory layout, or a
+/// community layout brought to the board with its author's credit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Template {
+    /// Stable within a board; `factory` is the vendor's layout.
+    pub id: &'static str,
+    pub board: &'static str,
+    pub name: &'static str,
+    /// One or two sentences on what the layout is.
+    pub description: &'static str,
+    /// Whose layout it is, and where to find the original.
+    pub credit: Option<Credit>,
+    json: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Credit {
+    pub author: &'static str,
+    pub url: &'static str,
+}
+
+/// The templates that ship with the app. Factory layouts are regenerated
+/// with the `make_template` example when a vendor changes theirs; the
+/// TailorKey port with kc-import's `tailorkey_imprint` example.
+pub const TEMPLATES: &[Template] = &[
+    Template {
+        id: "factory",
+        board: "cyboard-imprint",
+        name: "Factory layout",
+        description: "Cyboard's layout as the keyboard ships: five layers with the keypad, navigation and keyboard-control layers.",
+        credit: None,
+        json: include_str!("../templates/cyboard-imprint.kcproj"),
+    },
+    Template {
+        id: "tailorkey",
+        board: "cyboard-imprint",
+        name: "TailorKey",
+        description: "Moosy Research's TailorKey v5.2 Bilateral (QWERTY) brought to the Imprint: bilateral home-row mods, autoshift, cursor, symbol, mouse and gaming layers, combos and macros, with TailorKey's per-layer colors and the trackballs standing in for the touchpads.",
+        credit: Some(Credit {
+            author: "Moosy Research",
+            url: "https://sites.google.com/view/tailorkey",
+        }),
+        json: include_str!("../templates/tailorkey-cyboard-imprint.kcproj"),
+    },
+    Template {
+        id: "factory",
+        board: "moergo-go60",
+        name: "Factory layout",
+        description: "MoErgo's layout as the keyboard ships.",
+        credit: None,
+        json: include_str!("../templates/moergo-go60.kcproj"),
+    },
+    Template {
+        id: "factory",
+        board: "moergo-glove80",
+        name: "Factory layout",
+        description: "MoErgo's layout as the keyboard ships.",
+        credit: None,
+        json: include_str!("../templates/moergo-glove80.kcproj"),
+    },
 ];
 
 impl Project {
+    /// The templates a board can start from, the factory layout first.
+    pub fn templates(board: &Board) -> Vec<&'static Template> {
+        TEMPLATES.iter().filter(|t| t.board == board.id).collect()
+    }
+
     /// A new project that starts as the board's factory layout: every
     /// layer, behavior and pointing setting the keyboard ships with.
     /// Boards without a template start from [`Project::new`].
     pub fn from_template(name: impl Into<String>, board: &Board) -> Self {
-        let template = TEMPLATES
+        let name = name.into();
+        Self::from_template_id("factory", name.clone(), board)
+            .unwrap_or_else(|| Self::new(name, board))
+    }
+
+    /// A new project from one of the board's templates by id, or `None`
+    /// when the board has no such template.
+    pub fn from_template_id(id: &str, name: impl Into<String>, board: &Board) -> Option<Self> {
+        let mut project = TEMPLATES
             .iter()
-            .find(|(id, _)| *id == board.id)
-            .and_then(|(_, text)| crate::file::from_json(text).ok())
-            .filter(|p| p.layout == board.default_layout);
-        match template {
-            Some(mut project) => {
-                project.name = name.into();
-                project
-            }
-            None => Self::new(name, board),
-        }
+            .find(|t| t.board == board.id && t.id == id)
+            .and_then(|t| crate::file::from_json(t.json).ok())
+            .filter(|p| p.layout == board.default_layout)?;
+        project.name = name.into();
+        Some(project)
     }
 
     /// A new project for `board`, with a base layer of the board's starter
@@ -207,6 +262,89 @@ impl Project {
             bindings: vec![Binding::trans(); self.key_count],
         });
         id
+    }
+
+    /// Moves the project to another board's layout, key by key. `to_new`
+    /// gives each old position its new one, or `None` when the key has no
+    /// counterpart; keys of the new layout that nothing maps to are left
+    /// transparent and unlit. Combos that lose a key are dropped and
+    /// returned by name; hold-trigger positions simply lose the key.
+    /// Pointing settings are kept as they are, since their listeners are
+    /// the board's own to rename.
+    pub fn remap_keys(
+        &mut self,
+        board: &Board,
+        layout: &str,
+        to_new: &[Option<usize>],
+    ) -> Result<Vec<String>, ModelError> {
+        let target = board
+            .layout(layout)
+            .ok_or_else(|| ModelError::NoSuchLayout {
+                board: board.id.clone(),
+                layout: layout.to_string(),
+            })?;
+        if to_new.len() != self.key_count {
+            return Err(ModelError::KeyMapSize {
+                given: to_new.len(),
+                keys: self.key_count,
+            });
+        }
+        let count = target.keys.len();
+        if let Some(&bad) = to_new.iter().flatten().find(|&&n| n >= count) {
+            return Err(ModelError::NoSuchPosition {
+                position: bad,
+                keys: count,
+            });
+        }
+        let moved = |positions: &[usize]| -> Option<Vec<usize>> {
+            positions
+                .iter()
+                .map(|&p| to_new.get(p).copied().flatten())
+                .collect()
+        };
+        for layer in &mut self.layers {
+            let mut bindings = vec![Binding::trans(); count];
+            for (old, binding) in layer.bindings.iter().enumerate() {
+                if let Some(new) = to_new[old] {
+                    bindings[new] = binding.clone();
+                }
+            }
+            layer.bindings = bindings;
+        }
+        for lighting in &mut self.lighting {
+            let mut keys = vec![KeyLight::Inherit; count];
+            for (old, light) in lighting.keys.iter().enumerate() {
+                if let Some(new) = to_new.get(old).copied().flatten() {
+                    keys[new] = *light;
+                }
+            }
+            lighting.keys = keys;
+        }
+        for def in &mut self.behaviors {
+            if let BehaviorKind::HoldTap(h) = &mut def.kind {
+                h.hold_trigger_key_positions = h
+                    .hold_trigger_key_positions
+                    .iter()
+                    .filter_map(|&p| to_new.get(p).copied().flatten())
+                    .collect();
+            }
+        }
+        let mut dropped = Vec::new();
+        self.combos
+            .retain_mut(|combo| match moved(&combo.key_positions) {
+                Some(positions) => {
+                    combo.key_positions = positions;
+                    true
+                }
+                None => {
+                    dropped.push(combo.name.clone());
+                    false
+                }
+            });
+        self.board = board.id.clone();
+        self.layout = target.id.clone();
+        self.key_count = count;
+        Ok(dropped)
     }
 
     // Layers

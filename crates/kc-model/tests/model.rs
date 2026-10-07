@@ -1110,3 +1110,157 @@ fn led_check_patterns_and_unverified_maps() {
         .iter()
         .any(|e| e.contains("not available for this key layout")));
 }
+
+#[test]
+fn boards_offer_their_templates_with_credit() {
+    use kc_model::project::TEMPLATES;
+    let imprint = board("cyboard-imprint");
+    let ids: Vec<&str> = Project::templates(&imprint).iter().map(|t| t.id).collect();
+    assert_eq!(ids, ["factory", "tailorkey"]);
+    assert_eq!(
+        Project::templates(&board("moergo-go60"))
+            .iter()
+            .map(|t| t.id)
+            .collect::<Vec<_>>(),
+        ["factory"]
+    );
+    let tailorkey = TEMPLATES
+        .iter()
+        .find(|t| t.id == "tailorkey" && t.board == "cyboard-imprint")
+        .unwrap();
+    let credit = tailorkey
+        .credit
+        .expect("a community layout names its author");
+    assert_eq!(credit.author, "Moosy Research");
+    assert!(credit.url.starts_with("https://"));
+    // Every template loads for its board and is valid on every firmware
+    // the board offers with lighting; plain RMK has no lighting or mouse
+    // keys, and flags those keys as it should.
+    for template in TEMPLATES {
+        let board = board(template.board);
+        let project = Project::from_template_id(template.id, "Mine", &board).unwrap();
+        assert_eq!(
+            project.key_count,
+            board.layout(&board.default_layout).unwrap().keys.len()
+        );
+        for profile in board.firmware.iter().filter(|f| {
+            f.capabilities
+                .contains(&kc_boards::board::Capability::RgbUnderglow)
+        }) {
+            let config = kc_model::FirmwareConfig::new(profile.id.clone());
+            let errors: Vec<_> = kc_model::validate(&project, &board, &config)
+                .into_iter()
+                .filter(|p| p.severity == kc_model::Severity::Error)
+                .collect();
+            assert_eq!(errors, [], "{} on {}", template.id, profile.id);
+        }
+    }
+    assert!(Project::from_template_id("nope", "Mine", &imprint).is_none());
+    // The factory layout is still the default.
+    assert_eq!(
+        Project::from_template("Mine", &imprint).layers.len(),
+        Project::from_template_id("factory", "Mine", &imprint)
+            .unwrap()
+            .layers
+            .len()
+    );
+}
+
+/// TailorKey on the Imprint: twelve layers, the home-row mods split by
+/// hand with the other hand's keys and the thumbs as their triggers, the
+/// trackballs scaled by the mouse-speed layers, and TailorKey's colors.
+#[test]
+fn the_tailorkey_template_fits_the_imprint() {
+    use kc_model::behavior::BehaviorKind;
+    use kc_model::features::{InputProcessor, KeyLight};
+    let imprint = board("cyboard-imprint");
+    let p = Project::from_template_id("tailorkey", "TailorKey", &imprint).unwrap();
+    assert_eq!(p.layers.len(), 12);
+    assert_eq!(p.layers[0].name, "Base");
+    let hold_taps: Vec<_> = p
+        .behaviors
+        .iter()
+        .filter_map(|b| match &b.kind {
+            BehaviorKind::HoldTap(h) => Some((b.label.as_str(), h)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(hold_taps.len(), 11);
+    let (_, left) = hold_taps.iter().find(|(l, _)| *l == "hrm_pinky").unwrap();
+    let (_, right) = hold_taps
+        .iter()
+        .find(|(l, _)| *l == "hrm_pinky_right")
+        .unwrap();
+    assert!(!left.opposite_hand_hold && left.hold_trigger_on_release);
+    // The left pinky holds for right-hand keys (6, the top row's F6) and
+    // the left thumbs (70), never for the left hand's own A (37).
+    assert!(left.hold_trigger_key_positions.contains(&6));
+    assert!(left.hold_trigger_key_positions.contains(&70));
+    assert!(!left.hold_trigger_key_positions.contains(&37));
+    assert!(right.hold_trigger_key_positions.contains(&37));
+    assert!(!right.hold_trigger_key_positions.contains(&46));
+    // A on the left home row and ; on the right use their hand's behavior.
+    let label_at = |position: usize| match &p.layers[0].bindings[position] {
+        kc_model::Binding::Behavior {
+            behavior: kc_model::BehaviorRef::User { user },
+            ..
+        } => p.behavior(*user).unwrap().label.clone(),
+        other => format!("{other:?}"),
+    };
+    assert_eq!(label_at(37), "hrm_pinky");
+    assert_eq!(label_at(46), "hrm_pinky_right");
+    assert_eq!(p.combos.len(), 14);
+    assert_eq!(p.pointing.len(), 2);
+    let right_ball = p
+        .pointing
+        .iter()
+        .find(|c| c.listener == "trackball_peripheral_listener")
+        .unwrap();
+    assert_eq!(right_ball.overrides.len(), 3);
+    assert!(right_ball.overrides.iter().any(|o| o.processors
+        == [InputProcessor::Scale {
+            multiplier: 12,
+            divisor: 1
+        }]));
+    // TailorKey's colors: the home-row mods on the base layer, and the
+    // lock lights on F2 to F4.
+    let base = p.lighting(p.layers[0].id).unwrap();
+    assert_eq!(base.fade_delay, Some(15));
+    assert!(matches!(base.keys[37], KeyLight::Color(_)));
+    assert!(matches!(base.keys[3], KeyLight::Lock { .. }));
+    assert_eq!(base.keys[0], KeyLight::Off);
+    assert_eq!(p.lighting.len(), 10);
+}
+
+#[test]
+fn keys_move_to_another_layout() {
+    let imprint = board("cyboard-imprint");
+    let mut p = Project::from_template("Mine", &imprint);
+    let base = p.layers[0].id;
+    let first = p.layers[0].bindings[1].clone();
+    let last = p.layers[0].bindings[81].clone();
+    let combo = p.add_combo("pair", vec![1, 2], kc_model::Binding::none());
+    p.add_combo("lost", vec![0, 1], kc_model::Binding::none());
+    // Reverse the keys, and leave key 0 without a counterpart.
+    let mut map: Vec<Option<usize>> = (0..82).map(|i| Some(81 - i)).collect();
+    map[0] = None;
+    let dropped = p
+        .remap_keys(&imprint, &imprint.default_layout, &map)
+        .unwrap();
+    assert_eq!(dropped, ["lost"]);
+    assert_eq!(p.layers[0].bindings[80], first);
+    assert_eq!(p.layers[0].bindings[0], last);
+    assert_eq!(p.layers[0].bindings[81], kc_model::Binding::trans());
+    assert_eq!(p.combos.len(), 1);
+    assert_eq!(p.combos[0].id, combo);
+    assert_eq!(p.combos[0].key_positions, [80, 79]);
+    assert_eq!(p.key_count, 82);
+    let _ = base;
+    assert!(matches!(
+        p.remap_keys(&imprint, &imprint.default_layout, &map[..10]),
+        Err(kc_model::ModelError::KeyMapSize {
+            given: 10,
+            keys: 82
+        })
+    ));
+}

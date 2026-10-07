@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -43,7 +44,10 @@ pub enum Section {
 pub enum BoardEvent {
     /// Go back to My Boards.
     Back,
+    /// A new layout from the board's factory template.
     NewLayout,
+    /// A new layout from one of the board's templates, by id.
+    NewLayoutFrom(&'static str),
     /// Open this layout file in the editor.
     OpenLayout(PathBuf),
     /// Let the user pick a layout file to open.
@@ -251,6 +255,36 @@ impl BoardPage {
                 tester.leave(cx);
             }
         });
+    }
+
+    /// "New Layout": the factory layout, or, when the board has more
+    /// templates, a menu of them with their authors' credit.
+    fn new_layout_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let templates = Project::templates(&self.board);
+        let button = Button::new("new-layout").primary().label("New Layout");
+        if templates.len() < 2 {
+            return button
+                .on_click(cx.listener(|_, _, _, cx| cx.emit(BoardEvent::NewLayout)))
+                .into_any_element();
+        }
+        let page = cx.weak_entity();
+        button
+            .dropdown_caret(true)
+            .dropdown_menu(move |mut menu, _, _| {
+                for template in &templates {
+                    let page = page.clone();
+                    let id = template.id;
+                    let label = match template.credit {
+                        Some(credit) => format!("{} (by {})", template.name, credit.author),
+                        None => template.name.to_string(),
+                    };
+                    menu = menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
+                        let _ = page.update(cx, |_, cx| cx.emit(BoardEvent::NewLayoutFrom(id)));
+                    }));
+                }
+                menu
+            })
+            .into_any_element()
     }
 
     /// The layout the key tester matches presses against, and a sentence
@@ -1521,12 +1555,7 @@ impl BoardPage {
                     .flex()
                     .flex_wrap()
                     .gap_2()
-                    .child(
-                        Button::new("new-layout")
-                            .primary()
-                            .label("New Layout")
-                            .on_click(cx.listener(|_, _, _, cx| cx.emit(BoardEvent::NewLayout))),
-                    )
+                    .child(self.new_layout_button(cx))
                     .child(
                         Button::new("open-layout")
                             .label("Open Layout…")

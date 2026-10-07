@@ -520,7 +520,34 @@ fn fixtures_match_the_emitter() {
             ),
         ]
     });
-    for (board, directory, (project, config)) in projects.chain(lit).chain(with_addons) {
+    // Community layouts brought to a board, on its per-key lighting firmware
+    // when it has one, so their colors are generated too.
+    let community = boards.iter().flat_map(|board| {
+        Project::templates(board)
+            .into_iter()
+            .filter(|template| template.id != "factory")
+            .map(move |template| {
+                let profile = board
+                    .firmware
+                    .iter()
+                    .find(|f| f.lighting.is_some())
+                    .unwrap_or(&board.firmware[0]);
+                let project = Project::from_template_id(
+                    template.id,
+                    format!("{} for the {}", template.name, board.name),
+                    board,
+                )
+                .expect("the template is for this board");
+                (
+                    board,
+                    format!("{}-{}", board.id, template.id),
+                    (project, FirmwareConfig::new(profile.id.clone())),
+                )
+            })
+    });
+    for (board, directory, (project, config)) in
+        projects.chain(lit).chain(with_addons).chain(community)
+    {
         let errors: Vec<_> = kc_model::validate(&project, board, &config)
             .into_iter()
             .filter(|p| p.severity == kc_model::Severity::Error)

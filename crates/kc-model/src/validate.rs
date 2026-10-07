@@ -36,6 +36,10 @@ pub struct Problem {
 struct Checker<'a> {
     project: &'a Project,
     features: Vec<Feature>,
+    /// Whether a binding that needs a feature the firmware lacks is an
+    /// error. True for ZMK, whose catalog the features describe; another
+    /// family's own check says what it can express.
+    strict_features: bool,
     problems: Vec<Problem>,
 }
 
@@ -63,6 +67,9 @@ impl Checker<'_> {
     }
 
     fn feature(&mut self, location: &Location, what: &str, feature: Option<Feature>) {
+        if !self.strict_features {
+            return;
+        }
         if let Some(feature) = feature.filter(|f| !self.features.contains(f)) {
             self.error(
                 location,
@@ -228,6 +235,7 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
     let mut c = Checker {
         project,
         features: Vec::new(),
+        strict_features: config.family(board) == kc_boards::Family::Zmk,
         problems: Vec::new(),
     };
 

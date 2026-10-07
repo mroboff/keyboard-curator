@@ -244,7 +244,8 @@ impl Shell {
                 self.focus.focus(window, cx);
                 cx.notify();
             }
-            BoardEvent::NewLayout => self.new_layout(id, window, cx),
+            BoardEvent::NewLayout => self.new_layout(id, "factory", window, cx),
+            BoardEvent::NewLayoutFrom(template) => self.new_layout(id, template, window, cx),
             BoardEvent::OpenLayout(path) => self.open_path(path.clone(), window, cx),
             BoardEvent::ChooseLayout => self.open(&OpenProject, window, cx),
             BoardEvent::Import => self.import(&ImportProject, window, cx),
@@ -545,14 +546,22 @@ impl Shell {
     }
 
     /// Starts a layout from the board's factory layout.
-    fn new_layout(&mut self, id: KeyboardId, window: &mut Window, cx: &mut Context<Self>) {
+    fn new_layout(
+        &mut self,
+        id: KeyboardId,
+        template: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(keyboard) = self.keyboard(id, cx) else {
             return;
         };
         let Some(board) = self.boards.iter().find(|b| b.id == keyboard.board).cloned() else {
             return;
         };
-        let project = Project::from_template(format!("{} Layout", board.name), &board);
+        let name = format!("{} Layout", board.name);
+        let project = Project::from_template_id(template, name.clone(), &board)
+            .unwrap_or_else(|| Project::from_template(name, &board));
         let pending = Pending {
             project,
             board,
@@ -789,7 +798,7 @@ impl Shell {
             return;
         }
         match self.page.as_ref().map(|page| page.read(cx).keyboard()) {
-            Some(id) => self.new_layout(id, window, cx),
+            Some(id) => self.new_layout(id, "factory", window, cx),
             None => self.start_add(window, cx),
         }
     }

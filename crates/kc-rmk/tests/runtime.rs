@@ -1144,3 +1144,49 @@ fn the_imprint_factory_layout_translates_for_its_rmk_fork() {
         assert_eq!(mine.bindings.len(), theirs.bindings.len());
     }
 }
+
+/// TailorKey on the Imprint goes to the Imprint's RMK fork whole: the
+/// hand-split home-row mods as profiles with their trigger keys, the
+/// combos, the macros and the trackballs' speed layers reported as what
+/// the firmware cannot scale at runtime.
+#[test]
+fn the_tailorkey_template_translates_for_the_imprints_rmk_fork() {
+    let (imprint, profile) = imprint();
+    let project = Project::from_template_id("tailorkey", "TailorKey", &imprint).unwrap();
+    let firmware = FirmwareConfig::new("imprint-rmk");
+    let problems = kc_rmk::runtime::check(&project, &imprint, &profile, &firmware);
+    assert!(
+        problems.iter().all(|p| p.severity != Severity::Error),
+        "{problems:#?}"
+    );
+    let translation = translate(&project, &imprint, &profile, &firmware).expect("translates");
+    let text = translation.config.to_toml().unwrap();
+    let parsed = RuntimeConfig::from_toml(&text).unwrap();
+    assert_eq!(parsed.layers.len(), 12);
+    let profiles = &parsed.behavior.as_ref().unwrap().morse.profiles;
+    assert_eq!(profiles.len(), 11);
+    let pinky = &profiles["hrm_pinky"];
+    assert!(pinky.hold_trigger_key_positions.len() > 40);
+    assert_eq!(pinky.hold_timeout_ms, Some(270));
+    // Cells may hold spaces inside parentheses, so split on balance.
+    let mut base: Vec<String> = Vec::new();
+    let mut depth = 0i32;
+    for word in parsed.layers[0].keys.split_whitespace() {
+        if depth > 0 {
+            let last = base.last_mut().unwrap();
+            last.push(' ');
+            last.push_str(word);
+        } else {
+            base.push(word.to_string());
+        }
+        depth += word.matches('(').count() as i32 - word.matches(')').count() as i32;
+    }
+    assert_eq!(base.len(), 14 * 8);
+    // A at (3,4): matrix row 3 is the home row, column 4 the pinky column.
+    assert_eq!(base[3 * 8 + 4], "MT(KC_A, LGui, hrm_pinky)");
+    assert_eq!(base[10 * 8 + 4], "MT(KC_SCLN, RGui, hrm_pinky_right)");
+    let led_to_key = |led: u16| profile.key_of_led(&imprint, led);
+    let back = import(&parsed, &imprint, &profile, "Back", &led_to_key).expect("imports");
+    assert_eq!(back.project.combos.len(), 14);
+    assert_eq!(back.project.layers.len(), 12);
+}

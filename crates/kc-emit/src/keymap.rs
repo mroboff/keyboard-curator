@@ -70,11 +70,19 @@ impl Writer<'_> {
     }
 }
 
+/// A devicetree node name from a label: letters and digits kept, every
+/// other run of characters one underscore, none at the ends. Stable under
+/// a reimport, which reads the name back from the node.
 fn node_name(label: &str) -> String {
-    label
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect()
+    let mut name = String::new();
+    for c in label.chars() {
+        if c.is_ascii_alphanumeric() {
+            name.push(c);
+        } else if !name.is_empty() && !name.ends_with('_') {
+            name.push('_');
+        }
+    }
+    name.trim_end_matches('_').to_string()
 }
 
 fn mods(mods: &[kc_zmk::Modifier]) -> String {
