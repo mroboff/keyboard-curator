@@ -1,0 +1,155 @@
+<section class="cover">
+  <div class="eyebrow">User Guide</div>
+  <h1>Keyboard Curator</h1>
+  <div class="sub">Design your keyboard's layout, behaviors and lighting, then build and flash the firmware or write the layout straight to the keyboard. No prior knowledge of ZMK needed.</div>
+  <div class="art">{{IMPRINT}}</div>
+  <div class="foot">For the Cyboard Imprint, the MoErgo Go60 and Glove80, and the Dygma Defy &nbsp;·&nbsp; macOS &nbsp;·&nbsp; Early-development edition, October 2026</div>
+</section>
+
+<section class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#c1"><span class="n">1</span><span class="t">Welcome</span><span class="d">What the app does, what you need, and how finished it is.</span></a></li>
+    <li><a href="#c2"><span class="n">2</span><span class="t">How a programmable keyboard works</span><span class="d">Firmware, layers, flashing and live configuration, explained from scratch.</span></a></li>
+    <li><a href="#c3"><span class="n">3</span><span class="t">Getting started</span><span class="d">Launching the app, adding a board, starting a layout, saving your work.</span></a></li>
+    <li><a href="#c4"><span class="n">4</span><span class="t">A tour of the window</span><span class="d">My Boards, the board's page, the layout editor, and the themes.</span></a></li>
+    <li><a href="#c5"><span class="n">5</span><span class="t">Editing keys</span><span class="d">Selecting keys, choosing what they do, modifiers and holds.</span></a></li>
+    <li><a href="#c6"><span class="n">6</span><span class="t">Layers</span><span class="d">Several keyboards in one, and the keys that switch between them.</span></a></li>
+    <li><a href="#c7"><span class="n">7</span><span class="t">The key picker, tab by tab</span><span class="d">Everything a key can be assigned, and what each one does.</span></a></li>
+    <li><a href="#c8"><span class="n">8</span><span class="t">Behaviors</span><span class="d">Hold-taps, home-row mods, tap-dances, mod-morphs and macros.</span></a></li>
+    <li><a href="#c9"><span class="n">9</span><span class="t">Combos</span><span class="d">Pressing two or more keys together for something new.</span></a></li>
+    <li><a href="#c10"><span class="n">10</span><span class="t">Trackballs and touchpads</span><span class="d">Pointer or scroll, speed, direction, automatic mouse layers, and mouse keys.</span></a></li>
+    <li><a href="#c11"><span class="n">11</span><span class="t">Lighting</span><span class="d">Lighting keys and settings, and a color for every key on every layer.</span></a></li>
+    <li><a href="#c12"><span class="n">12</span><span class="t">The board's page</span><span class="d">Firmware and add-ons, settings, layouts, and the key tester.</span></a></li>
+    <li><a href="#c13"><span class="n">13</span><span class="t">Putting a layout on the keyboard</span><span class="d">Applying, building and flashing, or writing it straight to the keyboard.</span></a></li>
+    <li><a href="#c14"><span class="n">14</span><span class="t">Importing an existing layout</span><span class="d">Keymap files, MoErgo Layout Editor exports and RMK configuration files.</span></a></li>
+    <li><a href="#c15"><span class="n">15</span><span class="t">Notes for your keyboard</span><span class="d">What is particular to the Imprint, the Go60, the Glove80 and the Defy.</span></a></li>
+    <li><a href="#c16"><span class="n">16</span><span class="t">Recipes</span><span class="d">Seven worked examples, step by step.</span></a></li>
+    <li><a href="#c17"><span class="n">17</span><span class="t">Troubleshooting</span><span class="d">What to do when something does not work.</span></a></li>
+    <li><a href="#c18"><span class="n">18</span><span class="t">Reference</span><span class="d">Keyboard shortcuts, ZMK notation and a glossary.</span></a></li>
+  </ol>
+</section>
+
+<section class="chapter" id="c1">
+  <header><div class="num">Chapter 1</div><h1>Welcome</h1>
+  <p>Keyboard Curator is a Mac app for changing what your keyboard does: which key sends which character, what happens when you hold a key, how the lights look, and much more.</p></header>
+
+  <h2>What you can do with it</h2>
+  <ul>
+    <li><b>Rearrange keys.</b> Put any letter, symbol, shortcut or function on any key.</li>
+    <li><b>Add layers.</b> Give every key a second, third or tenth job, reached by holding or tapping another key.</li>
+    <li><b>Make keys smarter.</b> A key can be Shift when held and Enter when tapped. It can do one thing on a single tap and another on a double tap. It can type a whole phrase.</li>
+    <li><b>Set up the trackballs or touchpads</b> built into your keyboard.</li>
+    <li><b>Color the keys.</b> Give each key its own color on each layer, so the keyboard shows you where things are.</li>
+    <li><b>Choose and tune the firmware.</b> Pick which firmware a keyboard runs, add extras from the ZMK community, and adjust sleep, Bluetooth, debounce and the rest.</li>
+    <li><b>Put the result on the keyboard.</b> The app builds firmware and walks you through flashing it, or, on keyboards whose firmware is configured while it runs, writes your layout straight to the keyboard over USB.</li>
+    <li><b>Try the keyboard out.</b> A key tester lights each key as you press it, and plays a note for it.</li>
+  </ul>
+
+  <h2>Which keyboards</h2>
+  <p>This edition supports four split keyboards:</p>
+  <ul>
+    <li>the <b>Cyboard Imprint</b> (wireless), in all nine of its key arrangements, including the full 82-key one, on ZMK or on RMK;</li>
+    <li>the <b>MoErgo Go60</b>, on MoErgo's ZMK or on RMK;</li>
+    <li>the <b>MoErgo Glove80</b>, on MoErgo's ZMK or on RMK;</li>
+    <li>the <b>Dygma Defy</b> (wireless or wired), on Dygma's own firmware.</li>
+  </ul>
+  <p>Chapter 2 explains what ZMK, RMK and Dygma's firmware are; Chapter 15 lists what is particular to each keyboard.</p>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>A Mac.</li>
+    <li>One of the supported keyboards and a USB-C data cable.</li>
+    <li>For firmware that is built (ZMK, and RMK on the Imprint): a free GitHub account, and GitHub's command-line tool signed in to it. GitHub's servers are what turn your layout into firmware; Chapter 13 explains this. Keyboards configured while they run, the Defy and the MoErgo boards on RMK, need no GitHub account.</li>
+  </ul>
+
+  <div class="box warn"><div class="h">Read this first: how finished is it?</div>
+  <p>Keyboard Curator is in early development. The parts that turn a layout into ZMK firmware are checked automatically: every kind of configuration the app can produce is compiled with the real ZMK tools. But much of the app has not yet been used on real keyboards by real people, and some firmware it offers has never run on the keyboard it is for.</p>
+  <p>In practice that means: expect rough edges, save often, and treat the features marked <b>experimental</b> with care: per-key lighting, RMK, and writing to a running keyboard. Where a feature is unproven, this guide says so. Nothing the app does can permanently harm a keyboard; the worst case is flashing the manufacturer's original firmware again, which Chapters 15 and 17 cover.</p></div>
+
+  <h2>How to read this guide</h2>
+  <p>If programmable keyboards are new to you, read Chapter 2 first; it explains the ideas everything else builds on. Chapters 3 to 6 get you editing. After that, dip into whichever chapter matches what you want to do, or go straight to the recipes in Chapter 16.</p>
+  <p>Throughout the guide, names you will see on screen are written like <span class="ui">Build Firmware</span>, keys on your Mac's keyboard like <kbd>⌘</kbd><kbd>S</kbd>, and text you would type like <code>&amp;kp A</code>.</p>
+</section>
+
+<section class="chapter" id="c2">
+  <header><div class="num">Chapter 2</div><h1>How a programmable keyboard works</h1>
+  <p>A short tour of the ideas behind the app. Ten minutes here will make every other chapter easier.</p></header>
+
+  <h2>The keyboard is a small computer</h2>
+  <p>Inside each half of your keyboard is a tiny computer. It runs a program called <b>firmware</b>. The firmware watches the switches, decides what each press means, and tells your Mac "the letter A was pressed" over USB or Bluetooth.</p>
+  <p>Your Mac never sees which physical switch you pressed. It only sees what the firmware reports. So if you want the key under your left little finger to be Escape instead of Caps Lock, you change the firmware, not anything on the Mac. The change then follows the keyboard to any computer, phone or tablet you connect it to.</p>
+
+  <h2>Three kinds of firmware</h2>
+  <p>The app knows three <b>firmware families</b>. Which ones your keyboard can run depends on the keyboard.</p>
+  <table class="wrap">
+    <tr><th>Family</th><th>Keyboards</th><th>What it is</th></tr>
+    <tr><td><b>ZMK</b></td><td>Imprint, Go60, Glove80</td><td>The open-source firmware most wireless keyboards run, and the one most of this guide is written around. It is very capable, but normally configured by editing text files in a programmer's notation and running developer tools. The app does that part for you. The two MoErgo boards run MoErgo's own version of ZMK.</td></tr>
+    <tr><td><b>RMK</b></td><td>Imprint, Go60, Glove80</td><td>A newer firmware written in Rust. On the MoErgo boards and the Imprint the app offers a community version, moergo-rmk by colonelpanic, with animated lighting and bilateral home-row mods, which is configured on the running keyboard. The Imprint can also build plain RMK. Both are experimental.</td></tr>
+    <tr><td><b>Dygma</b></td><td>Defy</td><td>Dygma's own firmware, which stays on the keyboard. The app writes your layout to it over USB; nothing is built.</td></tr>
+  </table>
+  <p>Within a family, the firmwares the app offers differ in what they can do, and the app shows only what the chosen firmware supports. A keyboard's firmware is chosen on its board's page (Chapter 12).</p>
+
+  <h2>The keymap: what each key does</h2>
+  <p>The heart of your configuration is the <b>keymap</b>: a list saying, for every key, what it does. What a key does is called its <b>binding</b>. The simplest binding is "press a key", for example "send the letter A". In ZMK's own notation that is written <code>&amp;kp A</code>. You never need to write this notation, but the app shows it, and it helps to recognize its shape: an ampersand, the name of a <b>behavior</b> (<code>kp</code> means "key press"), and then the details (<code>A</code>).</p>
+  <p>The app uses this one notation for every family. When a layout goes to RMK or Dygma firmware, the app translates each binding; what a firmware cannot express is flagged on the key, never dropped silently.</p>
+
+  <h2>Behaviors: the kinds of thing a key can do</h2>
+  <p>"Key press" is one behavior. There are many others. A few examples, each explained fully later:</p>
+  <table>
+    <tr><th>Behavior</th><th>What the key does</th><th>In ZMK's notation</th></tr>
+    <tr><td>Key press</td><td>Sends a key while you hold it.</td><td><code>&amp;kp ESC</code></td></tr>
+    <tr><td>Momentary layer</td><td>Switches to another layer while held.</td><td><code>&amp;mo 1</code></td></tr>
+    <tr><td>Mod-tap</td><td>A modifier when held, a key when tapped.</td><td><code>&amp;mt LSHFT RET</code></td></tr>
+    <tr><td>Transparent</td><td>"Use whatever the layer below does."</td><td><code>&amp;trans</code></td></tr>
+    <tr><td>Bluetooth</td><td>Switches which device the keyboard talks to.</td><td><code>&amp;bt BT_SEL 0</code></td></tr>
+  </table>
+
+  <h2>Layers: several keyboards in one</h2>
+  <p>A small keyboard has fewer keys than a laptop, yet it can do more, because of <b>layers</b>. A layer is a complete set of bindings, one for every key. Your keyboard has a <b>base layer</b> that is always active, and further layers stacked on top that you switch on when you need them.</p>
+  <p>You already use the idea: holding Shift turns your number row into a symbol row. A layer key works the same way, except that you decide what every key becomes. Hold a thumb key, and the keys under your right hand become arrow keys; let go, and they are letters again.</p>
+
+  <figure><div class="frame">
+    <svg viewBox="0 0 560 190" class="kbd-svg">
+      <g font-size="11" fill="#394150">
+        <g transform="translate(120,118)"><polygon points="0,30 300,30 360,0 60,0" fill="#eef1f6" stroke="#c3cad6"/><text x="180" y="20" text-anchor="middle">Q  W  E  R  T  Y  U  I  O  P</text></g>
+        <g transform="translate(120,72)"><polygon points="0,30 300,30 360,0 60,0" fill="#dfe6ff" stroke="#9db0f5" opacity="0.92"/><text x="180" y="20" text-anchor="middle">·  ·  ·  ·  ·  ·  ←  ↓  ↑  →</text></g>
+        <g transform="translate(120,26)"><polygon points="0,30 300,30 360,0 60,0" fill="#f3f0ff" stroke="#b9a7ef" opacity="0.92"/><text x="180" y="20" text-anchor="middle">F1 F2 F3 F4 F5  ·  ·  ·  ·  ·</text></g>
+        <text x="10" y="140">Base layer</text><text x="10" y="94">Navigation layer</text><text x="10" y="48">Function layer</text>
+        <text x="492" y="140" fill="#5b6474">always on</text><text x="492" y="94" fill="#5b6474">while held</text><text x="492" y="48" fill="#5b6474">while held</text>
+      </g>
+    </svg></div>
+    <figcaption>Layers stack. A dot marks a transparent key: on that layer the key does whatever the layer beneath it does.</figcaption></figure>
+
+  <p>Two special bindings make layers work well together. A <b>transparent</b> key lets the layer beneath show through, so a layer only needs to define the keys it changes. A key set to <b>none</b> does nothing at all and blocks what is underneath.</p>
+
+  <h2>Two halves</h2>
+  <p>All four supported keyboards are split into a left and a right half. Each half has its own small computer and its own firmware. One half, the <b>central</b> or main half (the left one on all four), holds the keymap and talks to your Mac. The other, the <b>peripheral</b>, reports its key presses to the central half. This matters at one moment only: when you install new firmware, you install it on each half separately.</p>
+
+  <h2>Building and flashing</h2>
+  <p>ZMK cannot be changed while it runs in the way a phone app's settings can. Your design has to be turned into a new firmware file. That step is called a <b>build</b>, and it takes a few minutes on a server. Putting the finished file onto the keyboard is called <b>flashing</b>.</p>
+  <div class="flow">
+    <div class="st"><b>Design</b>Edit your layout in the app.</div><div class="ar">→</div>
+    <div class="st"><b>Build</b>GitHub turns it into firmware files.</div><div class="ar">→</div>
+    <div class="st"><b>Flash</b>Copy one file onto each half.</div><div class="ar">→</div>
+    <div class="st"><b>Type</b>The keyboard restarts with your layout.</div>
+  </div>
+  <p>To be flashed, a half is put into its <b>bootloader</b>: a tiny built-in program that makes the half appear on your Mac as a USB drive. Copying the firmware file onto that drive installs it. The bootloader cannot be erased by flashing, which is why a bad layout can always be replaced with a good one.</p>
+
+  <h2>Configured on the keyboard instead</h2>
+  <p>Some firmware keeps the layout as data the keyboard can change while it runs. Then there is no build: the app connects over USB, saves a copy of what the keyboard holds, and writes only what differs. Your layout takes effect at once.</p>
+  <div class="flow">
+    <div class="st"><b>Design</b>Edit your layout in the app.</div><div class="ar">→</div>
+    <div class="st"><b>Apply</b>The app writes it to the keyboard over USB.</div><div class="ar">→</div>
+    <div class="st"><b>Type</b>The keyboard uses it at once.</div>
+  </div>
+  <p>This is how the Dygma Defy works, with the firmware Dygma ships, and how the MoErgo boards and the Imprint work on RMK for MoErgo, after that firmware has been flashed once. ZMK has a smaller version of the same idea, <b>ZMK Studio</b>, which can change what keys do on a running keyboard but nothing else; the app can use it on firmware built with Studio (Chapter 13).</p>
+
+  <h2>Boards and layouts: where your work lives</h2>
+  <p>The app keeps your work at two levels.</p>
+  <ul>
+    <li>A <b>board</b> is one of your keyboards as the app knows it: which model it is, which firmware it runs, that firmware's settings, and the layouts you use with it. Your boards are listed on the welcome screen, <span class="ui">My Boards</span>, and kept by the app.</li>
+    <li>A <b>layout</b> is what the keys do: layers, bindings, behaviors, combos, per-key colors and pointing settings. A layout is a single file on your Mac ending in <code>.kcproj</code>, and a board can have any number of them, with one marked <b>current</b>.</li>
+  </ul>
+  <p>Nothing about the firmware is kept in a layout, and changing a board never touches a layout file. The firmware configuration is generated from the two together each time you build, so you never edit configuration files by hand, and nothing is lost if you flash a different layout: make the layout current again and build.</p>
+</section>

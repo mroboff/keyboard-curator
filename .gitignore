@@ -30,3 +30,6 @@
 
 # Packaged app and DMG from ci/bundle-macos.sh
 /dist/
+
+# Built by docs/user-guide/build.py
+/docs/user-guide/guide.html

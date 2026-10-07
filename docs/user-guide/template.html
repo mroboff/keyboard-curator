@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Keyboard Curator User Guide</title>
+<style>
+@page { size: Letter; margin: 22mm 20mm 22mm 20mm;
+  @bottom-center { content: counter(page); font: 9pt -apple-system, "Helvetica Neue", sans-serif; color: #8a93a3; }
+  @bottom-right { content: "Keyboard Curator User Guide"; font: 8pt -apple-system, "Helvetica Neue", sans-serif; color: #b0b7c3; }
+}
+@page :first { margin: 0; @bottom-center { content: none; } @bottom-right { content: none; } }
+:root { --ink: #1f2532; --muted: #5b6474; --line: #dfe3ea; --accent: #3b5bdb; --accent-soft: #eef2ff;
+  --tip: #e7f6ec; --tip-ink: #1e6b3a; --warn: #fff4e0; --warn-ink: #8a5a00; --ex: #f3f0ff; --ex-ink: #4b3aa8; }
+* { box-sizing: border-box; }
+html { font: 10.4pt/1.52 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+body { margin: 0; }
+h1, h2, h3, h4 { line-height: 1.2; margin: 0; break-after: avoid; }
+p { margin: 0 0 0.75em; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 0.8em; padding-left: 1.35em; }
+li { margin-bottom: 0.3em; }
+a { color: var(--accent); text-decoration: none; }
+code, .mono { font: 0.9em "SF Mono", Menlo, Consolas, monospace; background: #f1f3f7; padding: 0.08em 0.35em; border-radius: 3px; }
+pre { font: 8.6pt/1.45 "SF Mono", Menlo, Consolas, monospace; background: #f6f7fa; border: 1px solid var(--line);
+  border-radius: 6px; padding: 9px 12px; margin: 0 0 0.9em; white-space: pre-wrap; break-inside: avoid; }
+kbd { font: 0.86em -apple-system, "Helvetica Neue", sans-serif; background: #fff; border: 1px solid #c3cad6;
+  border-bottom-width: 2px; border-radius: 4px; padding: 0.05em 0.42em; white-space: nowrap; }
+.ui { font-weight: 600; white-space: nowrap; }
+
+/* Cover */
+.cover { height: 279.4mm; padding: 34mm 24mm; background: linear-gradient(155deg, #1c2a6b 0%, #3b5bdb 60%, #6f8cff 100%);
+  color: #fff; display: flex; flex-direction: column; break-after: page; }
+.cover .eyebrow { letter-spacing: 0.22em; text-transform: uppercase; font-size: 10pt; opacity: 0.85; }
+.cover h1 { font-size: 46pt; font-weight: 700; margin-top: 14mm; letter-spacing: -0.02em; }
+.cover .sub { font-size: 15pt; margin-top: 6mm; max-width: 130mm; opacity: 0.94; line-height: 1.35; }
+.cover .art { margin-top: 18mm; background: rgba(255,255,255,0.94); border-radius: 12px; padding: 9mm 8mm 7mm; }
+.cover .foot { margin-top: auto; font-size: 9.5pt; opacity: 0.85; }
+
+/* Contents */
+.toc { break-after: page; }
+.toc h2 { font-size: 22pt; margin-bottom: 8mm; }
+.toc ol { list-style: none; padding: 0; columns: 2; column-gap: 12mm; }
+.toc li { break-inside: avoid; margin-bottom: 4.2mm; }
+.toc .n { color: var(--accent); font-weight: 700; display: inline-block; width: 8mm; }
+.toc .t { font-weight: 600; }
+.toc .d { display: block; margin-left: 8mm; color: var(--muted); font-size: 9pt; line-height: 1.35; }
+
+/* Chapters */
+.chapter { break-before: page; }
+.chapter > header { border-bottom: 2px solid var(--accent); padding-bottom: 5mm; margin-bottom: 7mm; }
+.chapter > header .num { color: var(--accent); font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; font-size: 9pt; }
+.chapter > header h1 { font-size: 25pt; margin-top: 2mm; letter-spacing: -0.01em; }
+.chapter > header p { color: var(--muted); font-size: 11.5pt; margin: 3mm 0 0; max-width: 150mm; }
+h2 { font-size: 15pt; margin: 8mm 0 3mm; }
+h3 { font-size: 11.6pt; margin: 5.5mm 0 2mm; }
+h4 { font-size: 10pt; margin: 4mm 0 1.5mm; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Callouts */
+.box { border-radius: 7px; padding: 9px 13px 9px 13px; margin: 0 0 1em; break-inside: avoid; border-left: 4px solid; }
+.box > :last-child { margin-bottom: 0; }
+.box .h { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
+.tip { background: var(--tip); border-color: #46a758; } .tip .h { color: var(--tip-ink); }
+.warn { background: var(--warn); border-color: #f0a020; } .warn .h { color: var(--warn-ink); }
+.note { background: var(--accent-soft); border-color: var(--accent); } .note .h { color: var(--accent); }
+.ex { background: var(--ex); border-color: #8e4ec6; } .ex .h { color: var(--ex-ink); }
+
+/* Tables */
+table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 9.4pt; }
+th { text-align: left; background: #f1f3f7; font-weight: 600; padding: 5px 8px; border-bottom: 1.5px solid #cfd5df; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr { break-inside: avoid; }
+thead { display: table-header-group; break-after: avoid; }
+h2 + table, h3 + table, p + table { break-before: avoid; }
+td:first-child { white-space: nowrap; }
+table.wrap td:first-child { white-space: normal; }
+
+/* Figures */
+figure { margin: 0 0 1em; break-inside: avoid; text-align: center; }
+figure .frame { border: 1px solid var(--line); border-radius: 9px; padding: 10px; background: #fbfcfe; }
+figcaption { color: var(--muted); font-size: 8.8pt; margin-top: 5px; }
+.kbd-svg { width: 100%; height: auto; font-family: -apple-system, "Helvetica Neue", sans-serif; }
+.steps { counter-reset: step; list-style: none; padding: 0; }
+ol.steps { break-inside: avoid; }
+p + ol.steps, h2 + ol.steps, h3 + ol.steps { break-before: avoid; }
+.steps > li { counter-increment: step; position: relative; padding-left: 9mm; margin-bottom: 2.6mm; break-inside: avoid; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0.05em; width: 5.6mm; height: 5.6mm; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 8.4pt; font-weight: 700; text-align: center; line-height: 5.6mm; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+.cap { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 15mm; height: 15mm;
+  border: 1px solid #c3cad6; border-radius: 6px; background: #eef1f6; font-size: 10pt; margin: 0 2mm 2mm 0; vertical-align: top; }
+.cap small { font-size: 6.6pt; color: var(--muted); }
+.cap.ghost { background: #f7f8fb; color: #a6aebb; border-style: dashed; }
+.cap.layer { background: #dfe6ff; border-color: #9db0f5; }
+.cap.sel { border: 2.2px solid var(--accent); }
+
+/* Window mock-up */
+.win { border: 1px solid #c3cad6; border-radius: 9px; overflow: hidden; font-size: 7.4pt; text-align: left; background: #fff; }
+.win .bar { background: #eceff4; padding: 4px 9px; color: #5b6474; display: flex; gap: 5px; align-items: center; }
+.win .dot { width: 7px; height: 7px; border-radius: 50%; background: #c9ced8; display: inline-block; }
+.win .body { display: grid; grid-template-columns: 27mm 1fr; }
+.win .side { border-right: 1px solid var(--line); padding: 6px; }
+.win .side .row { padding: 2.5px 5px; border-radius: 4px; margin-bottom: 1.5px; }
+.win .side .row.on { background: var(--accent); color: #fff; }
+.win .modes { border-bottom: 1px solid var(--line); padding: 5px 6px; display: flex; gap: 3px; flex-wrap: wrap; }
+.chip { border: 1px solid #c3cad6; border-radius: 4px; padding: 1px 5px; display: inline-block; background: #fff; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.win .canvas { padding: 8px 14px; }
+.win .bottom { border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 44mm; }
+.win .bottom > div { padding: 6px; }
+.win .bottom > div + div { border-left: 1px solid var(--line); }
+.win .status { border-top: 1px solid var(--line); padding: 3px 8px; color: #8a93a3; display: flex; justify-content: space-between; }
+.tag { position: relative; }
+.callout-n { display: inline-block; width: 4.6mm; height: 4.6mm; border-radius: 50%; background: #e5484d; color: #fff; font-weight: 700;
+  font-size: 7.6pt; text-align: center; line-height: 4.6mm; margin-right: 1.5mm; }
+.legend-list { list-style: none; padding: 0; columns: 2; column-gap: 8mm; font-size: 9.4pt; }
+.legend-list li { break-inside: avoid; margin-bottom: 2.2mm; }
+.flow { display: flex; align-items: stretch; gap: 0; margin: 0 0 1em; break-inside: avoid; }
+.flow .st { flex: 1; border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px; background: #fbfcfe; font-size: 8.8pt; text-align: center; }
+.flow .st b { display: block; color: var(--accent); font-size: 9.4pt; margin-bottom: 2px; }
+.flow .ar { align-self: center; padding: 0 4px; color: #9aa3b2; font-size: 13pt; }
+</style>
+</head>
+<body>
+{{BODY}}
+</body>
+</html>

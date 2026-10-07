@@ -1,0 +1,333 @@
+<section class="chapter" id="c3">
+  <header><div class="num">Chapter 3</div><h1>Getting started</h1>
+  <p>Launching the app, adding your keyboard as a board, starting your first layout, and saving it.</p></header>
+
+  <h2>Launching the app</h2>
+  <p>The app is published as a signed disk image for macOS on the project's GitHub releases page. Open the <code>.dmg</code>, drag <span class="ui">Keyboard Curator</span> into Applications and launch it. When a newer release is out, the app offers its page as it starts; <span class="ui">Help › Check for Updates…</span> asks at any time, and <span class="ui">Help › Check for Updates at Launch</span> turns the automatic check off. The check sends nothing but the request.</p>
+  <p>You can also run the app from its source code. You need <b>Rust</b> (from rustup.rs) and Apple's <b>Xcode</b> (from the App Store) installed. Then, in Terminal, from the folder that holds the app's source:</p>
+  <pre>cargo run -p kc-app</pre>
+  <p>The first launch compiles the app and takes a few minutes. Later launches start in seconds.</p>
+  <div class="box note"><div class="h">If the build stops with an error about "metal"</div>
+  <p>The app's graphics need a tool that ships only with the full Xcode app. Either run <code>sudo xcode-select -s /Applications/Xcode.app</code> once, or start the app like this:</p>
+  <pre>DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer cargo run -p kc-app</pre></div>
+  <p>A layout given on the command line opens straight away, and a keymap file is imported the same way:</p>
+  <pre>cargo run -p kc-app -- "My Go60.kcproj"</pre>
+
+  <h2>My Boards</h2>
+  <p>The app opens on <span class="ui">My Boards</span>: a list of your keyboards on the left and, on the right, the one you last looked at, drawn on a plinth with what there is to know about it: model, firmware, current layout and whether it is connected. The first time, the list is empty and the screen asks you to add your first board.</p>
+  <table class="wrap">
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td class="ui">Add Board…</td><td>Adds a keyboard by hand. It does not need to be connected, or even one you own.</td></tr>
+    <tr><td class="ui">Add Connected Board</td><td>Looks for a supported keyboard on USB and adds it, linked to the physical device, so the app recognizes it next time. If the keyboard is already one of your boards, its page opens instead.</td></tr>
+    <tr><td class="ui">Open Board</td><td>Opens the shown board's page (Chapter 12).</td></tr>
+    <tr><td class="ui">Edit <i>layout</i></td><td>Opens the shown board's current layout in the editor.</td></tr>
+  </table>
+  <p>Clicking a board in the list shows it; clicking the arrow at the end of its row opens its page. Layouts you opened before boards existed are listed under <span class="ui">Opened before My Boards</span>; click one to open it under a board.</p>
+
+  <h2>Adding a board</h2>
+  <ol class="steps">
+    <li>Click <span class="ui">Add Board…</span>, or connect the keyboard's main half by USB and click <span class="ui">Add Connected Board</span>.</li>
+    <li>Give the board a <span class="ui">Name</span>. The app suggests one; "Go60 at work" or "Travel Imprint" is the idea.</li>
+    <li>Choose the <span class="ui">Model</span>. A connected keyboard has its model chosen for you where its name makes it certain.</li>
+    <li>Choose the <span class="ui">Firmware</span> the keyboard runs, or will run once you flash it. A keyboard cannot report this itself. If you have never flashed anything, it is the manufacturer's: ZMK with Cyboard's module on the Imprint, MoErgo ZMK on the Go60 and Glove80, Dygma firmware on the Defy. You can change it later on the board's page.</li>
+    <li>Click <span class="ui">Add Board</span>. The board's page opens.</li>
+  </ol>
+  <div class="box note"><div class="h">Linking</div><p>A board can be <b>linked</b> to one physical keyboard by its serial number, so that the app knows which of your boards is plugged in. A keyboard can be linked to only one board at a time; if you link it to another, the app asks first. Link or unlink on the board's page.</p></div>
+
+  <h2>Starting a layout</h2>
+  <p>On the board's page, open the <span class="ui">Layouts</span> tab and click <span class="ui">New Layout</span>. The new layout is not blank. It starts as a complete, working layout modeled on the one your keyboard shipped with: several layers, a system layer with Bluetooth and bootloader keys, and on the MoErgo boards their Magic layer too. This is deliberate. You can change one key, apply, build, flash, and have a keyboard that still does everything you expect apart from that one key.</p>
+  <p>A board with more than one template to start from shows a menu instead. On the Imprint, <span class="ui">New Layout</span> offers the factory layout and <b>TailorKey (by Moosy Research)</b>: TailorKey v5.2 Bilateral, Moosy Research's layout for the MoErgo boards, brought to the Imprint with its bilateral home-row mods, autoshift, cursor, symbol, mouse and gaming layers, combos and macros, and its per-layer colors, with the trackballs standing in for the touchpads. TailorKey is described at <a href="https://sites.google.com/view/tailorkey">sites.google.com/view/tailorkey</a>.</p>
+  <p>The Defy has no factory template yet: its <span class="ui">New Layout</span> starts with one empty layer. The better start on a Defy is <span class="ui">Read From Keyboard</span> on the <span class="ui">Keyboard</span> tab, which opens what the keyboard holds now as a layout (Chapter 13).</p>
+  <div class="box tip"><div class="h">A good first layout</div><p>Make one small change you will notice, such as swapping two keys, and take it all the way through to the keyboard. Once that loop works for you, bigger changes are just more of the same.</p></div>
+
+  <h2>Saving</h2>
+  <p>Press <kbd>⌘</kbd><kbd>S</kbd> to save. The first time, the app asks where; it suggests a <span class="ui">Keyboard Curator</span> folder inside Documents. Layouts are single files ending in <code>.kcproj</code>. A saved layout is listed on its board's <span class="ui">Layouts</span> tab.</p>
+  <ul>
+    <li>The window title shows the layout's name, followed by <span class="ui">Edited</span> when there are unsaved changes.</li>
+    <li><kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd> saves a copy under a new name. This is a simple way to keep versions: "Go60 with home-row mods", "Go60 for gaming".</li>
+    <li>Closing the layout, the window or the app with unsaved changes asks before discarding them.</li>
+  </ul>
+  <p>Layout files are plain text (JSON), with each key on its own line. If you keep them in a version-control tool such as git, changes show up as readable one-line differences. Your boards, with their firmware settings, are kept by the app itself; removing a board forgets its settings but leaves its layout files where they are, and does not change the keyboard.</p>
+
+  <h2>Undo and redo</h2>
+  <p>Everything you change in a layout can be undone with <kbd>⌘</kbd><kbd>Z</kbd> and redone with <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd>: key changes, layer changes, behavior edits, lighting. A painting stroke across many keys counts as one step. Undo history lasts until you close the layout.</p>
+</section>
+
+<section class="chapter" id="c4">
+  <header><div class="num">Chapter 4</div><h1>A tour of the window</h1>
+  <p>The app has three screens: My Boards, a board's page, and the layout editor. This chapter walks through the editor, where you will spend most of your time, and ends with the themes.</p></header>
+
+  <h2>Three screens</h2>
+  <div class="flow">
+    <div class="st"><b>My Boards</b>Your keyboards. Add one, pick one.</div><div class="ar">→</div>
+    <div class="st"><b>Board's page</b>Firmware, Settings, Layouts, Build &amp; Flash or Keyboard, Key Tester.</div><div class="ar">→</div>
+    <div class="st"><b>Layout editor</b>One layout: keys, layers, behaviors, combos, lighting, pointing.</div>
+  </div>
+  <p>A board's page has <span class="ui">‹ My Boards</span> at its top left; the editor has <span class="ui">‹ Back</span> and a breadcrumb naming the board and the layout. <kbd>⌘</kbd><kbd>W</kbd> closes the layout or the board's page. The board's page is described in Chapter 12.</p>
+
+  <h2>The layout editor</h2>
+  <figure><div class="frame"><div class="win">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>&nbsp; <span class="chip">‹ Back</span> &nbsp;Go60 at work &nbsp;›&nbsp; <b>My Go60</b> — Edited <span style="margin-left:auto">MoErgo Go60 · MoErgo ZMK v26.09</span></div>
+    <div class="body">
+      <div class="side"><div style="color:#8a93a3;margin-bottom:3px"><span class="callout-n">1</span>LAYERS</div>
+        <div class="row on">0 &nbsp;Base</div><div class="row">1 &nbsp;Keypad</div><div class="row">2 &nbsp;SymbolNav</div><div class="row">3 &nbsp;Magic</div><div class="row">4 &nbsp;Factory</div>
+        <div style="margin-top:14px;color:#8a93a3">SELECTED LAYER</div><div class="chip" style="width:100%;margin-top:2px">Base</div>
+        <div style="margin-top:3px"><span class="chip">↑</span> <span class="chip">↓</span> <span class="chip">Duplicate</span></div></div>
+      <div>
+        <div class="modes"><span class="callout-n">2</span><span class="chip on">Keyboard</span><span class="chip">Lighting</span><span class="chip">Behaviors</span><span class="chip">Combos</span><span class="chip">Pointing</span><span class="chip">Advanced</span><span class="chip">Generated Files</span><span class="chip">Apply</span></div>
+        <div class="canvas"><span class="callout-n">3</span>{{GO60_SELECT}}</div>
+        <div class="bottom">
+          <div><span class="callout-n">4</span><span class="chip" style="width:24mm">Search keys</span><div style="margin-top:4px"><span class="chip on">Basic</span> <span class="chip">Symbols</span> <span class="chip">Modifiers</span> <span class="chip">Navigation</span> <span class="chip">Layers</span> <span class="chip">…</span></div>
+            <div style="margin-top:4px"><span class="chip">A</span> <span class="chip">B</span> <span class="chip">C</span> <span class="chip">D</span> <span class="chip">E</span> <span class="chip">F</span> <span class="chip">G</span> <span class="chip">H</span> <span class="chip">I</span> <span class="chip">J</span> <span class="chip">K</span> <span class="chip">L</span> <span class="chip">M</span></div></div>
+          <div><span class="callout-n">5</span><span style="color:#8a93a3">BINDING</span><div class="chip" style="width:100%;margin-top:2px">&amp;kp A</div>
+            <div style="margin-top:4px;color:#8a93a3">WITH MODIFIERS</div><span class="chip">⌃</span> <span class="chip">⌥</span> <span class="chip">⇧</span> <span class="chip">⌘</span></div>
+        </div>
+        <div class="status"><span><span class="callout-n">6</span>MoErgo Go60 · No problems</span><span>~/Documents/Keyboard Curator/My Go60.kcproj</span></div>
+      </div>
+    </div></div></div>
+    <figcaption>The layout editor in Keyboard mode, with one key selected. The breadcrumb at the top names the board, the layout and the board's firmware.</figcaption></figure>
+
+  <ul class="legend-list">
+    <li><span class="callout-n">1</span><b>Layer sidebar.</b> Your layers, in order. Click one to see and edit it. Controls for the selected layer sit underneath (Chapter 6).</li>
+    <li><span class="callout-n">2</span><b>Mode bar.</b> Chooses what the main area shows. Each mode has its own chapter. Messages from the app, such as "Copied 3 key(s)", appear to the right of the modes.</li>
+    <li><span class="callout-n">3</span><b>Keyboard.</b> A drawing of your keyboard showing the selected layer. An outline in the accent color marks the selected key.</li>
+    <li><span class="callout-n">4</span><b>Key picker.</b> Everything a key can be assigned, organized into tabs, with a search box (Chapters 5 and 7).</li>
+    <li><span class="callout-n">5</span><b>Inspector.</b> Details of the selected key, with controls for modifiers and holds.</li>
+    <li><span class="callout-n">6</span><b>Status bar.</b> Your keyboard, a count of problems in the layout, and where the layout is saved. Some themes also show the editing shortcuts here.</li>
+  </ul>
+
+  <h2>The eight modes</h2>
+  <table class="wrap">
+    <tr><th>Mode</th><th>What you do there</th><th>Chapter</th></tr>
+    <tr><td class="ui">Keyboard</td><td>Choose what each key does on each layer.</td><td>5, 6, 7</td></tr>
+    <tr><td class="ui">Lighting</td><td>Paint a color onto each key, per layer.</td><td>11</td></tr>
+    <tr><td class="ui">Behaviors</td><td>Create keys with more than one job: hold-taps, tap-dances, macros.</td><td>8</td></tr>
+    <tr><td class="ui">Combos</td><td>Define keys that do something when pressed together.</td><td>9</td></tr>
+    <tr><td class="ui">Pointing</td><td>Set up trackballs and touchpads.</td><td>10</td></tr>
+    <tr><td class="ui">Advanced</td><td>Layer rules, and text for anything the editor does not cover.</td><td>12</td></tr>
+    <tr><td class="ui">Generated Files</td><td>See the configuration the app will build from, and any problems.</td><td>13</td></tr>
+    <tr><td class="ui">Apply</td><td>Make this the board's current layout, and update a keyboard over ZMK Studio.</td><td>13</td></tr>
+  </table>
+  <p>The editor shows only what the board's firmware supports, so the mode bar changes with the firmware. A ZMK firmware without per-key lighting has no Lighting mode; the Defy, whose firmware is configured live, has only Keyboard, Lighting and Apply; plain RMK on the Imprint has Keyboard, Combos, Generated Files and Apply. A mode that is missing is not disabled: the firmware cannot use it. Whatever the layout holds for a missing mode, such as colors, is kept in the file for a firmware that can.</p>
+
+  <h2>Reading the keyboard drawing</h2>
+  <p>Each keycap shows what the key does on the layer you are looking at.</p>
+  <p>
+    <span class="cap">A</span>
+    <span class="cap">⌃⇧K</span>
+    <span class="cap">Enter<small>Shift</small></span>
+    <span class="cap layer">Nav<small>hold</small></span>
+    <span class="cap ghost">Q</span>
+    <span class="cap ghost"></span>
+    <span class="cap sel">Esc</span>
+  </p>
+  <table class="wrap">
+    <tr><th>What you see</th><th>What it means</th></tr>
+    <tr><td>A plain legend, such as <b>A</b></td><td>The key sends that key.</td></tr>
+    <tr><td>Symbols before the legend, such as <b>⌃⇧K</b></td><td>The key sends K with modifiers held: ⌃ Control, ⌥ Option/Alt, ⇧ Shift, ⌘ Command/Windows.</td></tr>
+    <tr><td>A large legend with a small one beneath</td><td>A key with two jobs. The large legend is what a tap does; the small one is what holding does.</td></tr>
+    <tr><td>A tinted key with a layer's name</td><td>A layer key. The small text says how: <b>hold</b>, <b>go to</b>, <b>toggle</b> or <b>sticky</b>.</td></tr>
+    <tr><td>A faded legend</td><td>The key is transparent on this layer. The faded legend is what it inherits from the layer below.</td></tr>
+    <tr><td>A faded, empty key</td><td>The key does nothing here (or is transparent with nothing beneath).</td></tr>
+    <tr><td>An outlined key</td><td>The key is selected.</td></tr>
+  </table>
+  <p>Trackballs and touchpads are drawn as circles and rounded squares between the halves. They are there to orient you; you set them up in Pointing mode. The drawing is a diagram: sculpted keyboards curve in three dimensions and the drawing flattens them, so thumb keys fan out a little differently from the real thing. The order of keys always matches.</p>
+
+  <h2>Themes and appearance</h2>
+  <p><span class="ui">View › Theme</span> chooses the app's look. A theme sets the colors, the typefaces, the shape of the keycaps and the plinth the keyboard sits on. The themes are:</p>
+  <table class="wrap">
+    <tr><th>Theme</th><th>Look</th></tr>
+    <tr><td class="ui">Gallery</td><td>The default: the keyboard set out like an exhibit, with sculpted keycaps on a plinth, large display type and one accent color. Light and dark.</td></tr>
+    <tr><td class="ui">Golden Gate</td><td>macOS glass. The window is see-through and blurs the desktop behind it; system type, capsule buttons. Light and dark.</td></tr>
+    <tr><td class="ui">Arena</td><td>Near-black with violet and lime, capitals, and keys lit along their lower edge by kind. Dark only.</td></tr>
+    <tr><td class="ui">Curator</td><td>A terminal look, in monospace, with the editor's shortcuts in its status line. Dark only.</td></tr>
+    <tr><td class="ui">Bench</td><td>A workshop: light keycaps with slate and orange accents on a dark desk mat, and a pegboard behind My Boards. Dark only.</td></tr>
+  </table>
+  <p><span class="ui">View › Appearance</span> decides between light and dark for the themes that have both: <span class="ui">Match System</span> follows your Mac's appearance, <span class="ui">Light</span> and <span class="ui">Dark</span> hold it. A theme with one appearance stays that way whatever you choose. The app remembers your theme and appearance.</p>
+</section>
+
+<section class="chapter" id="c5">
+  <header><div class="num">Chapter 5</div><h1>Editing keys</h1>
+  <p>The everyday work: pick a key, pick what it does.</p></header>
+
+  <h2>The basic move</h2>
+  <ol class="steps">
+    <li>In the sidebar, click the layer you want to change.</li>
+    <li>Click a key on the keyboard drawing. It gets an outline.</li>
+    <li>Click an entry in the key picker below. The keycap changes at once.</li>
+  </ol>
+  <p>By default the selection then moves to the next key, so you can fill a row by clicking picker entries one after another. The <span class="ui">Advance after assigning</span> button above the picker turns this off.</p>
+  <div class="box ex"><div class="h">Example: Caps Lock becomes Escape</div><p>On the base layer, click the key that currently shows <b>Caps</b>. In the picker's search box type <code>esc</code>, then click <b>Esc</b>. Done. <kbd>⌘</kbd><kbd>Z</kbd> puts it back.</p></div>
+
+  <h2>Finding things in the picker</h2>
+  <ul>
+    <li><b>Tabs</b> group entries by kind: letters and numbers under Basic, arrows under Navigation, and so on. Chapter 7 goes through every tab.</li>
+    <li><b>Search</b> looks across every tab at once. It matches names, ZMK's own abbreviations and plain descriptions, in any order. <code>vol</code> finds the volume keys; <code>bluetooth 2</code> finds the key that selects Bluetooth profile 2; <code>ret</code> finds Enter.</li>
+    <li><b>Hover</b> over an entry to see a one-line description of what it does, next to the search box.</li>
+  </ul>
+  <p>The picker only offers what your board's firmware can do. If something described in this guide is missing from your picker, the firmware chosen on the board's page does not support it.</p>
+
+  <h2>The inspector</h2>
+  <p>The panel at the bottom right shows the selected key in detail and offers the most common adjustments.</p>
+
+  <h3>Binding</h3>
+  <p>The text box shows the key's binding in ZMK's notation, for example <code>&amp;kp A</code>. You can ignore it. But if you know the notation, or are following instructions from the ZMK documentation, you can type any binding here and press <kbd>Return</kbd>. Text the app understands becomes a normal, editable binding. Text it does not understand is kept exactly as typed and passed to ZMK as it is.</p>
+
+  <h3>With modifiers</h3>
+  <p>The four buttons <span class="ui">⌃ ⌥ ⇧ ⌘</span> add a modifier to what the key sends. They appear for any key that sends a key.</p>
+  <div class="box ex"><div class="h">Example: one key for "reopen closed tab"</div><p>Assign <b>T</b> to a key, then click <span class="ui">⇧</span> and <span class="ui">⌘</span> in the inspector. The keycap reads <b>⇧⌘T</b>, and pressing the key sends Shift-Command-T.</p></div>
+
+  <h3>When held</h3>
+  <p>This row gives a key a second job when you hold it instead of tapping it:</p>
+  <ul>
+    <li><span class="ui">None</span>: an ordinary key.</li>
+    <li><span class="ui">⌃ ⌥ ⇧ ⌘</span>: hold for that modifier, tap for the key. ZMK calls this a <b>mod-tap</b>.</li>
+    <li>A layer's name: hold for that layer, tap for the key. ZMK calls this a <b>layer-tap</b>.</li>
+  </ul>
+  <div class="box ex"><div class="h">Example: Space that is also a layer key</div><p>Select your Space key. Under <span class="ui">When held</span>, click your navigation layer's name. Tapping the key still types a space; holding it switches to the navigation layer for as long as you hold.</p></div>
+  <p>Once a key has a hold, picking a different key from the picker changes only what a tap sends; the hold stays. These built-in holds use the firmware's default timing. When you want to tune how a hold is told apart from a tap, create your own hold-tap in Behaviors mode (Chapter 8).</p>
+
+  <h3>Values and Layer</h3>
+  <p>Some bindings carry a number or a layer. For those the inspector shows:</p>
+  <ul>
+    <li><span class="ui">Values</span>, with − and + buttons. For example, a "set a specific color" lighting key has hue, saturation and brightness.</li>
+    <li><span class="ui">Layer</span>, with a button per layer, for a key such as "hold for layer…".</li>
+  </ul>
+  <p>A key that uses one of your own behaviors has an <span class="ui">Edit Behavior</span> button, which takes you to it in Behaviors mode.</p>
+
+  <h2>Working with several keys</h2>
+  <table class="wrap">
+    <tr><th>To do this</th><th>Do this</th></tr>
+    <tr><td>Select several keys</td><td>Hold <kbd>⇧</kbd> and click each one, or drag a box around them starting from empty space.</td></tr>
+    <tr><td>Give them all the same binding</td><td>With several selected, click a picker entry.</td></tr>
+    <tr><td>Swap two keys</td><td>Drag one key onto the other.</td></tr>
+    <tr><td>Copy a key onto another</td><td>Hold <kbd>⌥</kbd> while dragging.</td></tr>
+    <tr><td>Copy and paste</td><td><kbd>⌘</kbd><kbd>C</kbd> copies the selected keys. <kbd>⌘</kbd><kbd>V</kbd> pastes: a single copied key goes onto every selected key; several keep their arrangement, starting at the first selected key.</td></tr>
+    <tr><td>Copy a whole layer</td><td>With no key selected, <kbd>⌘</kbd><kbd>C</kbd> copies the layer. Switch to another layer and paste to replace it.</td></tr>
+    <tr><td>Move the selection</td><td>Arrow keys move to the neighboring key. With <kbd>⇧</kbd> they extend the selection.</td></tr>
+    <tr><td>Clear a key</td><td><kbd>Delete</kbd> makes the selected keys transparent.</td></tr>
+    <tr><td>Deselect</td><td><kbd>Esc</kbd>, or click empty space.</td></tr>
+  </table>
+  <p>Copied keys go to the Mac's clipboard, so you can paste them into another layout for the same keyboard. Layer keys are matched by layer name.</p>
+
+  <h3>Type to assign</h3>
+  <p>Turn on <span class="ui">Type to assign</span> above the picker and the app binds whatever you type on your Mac's keyboard to the selected key, then moves on. It is the quickest way to enter a row of letters. It covers letters, digits, common punctuation, Return, Tab, Space, Escape, Delete and F1 to F12. Turn it off again to get the arrow-key and Delete shortcuts back.</p>
+</section>
+
+<section class="chapter" id="c6">
+  <header><div class="num">Chapter 6</div><h1>Layers</h1>
+  <p>Layers are how a small keyboard does everything a big one can, without moving your hands.</p></header>
+
+  <h2>How layers behave</h2>
+  <p>The first layer in the list is the base layer. It is always on. Other layers are switched on by keys. When several layers are on, the highest one in the list wins for each key, unless that key is transparent there, in which case the next one down decides.</p>
+  <p>So a typical layer changes only a handful of keys and leaves the rest transparent. In the drawing, transparent keys show faded, with the legend they inherit.</p>
+
+  <h2>The five ways to switch layers</h2>
+  <p>All of these are in the picker's <span class="ui">Layers</span> tab, one entry for each of your layers.</p>
+  <table class="wrap">
+    <tr><th>Picker entry</th><th>Name</th><th>What it does</th><th>Good for</th></tr>
+    <tr><td><code>mo</code> + layer</td><td>Momentary</td><td>The layer is on while you hold the key.</td><td>Symbols, navigation: anything used in short bursts.</td></tr>
+    <tr><td><code>to</code> + layer</td><td>Go to</td><td>Switches to the layer and turns the others off. It stays until another key switches away.</td><td>A gaming or numpad layer you stay on for a while. Put a "go to Base" key on it.</td></tr>
+    <tr><td><code>tog</code> + layer</td><td>Toggle</td><td>Press once to turn the layer on, again to turn it off.</td><td>A mouse or numpad layer.</td></tr>
+    <tr><td><code>sl</code> + layer</td><td>Sticky</td><td>The layer applies to the next key you press, then turns off.</td><td>One-shot symbols without holding anything.</td></tr>
+    <tr><td>Inspector: <span class="ui">When held</span></td><td>Layer-tap</td><td>Hold for the layer, tap for an ordinary key.</td><td>Putting layer access on a key you already use, such as Space.</td></tr>
+  </table>
+  <div class="box warn"><div class="h">Always leave a way back</div><p>If a key takes you to a layer with <code>to</code> or <code>tog</code>, make sure that layer has a key that returns to the base layer. Otherwise you are stuck there until the keyboard restarts.</p></div>
+
+  <h2>Managing layers</h2>
+  <p>The sidebar lists your layers with their position number. Under the list, the <span class="ui">Selected layer</span> controls act on whichever layer is highlighted.</p>
+  <table class="wrap">
+    <tr><th>To do this</th><th>Do this</th></tr>
+    <tr><td>Add a layer</td><td>Click <span class="ui">Add Layer</span>. The new layer is all transparent.</td></tr>
+    <tr><td>Rename</td><td>Type in the name box and press <kbd>Return</kbd>.</td></tr>
+    <tr><td>Reorder</td><td>Drag a layer onto another's place, or use <span class="ui">↑</span> and <span class="ui">↓</span>.</td></tr>
+    <tr><td>Duplicate</td><td><span class="ui">Duplicate</span> copies the layer, its keys and its lighting, and places the copy below.</td></tr>
+    <tr><td>Delete</td><td><span class="ui">Delete</span>. If other keys switch to this layer, the app tells you how many and asks first.</td></tr>
+    <tr><td>Color tag</td><td>Click a colored circle to tag the layer. The tag tints the keyboard drawing while you edit that layer and shows as a dot in the list. Click it again to remove it. Tags are for your eyes only; they do not change the keyboard's lights.</td></tr>
+    <tr><td>Switch layers quickly</td><td><kbd>⌘</kbd><kbd>1</kbd> to <kbd>⌘</kbd><kbd>9</kbd> jump to a layer; <kbd>⌘</kbd><kbd>]</kbd> and <kbd>⌘</kbd><kbd>[</kbd> step through them.</td></tr>
+  </table>
+
+  <h3>Reordering is safe</h3>
+  <p>In hand-written ZMK files, layer keys refer to layers by number, so moving a layer silently breaks every key that pointed at it. Here, a layer key points at the layer itself. Rename or reorder as much as you like; every layer key keeps working.</p>
+  <h3>Deleting a layer that is in use</h3>
+  <p>If you confirm, keys that switched to the deleted layer are set to do nothing, and any rule, combo restriction or pointing setting that mentioned the layer is removed. One undo brings everything back.</p>
+
+  <h2>How many layers?</h2>
+  <p>ZMK allows 32 in total. The <span class="ui">Spare layers for ZMK Studio</span> counter reserves empty slots that ZMK Studio can later turn into layers without a build; they count toward the 32. If you do not use ZMK Studio, leave it alone. RMK for MoErgo and the Imprint's RMK fork hold 16 layers, and the Defy holds 10; a layout with more is flagged before it is written.</p>
+
+  <div class="box ex"><div class="h">Example: a navigation layer</div>
+  <ol>
+    <li>Click <span class="ui">Add Layer</span> and rename the new layer <b>Nav</b>.</li>
+    <li>On Nav, select the four keys under your right hand's resting position and assign <b>←</b>, <b>↓</b>, <b>↑</b>, <b>→</b> from the Navigation tab.</li>
+    <li>Switch to the base layer. Select a thumb key. In the picker's Layers tab, click <b>mo Nav</b>.</li>
+  </ol>
+  <p>Hold the thumb key and your right hand has arrow keys. Every other key on Nav is transparent, so it still types what the base layer says.</p></div>
+</section>
+
+<section class="chapter" id="c7">
+  <header><div class="num">Chapter 7</div><h1>The key picker, tab by tab</h1>
+  <p>Everything a key can be assigned with one click, and what each entry does on the keyboard.</p></header>
+
+  <h2>Keys that send keys</h2>
+  <table class="wrap">
+    <tr><th>Tab</th><th>What is in it</th><th>Notes</th></tr>
+    <tr><td class="ui">Basic</td><td>Letters, digits, Enter, Esc, Backspace, Tab, Space, Caps Lock, and the special keys below.</td><td>Start here.</td></tr>
+    <tr><td class="ui">Symbols</td><td>Punctuation, both plain (<b>-</b>, <b>;</b>) and shifted (<b>!</b>, <b>{</b>), plus international keys.</td><td>A shifted symbol such as <b>!</b> sends Shift+1 for you, so it works from any layer.</td></tr>
+    <tr><td class="ui">Modifiers</td><td>Left and right Shift, Ctrl, Alt and Gui.</td><td>"Gui" is the Command key on a Mac and the Windows key on a PC.</td></tr>
+    <tr><td class="ui">Navigation</td><td>Arrows, Home, End, Page Up and Down, Insert, Delete, Print Screen.</td><td></td></tr>
+    <tr><td class="ui">Function</td><td>F1 to F24.</td><td></td></tr>
+    <tr><td class="ui">Keypad</td><td>The number-pad keys.</td><td>Some programs treat these differently from the number row.</td></tr>
+    <tr><td class="ui">Media</td><td>Play/pause, next, previous, volume, mute, screen brightness.</td><td></td></tr>
+    <tr><td class="ui">Apps</td><td>Keys that launch or control applications: calculator, browser back and forward, and so on.</td><td>Whether these do anything depends on the computer.</td></tr>
+  </table>
+  <p>Keys are named for a US keyboard. If your Mac is set to another language, the Mac decides which character each key produces, exactly as with any keyboard.</p>
+
+  <h2>Special keys in the Basic tab</h2>
+  <table class="wrap">
+    <tr><th>Entry</th><th>What it does</th></tr>
+    <tr><td class="ui">Transparent</td><td>Use the binding from the next active layer down. The usual content of a key a layer does not change.</td></tr>
+    <tr><td class="ui">None</td><td>Do nothing, and block the layers beneath. Use it to disable a key on a layer.</td></tr>
+    <tr><td class="ui">Caps word</td><td>Capitalizes what you type until you press something that is not a letter, digit or underscore, then turns itself off. Ideal for typing <code>CONSTANT_NAMES</code> without holding Shift.</td></tr>
+    <tr><td class="ui">Key repeat</td><td>Sends whatever key you pressed last, again. Helpful for double letters.</td></tr>
+    <tr><td class="ui">Key toggle</td><td>Presses a key and keeps it held until you tap the toggle again. Typed as <code>&amp;kt</code> followed by a key name in the Binding box.</td></tr>
+    <tr><td class="ui">Sticky key</td><td>Holds a modifier until the next key press, so you can tap Shift and then a letter. Typed as <code>&amp;sk LSHFT</code>. See Chapter 8.</td></tr>
+    <tr><td class="ui">Grave escape</td><td>Escape normally; the backtick/tilde key when Shift or Gui is held. Saves a key on small layouts.</td></tr>
+  </table>
+
+  <h2>Layers</h2>
+  <p>One entry per layer for each way of switching: <code>mo</code>, <code>to</code>, <code>tog</code> and <code>sl</code>. See Chapter 6.</p>
+
+  <h2>Mouse</h2>
+  <p>Keys that act as a mouse: left, right and middle click, back and forward buttons, moving the pointer up, down, left or right while held, and scrolling. Useful on a mouse layer beside a trackball or touchpad.</p>
+
+  <h2>Bluetooth</h2>
+  <p>Your keyboard can remember several computers, phones or tablets. Each remembered device is a <b>profile</b>, numbered from 0.</p>
+  <table class="wrap">
+    <tr><th>Entry</th><th>What it does</th></tr>
+    <tr><td><b>BT SEL 0</b> to <b>BT SEL 4</b></td><td>Switch to that profile. If the profile is empty, the keyboard becomes discoverable so a new device can pair with it.</td></tr>
+    <tr><td><b>BT NXT</b>, <b>BT PRV</b></td><td>Step to the next or previous profile.</td></tr>
+    <tr><td><b>BT CLR</b></td><td>Forget the device on the current profile. Use this when a device will not reconnect; then remove the keyboard from that device's Bluetooth list and pair again.</td></tr>
+    <tr><td><b>BT CLR ALL</b></td><td>Forget every paired device.</td></tr>
+    <tr><td><b>BT DISC 0</b> to <b>4</b></td><td>Disconnect a profile without forgetting it.</td></tr>
+    <tr><td><b>OUT USB</b>, <b>OUT BLE</b>, <b>OUT TOG</b></td><td>Choose whether keys go over the USB cable or Bluetooth when both are available, or toggle between them.</td></tr>
+  </table>
+  <p>How many profiles a keyboard has depends on its firmware: five on ZMK and on the Imprint's RMK firmware, three on the Go60 and four on the Glove80 under RMK for MoErgo.</p>
+
+  <h2>Lighting</h2>
+  <p>Keys that control the keyboard's lights while you use it: on/off, brightness, hue, saturation, effect and effect speed. Chapter 11 explains them.</p>
+
+  <h2>System</h2>
+  <table class="wrap">
+    <tr><th>Entry</th><th>What it does</th></tr>
+    <tr><td class="ui">Bootloader</td><td>Restarts the half this key is on into its bootloader, ready for flashing. Keep one on each half; see the warning below.</td></tr>
+    <tr><td class="ui">Reset</td><td>Restarts the half this key is on. Useful if the halves lose touch with each other.</td></tr>
+    <tr><td class="ui">Soft off</td><td>Powers the keyboard down until woken, on keyboards that support it.</td></tr>
+    <tr><td class="ui">Studio unlock</td><td>Lets ZMK Studio make changes (Chapter 13).</td></tr>
+    <tr><td><b>EP ON</b>, <b>EP OFF</b>, <b>EP TOG</b></td><td>Switches power to the lights and other extras, to save battery.</td></tr>
+    <tr><td>System power, sleep, wake</td><td>Ask the computer to shut down, sleep or wake.</td></tr>
+  </table>
+  <div class="box warn"><div class="h">Keep a bootloader key</div><p>If no key in your layout enters the bootloader, you can still flash by using the reset button on the keyboard itself, but it is less convenient. The app warns you when a ZMK layout has no bootloader key. The factory layouts have them on their system layer; leave them there.</p></div>
+
+  <h2>Custom</h2>
+  <p>Behaviors you have created yourself in Behaviors mode appear here: your hold-taps, tap-dances, macros and so on. Behaviors defined as text under <span class="ui">Custom behaviors</span> in Advanced mode, and those that come with the add-ons built into your firmware, appear here too.</p>
+</section>

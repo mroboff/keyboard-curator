@@ -1,0 +1,529 @@
+<section class="chapter" id="c12">
+  <header><div class="num">Chapter 12</div><h1>The board's page</h1>
+  <p>Everything about one keyboard that is not a layout: which firmware it runs, that firmware's settings and add-ons, the layouts you use with it, and a tester for trying it out.</p></header>
+
+  <p>Open a board from <span class="ui">My Boards</span>. At the top of its page are its name (edit it in the <span class="ui">Name</span> box), its model and firmware, and whether it is connected. <span class="ui">Link Connected Keyboard</span> ties the board to the keyboard on USB so the app recognizes it later; <span class="ui">Unlink Device</span> undoes that. <span class="ui">Remove…</span> takes the board out of My Boards: its firmware settings are forgotten, its layout files stay where they are, and the keyboard itself is not changed.</p>
+  <p>Below are five tabs. The fourth is <span class="ui">Build &amp; Flash</span> for firmware that is built, and <span class="ui">Keyboard</span> for firmware configured on the keyboard itself; both are the subject of Chapter 13.</p>
+  <table class="wrap">
+    <tr><th>Tab</th><th>What is there</th></tr>
+    <tr><td class="ui">Firmware</td><td>Which firmware the keyboard runs, or will be built with; for ZMK, its add-ons and an optional custom source.</td></tr>
+    <tr><td class="ui">Settings</td><td>The chosen firmware's settings: sleep, Bluetooth, lighting defaults, debounce and the rest.</td></tr>
+    <tr><td class="ui">Layouts</td><td>The layouts used with this board, and which one is current.</td></tr>
+    <tr><td><span class="ui">Build &amp; Flash</span> / <span class="ui">Keyboard</span></td><td>Getting the current layout onto the keyboard (Chapter 13).</td></tr>
+    <tr><td class="ui">Key Tester</td><td>Press keys on the keyboard and watch them light up, with a note for each.</td></tr>
+  </table>
+
+  <h2>Firmware</h2>
+  <p>The firmware decides which settings the board has and what the layout editor offers. Layouts are not changed by it: what a firmware lacks is kept out of sight, and settings a firmware lacks are kept the same way. The tab lists the firmwares your board can run, grouped by family, each with a few sentences on what it gives and what it costs. Click a card to choose it; the chosen one is marked <span class="ui">Selected</span>, and the unproven ones <span class="ui">Experimental</span>.</p>
+  <table class="wrap">
+    <tr><th>Board</th><th>Firmware</th><th>In short</th></tr>
+    <tr><td rowspan="4">Imprint</td><td>ZMK v0.3.0 with Cyboard's module</td><td>The standard choice: ZMK with Cyboard's keyboard module and its trackball driver, built with ZMK Studio.</td></tr>
+    <tr><td>ZMK v0.3.0 with per-key lighting (experimental)</td><td>The same ZMK with the community per-key lighting work applied. LED order unconfirmed on hardware.</td></tr>
+    <tr><td>RMK 0.9 (experimental)</td><td>Plain RMK, built on GitHub: keys, the wireless split and both trackballs. No lighting; approximate battery level. It compiles but has never run on an Imprint.</td></tr>
+    <tr><td>RMK for the Imprint (community fork, experimental)</td><td>A fork of colonelpanic's moergo-rmk with a board crate for the Imprint, taken ready-made from its release and configured live over USB. RGB with animations, bilateral home-row mods, a Keyboard Control layer. Nothing here has run on an Imprint yet.</td></tr>
+    <tr><td rowspan="3">Go60, Glove80</td><td>MoErgo ZMK v26.09</td><td>The standard choice: MoErgo's own ZMK release, built with ZMK Studio.</td></tr>
+    <tr><td>MoErgo ZMK with per-key lighting (community, experimental)</td><td>The community per-key lighting branch, based on an older MoErgo release. No ZMK Studio.</td></tr>
+    <tr><td>RMK for MoErgo (community, experimental)</td><td>colonelpanic's moergo-rmk, the firmware behind Moosy Research's TailorKey for RMK, taken ready-made from its release and configured live over USB. RGB with animations, the touchpads on the Go60, bilateral home-row mods, a Magic layer. Not MoErgo firmware; MoErgo does not support it.</td></tr>
+    <tr><td>Defy</td><td>Dygma firmware (experimental in this app)</td><td>The firmware Dygma ships. Configured live over USB; firmware updates stay with Dygma's Bazecor. Writing has so far only been tested against a simulated keyboard.</td></tr>
+  </table>
+  <p>Choosing a firmware here does not touch the keyboard. The keyboard changes when you build and flash, or apply a layout to it (Chapter 13).</p>
+
+  <h3>Add-ons (ZMK)</h3>
+  <p>Below the firmware cards, <span class="ui">Add-ons</span> lists extras from the ZMK community that can be built into a ZMK firmware. Each is pinned to a version made for your firmware's ZMK, named with its author, its category and what people use it for, and carries notes to read before you add it. They are other people's code: expect to test. Click <span class="ui">Add</span> to build one in and <span class="ui">Remove</span> to take it out; <span class="ui">Its Page</span> opens the add-on's own page. An add-on that no longer fits the chosen firmware is left out of the build, and the app says so.</p>
+  <table class="wrap">
+    <tr><th>Add-on</th><th>By</th><th>People use it for</th></tr>
+    <tr><td>Auto layers and Num word</td><td>urob</td><td>Typing a number or two without holding a layer key, and one-handed navigation layers that end by themselves.</td></tr>
+    <tr><td>Tri-state (window swapper)</td><td>urob</td><td>An Alt-Tab or Cmd-Tab window swapper on one key: the modifier is held for you until you press something else.</td></tr>
+    <tr><td>Smart toggle</td><td>caksoylar</td><td>Another way to build a window swapper, or to keep a modifier or layer held across several taps.</td></tr>
+    <tr><td>Leader key</td><td>urob</td><td>Rarely used actions that do not deserve a key of their own: switching Bluetooth profiles, entering the bootloader, typing snippets.</td></tr>
+    <tr><td>Adaptive keys</td><td>urob</td><td>Alternative-layout tricks such as turning an awkward same-finger pair into an easier one, magic repeat keys, and dead keys for accents.</td></tr>
+    <tr><td>Unicode characters</td><td>urob</td><td>Accented letters, symbols and emoji on a US layout without changing the system's keyboard language.</td></tr>
+    <tr><td>Helper macros</td><td>urob</td><td>Hand-written additions in Custom Behaviors and Custom Devicetree, and pasting in snippets from other people's keymaps.</td></tr>
+  </table>
+  <p>Most add-ons give you behaviors to define yourself. The editor's <span class="ui">Advanced</span> mode offers an <span class="ui">Insert … Starter</span> button for each one you have added, which pastes a working example into <span class="ui">Custom behaviors</span> for you to change; the behavior then appears in the picker's Custom tab.</p>
+
+  <h3>Custom source (ZMK)</h3>
+  <p><span class="ui">Custom source</span> builds from another ZMK repository and revision (a branch, tag or commit) in place of the chosen firmware's own, for trying a fork or an unmerged feature. The app still assumes the firmware chosen above when deciding what to offer. <span class="ui">Use This Source</span> applies it; <span class="ui">Use the Firmware's Own</span> goes back.</p>
+
+  <h2>Settings</h2>
+  <p>The <span class="ui">Settings</span> tab holds the settings of the firmware chosen under Firmware. They belong to the board and apply whichever layout it is built with. Every setting starts at <span class="ui">Board default</span>, meaning the app writes nothing and the firmware's own default applies. Change a setting only when you want something different; a setting you have changed can be put back to Board default. Settings that need a feature the firmware lacks are hidden.</p>
+
+  <h3>ZMK settings, group by group</h3>
+  <h4>Keyboard</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">Keyboard name</td><td>The name your computer shows when pairing over Bluetooth. Keep it short: 16 characters at most.</td></tr></table>
+  <h4>Bluetooth</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">Stronger signal</td><td>Transmits at higher power. Try it if the connection drops or lags; it costs some battery life.</td></tr>
+    <tr><td class="ui">Faster reconnection</td><td>Uses ZMK's experimental connection settings, which can help a keyboard that is slow to reconnect after sleep.</td></tr>
+    <tr><td class="ui">Require a passkey</td><td>Asks you to type a code on the keyboard when pairing, for extra security.</td></tr></table>
+  <h4>Power</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">Deep sleep</td><td>Lets the keyboard sleep after a period without typing. Any key press wakes it; the first press after waking may only wake it.</td></tr>
+    <tr><td class="ui">Idle after (ms)</td><td>How long without typing before the keyboard counts as idle and dims its lights. 30000 is 30 seconds.</td></tr>
+    <tr><td class="ui">Sleep after (ms)</td><td>How long without typing before deep sleep. 900000 is 15 minutes.</td></tr>
+    <tr><td class="ui">Battery report interval (s)</td><td>How often the battery level is measured and reported to the computer.</td></tr></table>
+  <div class="box note"><div class="h">Milliseconds</div><p>ZMK measures most times in milliseconds (ms). 1000 ms is one second; 60000 ms is one minute.</p></div>
+  <h4>USB</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">N-key rollover</td><td>Lets the keyboard report any number of keys held at once, instead of six. A few computers and BIOS screens do not accept it; turn it off if keys stop working at start-up.</td></tr>
+    <tr><td class="ui">Lock indicators</td><td>Lets the keyboard learn from the computer whether Caps Lock, Num Lock and Scroll Lock are on. Needed for the lock lights of Chapter 11.</td></tr></table>
+  <h4>Typing</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">Press debounce (ms)</td><td>How long a key must be down before it counts. Raise it by a few milliseconds if a key sometimes types twice ("chatter").</td></tr>
+    <tr><td class="ui">Release debounce (ms)</td><td>The same for releasing a key.</td></tr>
+    <tr><td class="ui">Macro queue size</td><td>How many queued actions a macro can hold. Raise it if a long macro stops part-way.</td></tr></table>
+  <h4>Combos</h4>
+  <p><span class="ui">Combos held at once</span>, <span class="ui">Combos per key</span> and <span class="ui">Keys per combo</span> are ZMK's limits on combos. Raise them if you define many combos on the same keys or a combo with more than four keys.</p>
+  <h4>Split</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">Report the other half's battery</td><td>Lets the main half read and report the other half's battery level.</td></tr>
+    <tr><td class="ui">Lock indicators on the other half</td><td>Passes Caps Lock and similar states to the other half, so lock lights work there too.</td></tr></table>
+  <h4>Lighting</h4>
+  <p>The group starts by stating your keyboard's brightness limit (Chapter 11).</p>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">On at power-up</td><td>Whether the lights are on when the keyboard starts.</td></tr>
+    <tr><td class="ui">Off when idle</td><td>Turns the lights off when the keyboard is idle. Recommended on battery.</td></tr>
+    <tr><td class="ui">Off without USB</td><td>Turns the lights off when the cable is unplugged, so they never drain the battery.</td></tr>
+    <tr><td class="ui">Maximum brightness (%)</td><td>The brightest the lights can be set. Cannot exceed your keyboard's limit.</td></tr>
+    <tr><td class="ui">Starting brightness (%)</td><td>Brightness at power-up.</td></tr>
+    <tr><td class="ui">Brightness step (%)</td><td>How much each press of a brightness key changes.</td></tr>
+    <tr><td class="ui">Starting hue</td><td>Color at power-up, in degrees around the color wheel: 0 red, 120 green, 240 blue.</td></tr>
+    <tr><td class="ui">Starting saturation (%)</td><td>Color intensity at power-up. 100 is vivid; 0 is white.</td></tr>
+    <tr><td class="ui">Starting effect</td><td>Effect at power-up: 0 solid, 1 breathe, 2 spectrum, 3 swirl.</td></tr>
+    <tr><td class="ui">Starting effect speed</td><td>Animation speed at power-up.</td></tr></table>
+  <h4>Pointing and ZMK Studio</h4>
+  <table class="wrap"><tr><th>Setting</th><th>What it does</th></tr>
+    <tr><td class="ui">Smooth scrolling</td><td>Sends finer scroll steps, for smoother scrolling with a trackball or touchpad.</td></tr>
+    <tr><td class="ui">Require unlocking</td><td>Keeps ZMK Studio locked until you press the unlock key, so that no program can change your keyboard without you.</td></tr></table>
+  <h4>Custom settings</h4>
+  <p><span class="ui">Extra settings</span> is a text box for lines added to the <code>.conf</code> file exactly as you type them, such as <code>CONFIG_ZMK_USB_LOGGING=y</code>, for people following the ZMK documentation.</p>
+
+  <h3>RMK for MoErgo settings</h3>
+  <p>RMK for MoErgo and the Imprint's RMK fork keep their settings on the keyboard, so these are written to it when you apply a layout. A setting left at Board default is not written: what the keyboard holds for it stays.</p>
+  <table class="wrap"><tr><th>Group</th><th>Settings</th></tr>
+    <tr><td>Keyboard</td><td><span class="ui">Keyboard name</span>: the Bluetooth name; write <code>{slot}</code> in it to add the profile's number.</td></tr>
+    <tr><td>Lighting</td><td><span class="ui">Brightness</span>, as a share of what the firmware allows (it keeps the board's limit itself). <span class="ui">Lights on</span>: always, never, or only while powered over USB. <span class="ui">Animation</span>, <span class="ui">Animation palette</span>, <span class="ui">Animation brightness</span> and <span class="ui">Animation speed</span>: the animation played under the colors a layout does not set, chosen from the firmware's own effects (Gradient, Flow, Vortex, Sparkle, Ripple, Rain, Reactive, Crosshair, Tracer, Keyfall, Shockwave, Comet) and palettes. <span class="ui">Background color</span> with its hue, saturation, brightness, breathing speed and style: a single color behind everything else, in place of the animation.</td></tr>
+    <tr><td>Typing</td><td><span class="ui">Hold time</span> and <span class="ui">Hold decision</span> for mod-taps and layer-taps without their own timing; <span class="ui">Quick tap</span>; <span class="ui">Only hold after a pause</span> and <span class="ui">Pause before a hold</span>; <span class="ui">Tap for the same hand</span> and <span class="ui">Hold only for the other hand</span>, the firmware's bilateral rules; <span class="ui">Combo window</span>; <span class="ui">Sticky key timeout</span> and <span class="ui">Sticky keys let go on the next key</span>; <span class="ui">Tap length</span>.</td></tr></table>
+  <p>Plain RMK on the Imprint and Dygma firmware have no settings to adjust here yet.</p>
+
+  <h2>Layouts</h2>
+  <p>A layout is what the keys do. The board can have any number of them; the <b>current</b> one is the one that goes into the firmware when it is built, or is written to the keyboard.</p>
+  <table class="wrap">
+    <tr><th>Control</th><th>What it does</th></tr>
+    <tr><td class="ui">New Layout</td><td>Starts a layout from the factory template, or from a menu of templates where the board has more (Chapter 3).</td></tr>
+    <tr><td class="ui">Open Layout…</td><td>Opens a layout file saved earlier. A layout for another of your boards opens under that board; one for a board you have not added offers to add it.</td></tr>
+    <tr><td class="ui">Import a Keymap…</td><td>Creates a layout from a keymap file, a Layout Editor export or an RMK configuration file (Chapter 14).</td></tr>
+    <tr><td class="ui">Factory layout</td><td>Listed first on boards whose firmware is built: what the keyboard ships with, used when no layout is current.</td></tr>
+    <tr><td><span class="ui">Open</span>, <span class="ui">Make Current</span>, <span class="ui">Remove From List</span></td><td>On each saved layout. Removing a layout from the list does not delete its file. A layout whose file has moved is marked <span class="ui">File not found</span>.</td></tr>
+  </table>
+  <p>The usual way to make a layout current is <span class="ui">Apply to Board</span> inside the editor (Chapter 13), which saves it first.</p>
+
+  <h2>Key Tester</h2>
+  <p>The <span class="ui">Key Tester</span> tab draws the board and lights each key as you press it on the keyboard, keeping count of the keys seen; <span class="ui">Start Over</span> clears the count. Presses are matched against the board's current layout, or the factory layout when there is none, so the tab says which. The computer only reports what a key sends, so a press lights every key of the layout that can send it, on any layer; keys that send nothing to the computer, such as layer keys, cannot be tested and are drawn hollow. Hold <kbd>⌘</kbd> to use the app's shortcuts while the tester has the keyboard.</p>
+  <p>Every key also plays a note, so the board becomes an instrument. <span class="ui">Sound</span> turns it on and off; <span class="ui">Wave</span> chooses a sine, triangle, sawtooth or square wave; <span class="ui">Scale</span> lays the notes out across the keys as chromatic, Wicki-Hayden, major, minor, pentatonic, minor pentatonic or blues; <span class="ui">Volume</span> and <span class="ui">Transpose</span> do what they say, and the range of notes is shown beside them. Clicking a key on the drawing plays it too. If the computer's sound output is not answering, the tester says so and keys still light up.</p>
+
+  <h2>Advanced mode, in the editor</h2>
+  <p>Two things that are part of a layout but rarely touched live in the editor's <span class="ui">Advanced</span> mode, which is offered for firmware built from ZMK's configuration files.</p>
+  <h3>Layer rules</h3>
+  <p>A layer rule turns one layer on automatically while a combination of others is active. ZMK calls these conditional layers. The classic use: you have a <b>Lower</b> layer on the left thumb and a <b>Raise</b> layer on the right; holding both gives you a third, <b>Adjust</b>, with no key of its own.</p>
+  <ol class="steps">
+    <li>Click <span class="ui">New Rule</span>.</li>
+    <li>Under <span class="ui">When all of these layers are on</span>, choose the layers that must be active together.</li>
+    <li>Under <span class="ui">also turn on</span>, choose the layer to switch on.</li>
+  </ol>
+  <h3>Custom devicetree</h3>
+  <p>Two text boxes take anything the editor does not cover, written into the keymap file exactly as you type it, so they are for people following the ZMK documentation. <span class="ui">Custom behaviors</span> goes inside the keymap's behaviors section, and behaviors defined there appear in the picker's Custom tab; <span class="ui">Custom devicetree</span> goes at the end of the keymap file. Add-ons you have built in offer a starter for each box.</p>
+</section>
+
+<section class="chapter" id="c13">
+  <header><div class="num">Chapter 13</div><h1>Putting a layout on the keyboard</h1>
+  <p>Getting your layout out of the app and into the keyboard: by building and flashing firmware, or by writing it to a keyboard that is configured while it runs.</p></header>
+
+  <h2>Apply</h2>
+  <p>Whatever the firmware, the first step is the same. In the editor, open the <span class="ui">Apply</span> mode and click <span class="ui">Apply to Board</span>. The layout is saved, becomes the board's current layout, and the app takes you to the board's page: to <span class="ui">Build &amp; Flash</span> if the firmware is built, or to <span class="ui">Keyboard</span> if it is configured live. The board's firmware and settings are not changed.</p>
+  <p>Before that, the editor keeps checking the layout against the board's firmware. The status bar shows a count of problems, and <span class="ui">Generated Files</span> mode lists them under <span class="ui">Problems</span>; click one to go to the key or item it concerns.</p>
+  <ul>
+    <li><b>Errors</b> must be fixed; the files cannot be generated or written while any remain. Examples: a key that switches to a layer that no longer exists; a combo with only one key; brightness above the keyboard's limit; a key that uses something the firmware cannot express.</li>
+    <li><b>Warnings</b> are advice; you can build anyway. Examples: no key enters the bootloader; per-key colors with no key to change the lighting effect; an LED order unconfirmed on hardware.</li>
+  </ul>
+  <p>Below the problems, tabs show each file the app will produce. You never need to read them, but they are there if you are curious or are asking for help in the firmware's community. ZMK firmware is built from a <code>.keymap</code> (your layers, behaviors, combos, macros and lighting), a <code>.conf</code> (the board's settings), <code>config/west.yml</code> (which ZMK and add-ons to build from), <code>build.yaml</code> (one firmware file for each half) and a workflow that tells GitHub to do the build. Plain RMK is built from a generated Rust project: <code>keyboard.toml</code>, <code>Cargo.toml</code>, a source file for each half and the same kind of workflow. Firmware configured live has no files to show, so the Defy and the RMK for MoErgo boards have no Generated Files mode.</p>
+
+  <h2>Build &amp; Flash</h2>
+  <p>For ZMK, and for plain RMK on the Imprint, a change takes three steps: the app <b>generates</b> configuration files from the board and its current layout, a build service <b>builds</b> firmware from them, and you <b>flash</b> that firmware onto each half.</p>
+  <div class="flow"><div class="st"><b>Generate</b>The app writes the configuration files.</div><div class="ar">→</div><div class="st"><b>Build</b>GitHub compiles them into firmware (.uf2 files).</div><div class="ar">→</div><div class="st"><b>Flash</b>You copy the firmware to each half over USB.</div></div>
+  <p>The tab starts by saying exactly what it will build: the firmware, how many settings differ from the board's defaults, and the layout. Change any of them under Firmware, Settings and Layouts.</p>
+
+  <h3>One-time set-up for building</h3>
+  <p>The app builds firmware with <b>GitHub Actions</b>, a free service that compiles firmware on GitHub's computers. Nothing has to be installed for the build itself, but the app needs access to a GitHub account.</p>
+  <ol class="steps">
+    <li>Create a free account at github.com if you do not have one.</li>
+    <li>Install the GitHub command-line tool. With Homebrew: <code>brew install gh</code>.</li>
+    <li>In Terminal, run <code>gh auth login</code> and follow the prompts to sign in.</li>
+  </ol>
+  <p>If you see "Not signed in to GitHub" in the app, this is the step that is missing.</p>
+
+  <h3>Building</h3>
+  <ol class="steps">
+    <li>Under <span class="ui">Build the firmware</span>, click <span class="ui">Choose Folder…</span>. For your first build, make a new empty folder, for example <i>go60-firmware</i>. The app creates a <b>private</b> repository on your GitHub account, named after the folder. Later, choose the same folder again; the app remembers it for the board.</li>
+    <li>Click <span class="ui">Build Firmware</span>.</li>
+  </ol>
+  <p>The app then reports what it is doing: pushing the configuration to GitHub, waiting for the build to start, building (with a running clock), and downloading the firmware. A first build takes several minutes; later ones are usually quicker. If the build fails, the app shows the end of GitHub's log and <span class="ui">Open on GitHub</span> shows the build in your browser.</p>
+  <p>When it finishes you see "Built 2 firmware file(s). Flash each half below." and the files appear in the flashing section.</p>
+  <div class="box note"><div class="h">If the firmware does not build</div><p>The cause is nearly always text typed by hand: a binding in the Binding box that ZMK does not accept, something in the editor's Advanced boxes, or a line under Extra settings. Look for the name of a key or behavior in the log, fix it and build again. An add-on can fail to build too; remove it and try again.</p></div>
+  <div class="box tip"><div class="h">Building some other way</div><p><span class="ui">Export Firmware Config…</span> (<kbd>⌘</kbd><kbd>E</kbd>) writes the generated files into a folder of your choice, laid out as a standard ZMK configuration or RMK project, together with a copy of the layout. Use it if you already have your own firmware repository or build on your own computer.</p></div>
+
+  <h3>Flashing</h3>
+  <p>Each half of a split keyboard is a separate computer with its own firmware, so each is flashed separately. To accept new firmware, a half must be in its <b>bootloader</b>: a special mode in which it appears on your Mac as a small USB drive. Copying a firmware file onto that drive installs it; the half then restarts by itself and the drive disappears.</p>
+  <p>The app guides you through it, one half at a time, in the right order for your keyboard, and tells you how to enter the bootloader on it:</p>
+  <ol class="steps">
+    <li>Connect the half named in the first step to your Mac with a USB cable.</li>
+    <li>Put it into its bootloader. The step tells you how for your keyboard; see also Chapter 15. The app is waiting for the drive and says "Bootloader found. Ready to flash." when it appears.</li>
+    <li>Click <span class="ui">Flash Left Half</span> or <span class="ui">Flash Right Half</span>. The app checks that the file really is for this half of this keyboard before copying it. It then says "Flashed."</li>
+    <li>Repeat for the other half.</li>
+  </ol>
+  <p>When both are done, the halves restart and reconnect to each other. macOS may complain that a disk "was not ejected properly" when a half restarts. That is normal.</p>
+  <p>To flash firmware you obtained some other way, click <span class="ui">Choose Firmware Files…</span> and select the <code>.uf2</code> files, one for each half. The app works out which is which; if it cannot, give the files names containing "left" and "right". <span class="ui">Start Over</span> resets the steps.</p>
+  <div class="box warn"><div class="h">Flashing is safe, but be patient</div><p>The bootloader is separate from the firmware and is not replaced by flashing, so a bad build cannot lock you out: you can always enter the bootloader with the keyboard's reset button and flash again, including the manufacturer's original firmware. Do not unplug a half while it is being flashed.</p></div>
+  <div class="box note"><div class="h">Pairing after flashing</div><p>If the halves do not find each other afterward, or the keyboard will not reconnect to your computer, see Chapter 17. Usually a reset of both halves, or clearing the Bluetooth profile and pairing again, fixes it. Switching between firmware families loses the Bluetooth pairings: computers must pair again.</p></div>
+
+  <h2>The Keyboard tab: Dygma Defy</h2>
+  <p>The Defy keeps its layout on the keyboard, and the app changes it over USB with Dygma's own protocol. There is nothing to build. Connect the keyboard by USB and close Dygma's Bazecor first: only one program can talk to the keyboard at a time. Firmware updates stay with Bazecor.</p>
+  <table class="wrap">
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td class="ui">Read From Keyboard</td><td>Opens what the keyboard holds now as a new, unsaved layout: every layer's keys and the colors under them. Nothing is written to the keyboard. Save it to keep it.</td></tr>
+    <tr><td class="ui">Apply To Keyboard…</td><td>Writes the board's current layout to the keyboard at once. Only keys and the colors under them are written, and only if they differ; superkeys, macros, mouse and media keys, the underglow and the keyboard's settings are left exactly as they are. The app asks first, saves what the keyboard holds to a <i>backups</i> folder inside its own folder in Library › Application Support, and reports how many changes it made.</td></tr>
+  </table>
+  <p>If the keyboard already holds the layout, nothing is written. Keys that use something Dygma's firmware cannot express are flagged in the editor and have to be changed before the layout can be written.</p>
+
+  <h2>The Keyboard tab: RMK for MoErgo and the Imprint fork</h2>
+  <p>This firmware is not built. It comes ready-made from its project's release on GitHub, is flashed once, and is then configured on the running keyboard with Rynk, RMK's host protocol. The tab has everything for that, top to bottom.</p>
+  <ol class="steps">
+    <li><b>Get the firmware.</b> Click <span class="ui">Fetch Firmware <i>version</i></span>. The app downloads the release, checks it against the release's checksums and against the sources it expects, and puts one file per half into the flashing section. <span class="ui">Open the Release</span> shows the release page.</li>
+    <li><b>Flash each half</b>, as above. On the Go60 and Glove80, enter the bootloader with the Magic key combination; on the Imprint, with the reset button (Chapter 15).</li>
+    <li><b>Apply the layout.</b> With the keyboard's left half connected, click <span class="ui">Apply To Keyboard…</span>. The app asks first, then writes the current layout and the board's settings: keys, hold-taps with their timing profiles, tap-dances, mod-morphs, macros, combos, per-key colors with lock and battery lights, and the touchpads or trackballs. Only what differs is written, after what the keyboard holds has been saved to a file that Rynkbench and moergo-control can read, and the keyboard is read back afterward to confirm it holds what was sent.</li>
+  </ol>
+  <p>The rest of the tab:</p>
+  <table class="wrap">
+    <tr><th>Control</th><th>What it does</th></tr>
+    <tr><td><span class="ui">Restart Left Half</span>, <span class="ui">Restart Right Half</span></td><td>While the keyboard runs this firmware, each half can be asked to restart into its bootloader from here, with no key combination. The right half is asked through the left, so both must be on and connected to each other.</td></tr>
+    <tr><td class="ui">Read From Keyboard</td><td>Opens what the keyboard holds now as a new layout: keys, hold-taps with their timing, tap-dances, mod-morphs, macros, combos, colors and touchpad settings. Settings the keyboard carries are offered to the board. Close Rynkbench or moergo-control first.</td></tr>
+    <tr><td class="ui">Export Configuration…</td><td>Writes the layout as the firmware's own configuration file, the kind TailorKey for RMK is published as, for use with other tools.</td></tr>
+    <tr><td class="ui">Erase Stored Settings…</td><td>Makes the keyboard forget its layout, lighting, settings and Bluetooth pairings and restart on the firmware's defaults. Do this before flashing another firmware, so nothing of this one is left behind in the flash the two share. It cannot be undone; erase after reading or applying, not before.</td></tr>
+  </table>
+  <div class="box warn"><div class="h">Not yet run on a keyboard</div><p>This path was written against the protocol's own client and has not yet been tried on a Go60, Glove80 or Imprint. Keep the manufacturer's firmware files at hand, and treat the first flash as a test. The way back is in Chapter 15.</p></div>
+
+  <h2>Updating ZMK directly (ZMK Studio)</h2>
+  <p>ZMK Studio is a feature of ZMK that lets a program change key assignments on a running keyboard over USB, with no build and no flashing. The app can use it on firmware built with Studio: the standard ZMK firmware of all three ZMK boards. The controls are in the editor's <span class="ui">Apply</span> mode, under <span class="ui">Update the keyboard directly</span>.</p>
+  <ol class="steps">
+    <li>Connect the <b>main half</b> (the left half) by USB.</li>
+    <li>Click <span class="ui">Find Keyboard</span>.</li>
+    <li>If the app says the keyboard is locked, unlock it: on the Imprint, hold the A and F key positions on the left half together for three seconds; otherwise press a key assigned to Studio unlock. Then click <span class="ui">Find Keyboard</span> again.</li>
+    <li>The app compares the keyboard with your layout and tells you how many keys differ. Click <span class="ui">Send to Keyboard</span> to update the keyboard, or <span class="ui">Use the Keyboard's Keys Instead</span> to copy the keyboard's current assignments into your layout.</li>
+  </ol>
+  <p>What can be sent this way is limited to <b>what keys do</b>, using behaviors the firmware on the keyboard already has. The app tells you when some differences "need a firmware build". These always need a build and a flash:</p>
+  <ul>
+    <li>new or changed behaviors, combos and macros;</li>
+    <li>more layers than the firmware has room for (see "Spare layers" in Chapter 6);</li>
+    <li>lighting, pointing and anything in the board's settings.</li>
+  </ul>
+  <p>The app also refuses to send to a keyboard that is saved as a different board, or is not the device this board is linked to, and says which board it belongs to.</p>
+  <div class="box tip"><div class="h">A practical rhythm</div><p>Build and flash once with your behaviors, combos and a few spare layers in place. After that, day-to-day changes to which key does what can go over ZMK Studio in seconds. Build again when you change something structural.</p></div>
+  <p>The per-key lighting firmwares do not offer ZMK Studio, and neither does RMK. Direct updates currently work over USB only.</p>
+</section>
+
+<section class="chapter" id="c14">
+  <header><div class="num">Chapter 14</div><h1>Importing an existing layout</h1>
+  <p>Bring in a layout you already have instead of starting again.</p></header>
+
+  <p>Choose <span class="ui">Import a Keymap…</span> on a board's <span class="ui">Layouts</span> tab, or <span class="ui">File › Import Keymap…</span> (<kbd>⌘</kbd><kbd>I</kbd>). The app opens the result as a new, unsaved layout and leaves the original file untouched.</p>
+  <table class="wrap"><tr><th>You have</th><th>What to choose</th></tr>
+    <tr><td>A ZMK configuration you or someone else wrote</td><td>The <code>.keymap</code> file. If a <code>.conf</code> file with the same name sits beside it, its settings are read too.</td></tr>
+    <tr><td>A Go60 or Glove80 layout made in MoErgo's Layout Editor</td><td>Either file the Layout Editor gives you: the <code>.keymap</code> file it offers for download, or the layout exported as a JSON file.</td></tr>
+    <tr><td>An RMK configuration, such as TailorKey for RMK</td><td>The <code>.toml</code> file, the form moergo-rmk keeps a layout in.</td></tr></table>
+  <p>The app works out which keyboard the file is for from its name, its contents and the number of keys. If several of your boards could use it, it asks which; if none of your boards is that keyboard, it offers to add one and open the layout under it.</p>
+
+  <h2>What comes across</h2>
+  <ul>
+    <li>Layers and their names, and every key assignment.</li>
+    <li>Hold-taps, tap-dances, mod-morphs, sticky keys and macros, which become editable behaviors.</li>
+    <li>The description written above a behavior, when the file has one.</li>
+    <li>Combos and layer rules.</li>
+    <li>Trackball and touchpad settings, mouse-key speeds, and their different settings on particular layers (Chapter 10).</li>
+    <li>Per-key colors, from files that have them.</li>
+  </ul>
+  <p>Firmware settings found in the file belong to the board, not the layout, so the app asks: <span class="ui">Apply to Board</span> replaces the board's own values for those settings; <span class="ui">Ignore</span> leaves the board as it is. Settings the app does not know are kept as extra settings.</p>
+  <p>After importing, the app shows a short summary: how many layers, behaviors and combos were read, and anything it could not fully understand.</p>
+  <p>Files that build their contents with ZMK's helper macros, or include parts only under a condition (<code>#ifdef</code>), are read the way the firmware build would read them. If a file chooses by a name the app does not know, the summary says so and that part is left out, as a build would leave it out.</p>
+  <h2>What is kept as it is</h2>
+  <p>Hand-written ZMK files can contain almost anything. Whatever the app cannot turn into something editable is not thrown away. It is kept as text in the editor's <span class="ui">Advanced</span> mode and written back out unchanged when you build. A binding the app does not recognize shows on its key as raw text and still works.</p>
+  <div class="box warn"><div class="h">Check before you flash</div><p>Look through each layer after importing, and open Generated Files to see whether any problems are listed. In particular, make sure the system layer still has its Bluetooth and bootloader keys.</p></div>
+</section>
+
+<section class="chapter" id="c15">
+  <header><div class="num">Chapter 15</div><h1>Notes for your keyboard</h1>
+  <p>What is particular to each supported keyboard.</p></header>
+
+  <div class="box note"><div class="h">Going back to the manufacturer's firmware</div><p>You can always return to the original. On the ZMK boards, the simplest way is in the app: choose the manufacturer's firmware on the board's <span class="ui">Firmware</span> tab, build it, put each half into its bootloader and flash. Or download the factory firmware from the manufacturer and use <span class="ui">Choose Firmware Files…</span> in Build &amp; Flash, or drag the file onto the bootloader drive in Finder. The Defy's firmware is never replaced by this app.</p></div>
+
+  <h2>Cyboard Imprint</h2>
+  <figure><div class="frame">{{IMPRINT}}</div><figcaption>The Imprint with function row and five-key bottom row: 82 keys, with a trackball position on each half.</figcaption></figure>
+  <table class="wrap"><tr><th></th><th></th></tr>
+    <tr><td>Model supported</td><td>The wireless Imprint, in all nine key arrangements; the full layout has a function row and five-key bottom row, 82 keys.</td></tr>
+    <tr><td>Main half</td><td>Left. It talks to the computer; the right half talks to the left.</td></tr>
+    <tr><td>Flash order</td><td>Left, then right.</td></tr>
+    <tr><td>Entering the bootloader</td><td>Double-tap the reset button next to the USB-C port on the half you are flashing, or press a Bootloader key on that half. On the RMK fork, the Keyboard tab can restart either half into its bootloader.</td></tr>
+    <tr><td>Bootloader drive</td><td>Both halves appear as <code>ASSIMILATOR</code>, so connect only one at a time. The app checks the file against the half before flashing.</td></tr>
+    <tr><td>Starting layouts</td><td>The factory layout (Base, Numpad and Nav, Keyboard Control, Auto Mouse, Factory Test), or TailorKey by Moosy Research (Chapter 3).</td></tr>
+    <tr><td>Pointing</td><td>A trackball position on each half.</td></tr>
+    <tr><td>ZMK Studio</td><td>Supported with the standard firmware. Unlock by holding the A and F key positions on the left half for three seconds. The factory layout reserves spare layers for it.</td></tr>
+    <tr><td>Brightness limit</td><td>50%.</td></tr>
+    <tr><td>Standard firmware</td><td>ZMK v0.3.0 with Cyboard's module.</td></tr>
+    <tr><td>Per-key lighting</td><td>"ZMK v0.3.0 with per-key lighting (experimental)", built; or "RMK for the Imprint (community fork, experimental)", configured live. On both, the LED order is the wired Imprint's and is not yet confirmed on this board.</td></tr>
+    <tr><td>RMK</td><td>"RMK 0.9", plain RMK built on GitHub, with keys, the wireless split and both trackballs but no lighting; and the community fork above, which has never run on an Imprint. Bluetooth pairings do not carry across a change of family.</td></tr></table>
+  <div class="box warn"><div class="h">Self-built firmware and Cyboard's own tools</div>
+  <p>Firmware you build or fetch through this app, whether the per-key lighting ZMK branch or the RMK fork, <b>replaces Cyboard's firmware on the keyboard</b>, and with it the trackball configuration features of Cyboard Studio. While the keyboard runs self-built firmware, the trackballs are configured here, in Pointing mode, and Cyboard Studio cannot adjust them. Cyboard does not support firmware it did not build.</p>
+  <p>To return to Cyboard's official firmware, either:</p>
+  <ul>
+    <li>on the board's <span class="ui">Firmware</span> tab choose <b>ZMK v0.3.0 with Cyboard's module</b>, click <span class="ui">Build Firmware</span> on Build &amp; Flash, put each half into its bootloader (double-tap the reset button) and flash it, left then right; or</li>
+    <li>download Cyboard's own firmware files, choose them with <span class="ui">Choose Firmware Files…</span>, and flash each half the same way.</li>
+  </ul>
+  <p>Keep Cyboard's firmware files at hand before trying the RMK fork. It is linked to the same flash layout as Cyboard's ZMK precisely so that Cyboard's firmware can be flashed back.</p></div>
+
+  <h2>MoErgo Go60</h2>
+  <figure><div class="frame">{{GO60}}</div><figcaption>The Go60: 60 keys, with a touchpad on each half.</figcaption></figure>
+  <table class="wrap"><tr><th></th><th></th></tr>
+    <tr><td>Main half</td><td>Left; only the left half has USB.</td></tr>
+    <tr><td>Flash order</td><td>Right, then left.</td></tr>
+    <tr><td>Entering the bootloader</td><td>Press the bootloader key on the Magic layer for that half, or hold the half's bootloader key combination while powering it on (see MoErgo's instructions for the combination). On RMK for MoErgo, the Keyboard tab can restart either half into its bootloader.</td></tr>
+    <tr><td>Bootloader drives</td><td><code>GO60LHBOOT</code> (left) and <code>GO60RHBOOT</code> (right).</td></tr>
+    <tr><td>Starting layers</td><td>Base, Keypad, SymbolNav, Magic, Factory. The Magic layer holds Bluetooth, lighting and bootloader keys.</td></tr>
+    <tr><td>Pointing</td><td>A touchpad on each half.</td></tr>
+    <tr><td>ZMK Studio</td><td>With the standard firmware. Not offered with the per-key lighting branch.</td></tr>
+    <tr><td>Brightness limit</td><td>40%. MoErgo voids the warranty above this; the app will not generate a configuration above it, and RMK for MoErgo keeps the same ceiling in the firmware.</td></tr>
+    <tr><td>Standard firmware</td><td>MoErgo ZMK v26.09.</td></tr>
+    <tr><td>Per-key lighting</td><td>"MoErgo ZMK with per-key lighting (community, experimental)": after flashing, press RGB EFF until your colors appear. Or "RMK for MoErgo (community)", configured live; its README says the right half's LED order is an assumption.</td></tr>
+    <tr><td>Bluetooth profiles</td><td>Five on ZMK; three on RMK for MoErgo.</td></tr>
+    <tr><td>Importing</td><td>Layouts exported from MoErgo's Layout Editor, and TailorKey's RMK files, can be imported (Chapter 14).</td></tr></table>
+  <div class="box note"><div class="h">Going back from RMK for MoErgo</div><p>On the Keyboard tab, click <span class="ui">Erase Stored Settings…</span> so that nothing of this firmware is left in the flash the two share; then choose MoErgo ZMK under Firmware, build it, restart each half into its bootloader from the same tab, and flash. MoErgo does not support this firmware.</p></div>
+
+  <h2>MoErgo Glove80</h2>
+  <figure><div class="frame">{{GLOVE80}}</div><figcaption>The Glove80: 80 keys, with a six-key thumb cluster on each half.</figcaption></figure>
+  <table class="wrap"><tr><th></th><th></th></tr>
+    <tr><td>Main half</td><td>Left; only the left half has USB.</td></tr>
+    <tr><td>Flash order</td><td>Right, then left.</td></tr>
+    <tr><td>Entering the bootloader</td><td>Hold the Magic key and press the bootloader key for that half (the outer key of its home row), or hold the half's outer thumb key while powering it on. On RMK for MoErgo, the Keyboard tab can restart either half into its bootloader.</td></tr>
+    <tr><td>Bootloader drives</td><td><code>GLV80LHBOOT</code> (left) and <code>GLV80RHBOOT</code> (right).</td></tr>
+    <tr><td>Starting layers</td><td>MoErgo's factory layout, with its Magic layer.</td></tr>
+    <tr><td>Pointing</td><td>No trackball or touchpad. MoErgo's firmware has mouse keys, so Pointing mode offers the mouse-key cards.</td></tr>
+    <tr><td>ZMK Studio</td><td>With the standard firmware. Not offered with the per-key lighting branch.</td></tr>
+    <tr><td>Brightness limit</td><td>80%. MoErgo voids the warranty above this: more draws current that can damage the computer. RMK for MoErgo keeps the same ceiling in the firmware.</td></tr>
+    <tr><td>Standard firmware</td><td>MoErgo ZMK v26.09.</td></tr>
+    <tr><td>Per-key lighting</td><td>"MoErgo ZMK with per-key lighting (community, experimental)": after flashing, press RGB EFF until your colors appear. Or "RMK for MoErgo (community)", configured live.</td></tr>
+    <tr><td>Bluetooth profiles</td><td>Five on ZMK; four on RMK for MoErgo.</td></tr>
+    <tr><td>Importing</td><td>Layouts exported from MoErgo's Layout Editor, and TailorKey's RMK files, can be imported (Chapter 14).</td></tr></table>
+  <p>Going back from RMK for MoErgo works as on the Go60: erase the stored settings, choose MoErgo ZMK, build, restart each half into its bootloader and flash.</p>
+
+  <h2>Dygma Defy</h2>
+  <figure><div class="frame">{{DEFY}}</div><figcaption>The Defy: 70 keys. The thumb keys are drawn upright, without their real angles.</figcaption></figure>
+  <table class="wrap"><tr><th></th><th></th></tr>
+    <tr><td>Models supported</td><td>Wireless and wired. The two share a layout and firmware behavior and differ only in how the Neuron connects.</td></tr>
+    <tr><td>Connection</td><td>The Neuron is the USB device. Connect it, and close Dygma's Bazecor: only one program can talk to the keyboard at a time.</td></tr>
+    <tr><td>Flashing</td><td>None from this app. Firmware updates are done with Bazecor.</td></tr>
+    <tr><td>Starting layout</td><td><span class="ui">Read From Keyboard</span> on the Keyboard tab, which opens what the Defy holds. <span class="ui">New Layout</span> starts with one empty layer.</td></tr>
+    <tr><td>Layers</td><td>Ten.</td></tr>
+    <tr><td>Lighting</td><td>Per-key colors from a palette of sixteen, which the underglow shares. No lock or battery lights. No brightness limit.</td></tr>
+    <tr><td>Kept as they are</td><td>Superkeys, macros, mouse and media keys and the underglow colors stay exactly as they are on the keyboard; they cannot be edited here yet. The firmware has no combos or layer rules, so those modes are not offered.</td></tr>
+    <tr><td>Status</td><td>Reading is proven on a Defy; writing has so far only been tested against a simulated keyboard. A backup of the keyboard's configuration is saved before the first write.</td></tr></table>
+</section>
+
+<section class="chapter" id="c16">
+  <header><div class="num">Chapter 16</div><h1>Recipes</h1>
+  <p>Seven worked examples, each from start to finish. They assume a new layout started from the factory template.</p></header>
+
+  <h2>1. Caps Lock that is Escape when tapped, Control when held</h2>
+  <p><i>For:</i> anyone who uses Control or Escape a lot. <i>Uses:</i> the inspector.</p>
+  <ol class="steps">
+    <li>On the base layer, select the key in the Caps Lock position.</li>
+    <li>In the picker, search <code>esc</code> and click <b>Esc</b>.</li>
+    <li>In the inspector, under <span class="ui">When held</span>, click <span class="ui">⌃</span>.</li>
+  </ol>
+  <p>The keycap shows <b>Esc</b> with a small <b>⌃</b>. Tap it for Escape; hold it with another key for Control.</p>
+
+  <h2>2. Arrow keys under your right hand</h2>
+  <p><i>For:</i> moving the cursor without leaving the home row. <i>Uses:</i> layers.</p>
+  <ol class="steps">
+    <li><span class="ui">Add Layer</span>; rename it <b>Nav</b>.</li>
+    <li>On Nav, assign <b>←</b> <b>↓</b> <b>↑</b> <b>→</b> to the H, J, K and L positions (or J, K, I, L for an inverted T). Add Home, End, Page Up and Page Down nearby.</li>
+    <li>On the base layer, select a left thumb key and, in the Layers tab, click <b>mo Nav</b>. Or keep the key's tap: select Space and choose Nav under <span class="ui">When held</span>.</li>
+  </ol>
+
+  <h2>3. A number pad on a toggle</h2>
+  <p><i>For:</i> entering lots of numbers. <i>Uses:</i> layers, toggle.</p>
+  <ol class="steps">
+    <li>Add a layer named <b>Numpad</b>. Under the right hand, lay out 7 8 9 / 4 5 6 / 1 2 3 with 0 on a thumb key, using the Keypad or Basic tab. Add <b>.</b>, <b>+</b>, <b>-</b> and Enter around them.</li>
+    <li>On the base layer, assign <b>tog Numpad</b> to a spare key.</li>
+    <li>On Numpad, assign <b>tog Numpad</b> to the <i>same</i> key, so the key that turned the layer on also turns it off.</li>
+  </ol>
+
+  <h2>4. Home-row mods</h2>
+  <p><i>For:</i> shortcuts without reaching. <i>Uses:</i> Behaviors.</p>
+  <ol class="steps">
+    <li>In Behaviors mode, click <span class="ui">Left hand</span> and <span class="ui">Right hand</span> under Home-row mods.</li>
+    <li>In Keyboard mode, set the left home row through the Binding box: <code>&amp;hml LCTRL A</code>, <code>&amp;hml LALT S</code>, <code>&amp;hml LGUI D</code>, <code>&amp;hml LSHFT F</code>.</li>
+    <li>Mirror it on the right: <code>&amp;hmr RSHFT J</code>, <code>&amp;hmr RGUI K</code>, <code>&amp;hmr RALT L</code>, <code>&amp;hmr RCTRL SEMI</code>.</li>
+    <li>Apply, build, flash, and type normally for a day before changing any timing. Then tune by symptom (Chapter 8).</li>
+  </ol>
+
+  <h2>5. A combo for Escape and one for Caps Word</h2>
+  <p><i>Uses:</i> Combos.</p>
+  <ol class="steps">
+    <li>In Combos mode, <span class="ui">New Combo</span>; click J and K; set the binding to <b>Esc</b>.</li>
+    <li><span class="ui">New Combo</span> again; click the two keys under your index fingers, F and J; set the binding to <b>Caps word</b>.</li>
+    <li>Turn on <span class="ui">Only after a pause in typing</span> for both if they fire by accident.</li>
+  </ol>
+
+  <h2>6. A macro that types your email address</h2>
+  <p><i>Uses:</i> Behaviors, macro.</p>
+  <ol class="steps">
+    <li>In Behaviors mode, click <span class="ui">Macro</span>. Name it "Email".</li>
+    <li>In <span class="ui">Type text</span>, type your address and press <kbd>Return</kbd>. The steps fill in.</li>
+    <li>In Keyboard mode, pick a key on a layer you do not hit by accident and assign <b>Email</b> from the Custom tab.</li>
+  </ol>
+
+  <h2>7. Layers you can see</h2>
+  <p><i>For:</i> learning a new layout. <i>Uses:</i> per-key lighting (experimental).</p>
+  <ol class="steps">
+    <li>On the board's page, under <span class="ui">Firmware</span>, choose a firmware with per-key lighting (Chapter 11). Open the layout; Lighting mode is now in the mode bar.</li>
+    <li>On the base layer, choose a dim, calm color and click <span class="ui">Fill</span>.</li>
+    <li>On each other layer, click <span class="ui">Color by what keys do</span>, then repaint anything you want to stand out.</li>
+    <li>On a ZMK per-key firmware, make sure a key somewhere is <b>RGB EFF</b>. Apply, then build and flash, or on RMK for MoErgo apply to the keyboard. On the ZMK branch, press RGB EFF until the colors appear.</li>
+  </ol>
+</section>
+
+<section class="chapter" id="c17">
+  <header><div class="num">Chapter 17</div><h1>Troubleshooting</h1>
+  <p>Common problems and what to try.</p></header>
+
+  <h2>In the app</h2>
+  <table class="wrap"><tr><th>Problem</th><th>What to do</th></tr>
+    <tr><td>The app will not compile from source: an error mentions "metal"</td><td>Xcode is needed; see "Launching the app" in Chapter 3.</td></tr>
+    <tr><td>Something from this guide is missing from the picker or the mode bar</td><td>The board's firmware does not support it. Check the <span class="ui">Firmware</span> tab on the board's page.</td></tr>
+    <tr><td>"No supported keyboard was found on USB"</td><td>Connect the main half (the left half, or the Defy's Neuron) with a USB <i>data</i> cable; many USB-C cables carry power only. A keyboard that reports no serial number cannot be linked.</td></tr>
+    <tr><td>Arrow keys and Delete type into the layout instead of moving the selection</td><td><span class="ui">Type to assign</span> is on. Turn it off.</td></tr>
+    <tr><td>The status bar shows errors</td><td>Open Generated Files and click each problem to go to it. A key flagged as not expressible by the firmware needs a different binding, or a different firmware.</td></tr>
+    <tr><td>"Not signed in to GitHub"</td><td>Run <code>gh auth login</code> in Terminal, then try again.</td></tr>
+    <tr><td>"GitHub did not start a build"</td><td>Open the repository on GitHub and check that Actions are enabled for it.</td></tr>
+    <tr><td>"The firmware did not build"</td><td>Read the log shown. Check any hand-typed bindings, the editor's Advanced boxes, the Extra settings box and any add-on you added.</td></tr>
+    <tr><td>"No keyboard answered" when updating over ZMK Studio</td><td>Connect the main half by USB with a data cable. The firmware on it must have been built with ZMK Studio (the standard ZMK firmware).</td></tr>
+    <tr><td>The Defy "did not answer in time"</td><td>Close Dygma's Bazecor; only one program can talk to the keyboard at a time. Then try again.</td></tr>
+    <tr><td>RMK for MoErgo: the keyboard does not answer</td><td>Connect the left half by USB; it must be running this firmware. Close Rynkbench or moergo-control.</td></tr>
+    <tr><td>The key tester says "No sound"</td><td>The computer's sound output is not answering. Keys still light up; check the output device in System Settings.</td></tr></table>
+
+  <h2>Flashing</h2>
+  <table class="wrap"><tr><th>Problem</th><th>What to do</th></tr>
+    <tr><td>The app keeps waiting for the bootloader</td><td>Try another cable: many USB-C cables carry power only. Connect directly to the Mac rather than through a hub. Enter the bootloader again; on the Imprint the double-tap must be quick.</td></tr>
+    <tr><td>The app says the file is for the other half</td><td>You have the wrong half connected, or chose the files the wrong way round.</td></tr>
+    <tr><td>macOS says the disk was not ejected properly</td><td>Normal. The half restarted after flashing.</td></tr>
+    <tr><td>One half works, the other does nothing</td><td>Both halves must be flashed with firmware from the same build or release. Flash the other half. Then press the reset button on both halves at the same time.</td></tr>
+    <tr><td>"Fetch Firmware" fails its checks</td><td>The release on GitHub does not match what this version of the app expects. Do not flash it; update the app, or report it.</td></tr></table>
+
+  <h2>On the keyboard</h2>
+  <table class="wrap"><tr><th>Problem</th><th>What to do</th></tr>
+    <tr><td>The keyboard will not reconnect over Bluetooth after flashing</td><td>On the computer, remove (forget) the keyboard in Bluetooth settings. On the keyboard, press <b>BT CLR</b> on that profile. Pair again. Changing firmware family always loses the pairings.</td></tr>
+    <tr><td>Stuck on a layer</td><td>Unplug and reconnect, or switch the keyboard off and on. Then add a key that returns to the base layer (Chapter 6).</td></tr>
+    <tr><td>Home-row mods fire while typing</td><td>See "Tuning by symptom" in Chapter 8.</td></tr>
+    <tr><td>A combo fires during normal typing</td><td>Lower "Keys must land within", or turn on "Only after a pause in typing".</td></tr>
+    <tr><td>A macro drops characters</td><td>Raise "Wait between steps" and "Hold each tap for" in the macro's Timing. For long macros, raise "Macro queue size" on the board's Settings tab.</td></tr>
+    <tr><td>A key types twice</td><td>Raise "Press debounce" on the board's Settings tab by a few milliseconds.</td></tr>
+    <tr><td>Per-key colors do not appear</td><td>On the ZMK per-key branch, press RGB EFF until they do. Check the lights are on (RGB TOG) and that the per-key firmware is the one chosen on the board's page and actually flashed. On RMK for MoErgo, check <span class="ui">Lights on</span> under Settings.</td></tr>
+    <tr><td>Colors appear on the wrong keys (Imprint)</td><td>A known risk of the unconfirmed LED order. Put the <span class="ui">LED check</span> patterns on the keyboard and report which keys light in which color, so it can be corrected.</td></tr>
+    <tr><td>Lock lights never light</td><td>On ZMK, turn on "Lock indicators" (and "Lock indicators on the other half" for keys on the second half) on the board's Settings tab. Dygma firmware has no lock lights.</td></tr>
+    <tr><td>Everything is wrong and you want to start again</td><td>Flash the manufacturer's firmware (Chapter 15). Your layout files are unaffected.</td></tr></table>
+
+  <h2>Getting more help</h2>
+  <p><span class="ui">Help › ZMK Documentation</span> opens ZMK's own documentation at zmk.dev, the reference for every behavior and setting named in this guide. <span class="ui">Help › Keyboard Curator Help</span> opens the project's page on GitHub, where you can report problems, and <span class="ui">Help › Keyboard Shortcuts</span> lists the shortcuts in a sheet.</p>
+</section>
+
+<section class="chapter" id="c18">
+  <header><div class="num">Chapter 18</div><h1>Reference</h1>
+  <p>Shortcuts, ZMK's notation, and the vocabulary of the app in plain words.</p></header>
+
+  <h2>Keyboard shortcuts</h2>
+  <div class="cols">
+  <table><tr><th>File</th><th></th></tr>
+    <tr><td>New board or layout, for where you are</td><td><kbd>⌘</kbd><kbd>N</kbd></td></tr>
+    <tr><td>Open a layout</td><td><kbd>⌘</kbd><kbd>O</kbd></td></tr>
+    <tr><td>Import a keymap</td><td><kbd>⌘</kbd><kbd>I</kbd></td></tr>
+    <tr><td>Save the layout</td><td><kbd>⌘</kbd><kbd>S</kbd></td></tr>
+    <tr><td>Save the layout as…</td><td><kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd></td></tr>
+    <tr><td>Export the firmware config</td><td><kbd>⌘</kbd><kbd>E</kbd></td></tr>
+    <tr><td>Close the layout or the board's page</td><td><kbd>⌘</kbd><kbd>W</kbd></td></tr>
+    <tr><td>Quit</td><td><kbd>⌘</kbd><kbd>Q</kbd></td></tr></table>
+  <table><tr><th>Editing</th><th></th></tr>
+    <tr><td>Undo, redo</td><td><kbd>⌘</kbd><kbd>Z</kbd>, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd></td></tr>
+    <tr><td>Copy, paste the selected keys</td><td><kbd>⌘</kbd><kbd>C</kbd>, <kbd>⌘</kbd><kbd>V</kbd></td></tr>
+    <tr><td>Move the selection</td><td>Arrow keys</td></tr>
+    <tr><td>Extend the selection</td><td><kbd>⇧</kbd> + arrows or click</td></tr>
+    <tr><td>Clear the selected keys</td><td><kbd>Backspace</kbd> or <kbd>Delete</kbd></td></tr>
+    <tr><td>Clear the selection</td><td><kbd>Esc</kbd></td></tr>
+    <tr><td>Go to layer 1 to 9</td><td><kbd>⌘</kbd><kbd>1</kbd> … <kbd>⌘</kbd><kbd>9</kbd></td></tr>
+    <tr><td>Next, previous layer</td><td><kbd>⌘</kbd><kbd>]</kbd>, <kbd>⌘</kbd><kbd>[</kbd></td></tr></table>
+  </div>
+  <p>With the mouse: drag a key onto another to swap them; hold <kbd>⌥</kbd> while dragging to copy; drag from empty space to select a group. The same list is in the app under <span class="ui">Help › Keyboard Shortcuts</span>.</p>
+
+  <h2>ZMK notation at a glance</h2>
+  <p>You can type any of these in the inspector's Binding box. Replace the parts in capitals.</p>
+  <table class="wrap"><tr><th>Binding</th><th>Meaning</th></tr>
+    <tr><td><code>&amp;kp A</code></td><td>Send the key A.</td></tr>
+    <tr><td><code>&amp;kp LC(LS(K))</code></td><td>Send Control+Shift+K. <code>LC</code> Control, <code>LS</code> Shift, <code>LA</code> Option/Alt, <code>LG</code> Command/Gui.</td></tr>
+    <tr><td><code>&amp;mt LSHFT A</code></td><td>Mod-tap: Shift when held, A when tapped.</td></tr>
+    <tr><td><code>&amp;lt 2 SPACE</code></td><td>Layer-tap: layer when held, Space when tapped. In the app you may write the layer's name.</td></tr>
+    <tr><td><code>&amp;mo</code>, <code>&amp;to</code>, <code>&amp;tog</code>, <code>&amp;sl</code></td><td>Layer while held; go to layer; toggle layer; sticky layer.</td></tr>
+    <tr><td><code>&amp;sk LSHFT</code></td><td>Sticky Shift.</td></tr>
+    <tr><td><code>&amp;trans</code>, <code>&amp;none</code></td><td>Transparent; do nothing.</td></tr>
+    <tr><td><code>&amp;bt BT_SEL 0</code></td><td>Select Bluetooth profile 0.</td></tr>
+    <tr><td><code>&amp;rgb_ug RGB_TOG</code></td><td>Turn the lighting on or off.</td></tr>
+    <tr><td><code>&amp;bootloader</code>, <code>&amp;sys_reset</code></td><td>Enter the bootloader; restart.</td></tr></table>
+
+  <h2>Glossary</h2>
+  <table class="wrap"><tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td>Add-on</td><td>A community extra built into a ZMK firmware, chosen on the board's Firmware tab.</td></tr>
+    <tr><td>Bazecor</td><td>Dygma's own configuration app. Close it while this app talks to a Defy; firmware updates stay with it.</td></tr>
+    <tr><td>Behavior</td><td>ZMK's word for anything a key can do.</td></tr>
+    <tr><td>Binding</td><td>A behavior assigned to one key on one layer, with its details: "send A", "hold for layer Nav".</td></tr>
+    <tr><td>Board</td><td>One of your keyboards as the app knows it: model, firmware, settings, layouts. Listed in My Boards.</td></tr>
+    <tr><td>Bootloader</td><td>A small permanent program on each half that accepts new firmware. In bootloader mode the half appears as a USB drive.</td></tr>
+    <tr><td>Central / main half</td><td>The half of a split keyboard that talks to the computer.</td></tr>
+    <tr><td>Combo</td><td>Two or more keys pressed together to produce something else.</td></tr>
+    <tr><td>Conditional layer</td><td>A layer that turns on when certain others are on. The app calls it a layer rule.</td></tr>
+    <tr><td>Current layout</td><td>The one of a board's layouts that is built into its firmware or written to the keyboard.</td></tr>
+    <tr><td>Debounce</td><td>Ignoring the electrical flicker of a switch so one press counts once.</td></tr>
+    <tr><td>Family</td><td>A kind of firmware: ZMK, RMK or Dygma. Firmwares within a family differ in what they can do.</td></tr>
+    <tr><td>Firmware</td><td>The program that runs inside the keyboard.</td></tr>
+    <tr><td>Flash</td><td>To install firmware on the keyboard.</td></tr>
+    <tr><td>Gui</td><td>The Command key on a Mac; the Windows key on a PC.</td></tr>
+    <tr><td>Hold-tap</td><td>A key that does one thing held and another tapped. Mod-tap and layer-tap are kinds of hold-tap.</td></tr>
+    <tr><td>Home-row mods</td><td>Modifiers placed on the home-row letter keys as hold-taps.</td></tr>
+    <tr><td>Keymap</td><td>The complete set of layers and bindings; also the file ZMK reads them from.</td></tr>
+    <tr><td>Layer</td><td>One complete set of key assignments. Several can be active, stacked.</td></tr>
+    <tr><td>Layout</td><td>What the keys do, saved as a <code>.kcproj</code> file: layers, behaviors, combos, colors, pointing.</td></tr>
+    <tr><td>Live configuration</td><td>Writing a layout to a running keyboard over USB, with no build: the Defy, and RMK for MoErgo.</td></tr>
+    <tr><td>Macro</td><td>A recorded sequence of key actions played by one key.</td></tr>
+    <tr><td>Mod-morph</td><td>A key that changes what it sends while a modifier is held.</td></tr>
+    <tr><td>Modifier</td><td>Shift, Control, Option/Alt or Command/Gui.</td></tr>
+    <tr><td>moergo-rmk</td><td>colonelpanic's community RMK firmware for MoErgo's boards, and the base of the Imprint's RMK fork. "RMK for MoErgo" in the app.</td></tr>
+    <tr><td>Peripheral</td><td>The half of a split keyboard that talks only to the main half.</td></tr>
+    <tr><td>Profile</td><td>One remembered Bluetooth device.</td></tr>
+    <tr><td>RMK</td><td>A keyboard firmware written in Rust. See rmk.rs.</td></tr>
+    <tr><td>Rynk</td><td>RMK's host protocol, over which the app reads and writes a keyboard's configuration.</td></tr>
+    <tr><td>Sticky key / one-shot</td><td>A modifier or layer that applies to the next key press only.</td></tr>
+    <tr><td>TailorKey</td><td>Moosy Research's layout for the MoErgo boards, offered as a template on the Imprint. See sites.google.com/view/tailorkey.</td></tr>
+    <tr><td>Tap-dance</td><td>A key that does different things depending on how many times it is tapped.</td></tr>
+    <tr><td>Tapping term</td><td>How long a hold-tap must be held to count as a hold.</td></tr>
+    <tr><td>Theme</td><td>The app's look, chosen under View › Theme.</td></tr>
+    <tr><td>Transparent</td><td>A key that defers to the layer beneath.</td></tr>
+    <tr><td>UF2</td><td>The file format of firmware copied onto a bootloader drive.</td></tr>
+    <tr><td>ZMK</td><td>The open-source firmware that runs on the Imprint, Go60 and Glove80. See zmk.dev.</td></tr>
+    <tr><td>ZMK Studio</td><td>A ZMK feature for changing key assignments on a running keyboard without flashing.</td></tr></table>
+</section>

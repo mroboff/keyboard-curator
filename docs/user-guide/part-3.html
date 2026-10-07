@@ -1,0 +1,307 @@
+<section class="chapter" id="c8">
+  <header><div class="num">Chapter 8</div><h1>Behaviors</h1>
+  <p>Keys with more than one job: hold-taps, tap-dances, mod-morphs, sticky keys and macros.</p></header>
+
+  <p>In ZMK, everything a key can do is called a <b>behavior</b>. "Send a key" is a behavior; so is "switch layer". Those are built in, and you have been using them through the picker. Behaviors mode is where you build <b>your own</b>, with your own timing and your own combinations.</p>
+
+  <h2>How Behaviors mode works</h2>
+  <ol class="steps">
+    <li>Click <span class="ui">Behaviors</span> in the mode bar.</li>
+    <li>On the left, under <span class="ui">New</span>, click the kind you want. It appears in the list and its settings open on the right.</li>
+    <li>Give it a name you will recognize, and adjust its settings.</li>
+    <li>Go back to <span class="ui">Keyboard</span> mode, select a key, and assign the behavior from the picker's <span class="ui">Custom</span> tab.</li>
+  </ol>
+  <p>One behavior can be assigned to as many keys as you like. Change the behavior and every key that uses it changes with it.</p>
+  <p>Behaviors you define are built into ZMK firmware, and written to the keyboard on RMK for MoErgo and the Imprint's RMK fork, with their timing. Plain RMK on the Imprint and Dygma firmware cannot take them yet, so those boards have no Behaviors mode, and keys that use a behavior are flagged until the firmware changes.</p>
+  <p>Each behavior has two names. <span class="ui">Name</span> is for you. <span class="ui">Label in the keymap</span> is the short identifier written into the firmware files, such as <code>hml</code>; the app picks one for you and you rarely need to touch it.</p>
+  <p>A behavior from an imported layout can also have a <span class="ui">Description</span>, taken from the note written above it in the file. It is shown under the names and written back into the firmware files as a comment.</p>
+  <p>Where a behavior needs you to say what it does (what a tap sends, what three taps do), you see a small box showing a binding. Click the box to select it, then choose from the list beneath it, or type any ZMK binding and press <kbd>Return</kbd>.</p>
+  <p>To delete a behavior, select it and click <span class="ui">Delete</span>. The app refuses while any key still uses it, and tells you how many do; reassign those keys first.</p>
+
+  <table class="wrap">
+    <tr><th>Kind</th><th>In one sentence</th><th>Typical use</th></tr>
+    <tr><td class="ui">Hold-tap</td><td>One thing when tapped, another when held.</td><td>Home-row mods; a thumb key that is Space and a layer.</td></tr>
+    <tr><td class="ui">Tap-dance</td><td>Different things for one tap, two taps, three taps.</td><td>Tap for Shift, double-tap for Caps Word.</td></tr>
+    <tr><td class="ui">Mod-morph</td><td>One thing normally, another while a modifier is held.</td><td>Shift+Backspace sends Delete.</td></tr>
+    <tr><td class="ui">Sticky key</td><td>A modifier that waits for the next key.</td><td>Tap Shift, then a letter, for a capital.</td></tr>
+    <tr><td class="ui">Macro</td><td>Plays a sequence of keys.</td><td>Type an email address; a multi-key shortcut.</td></tr>
+  </table>
+
+  <h2>Hold-tap</h2>
+  <p>A hold-tap is the most useful behavior and the one that needs most care, because the keyboard has to guess: when you press the key, did you mean a tap or a hold? Guess wrong one way and you get stray letters; the other way and you get accidental shortcuts. The settings exist to make the guess match the way you type.</p>
+
+  <h3>What it does</h3>
+  <p><span class="ui">When held</span> and <span class="ui">When tapped</span> each choose a kind of action:</p>
+  <table class="wrap">
+    <tr><th>Choice</th><th>Meaning</th></tr>
+    <tr><td class="ui">Key</td><td>Send a key or modifier.</td></tr>
+    <tr><td class="ui">Layer while held</td><td>Turn a layer on for as long as the key is down.</td></tr>
+    <tr><td class="ui">Go to layer</td><td>Switch to a layer and stay there.</td></tr>
+    <tr><td class="ui">Sticky layer</td><td>Turn a layer on for the next key press.</td></tr>
+    <tr><td class="ui">Sticky key</td><td>Hold a modifier for the next key press.</td></tr>
+  </table>
+  <p>The hold-tap sets the <i>kind</i> of action. The particular key or layer is chosen on each key that uses it. That is why one "home-row mod" behavior can serve A-with-Control, S-with-Option and D-with-Command.</p>
+
+  <h3>Deciding between hold and tap</h3>
+  <p>The <b>tapping term</b> is the dividing line: release the key sooner and it is a tap; keep it down longer and it is a hold. The interesting case is when you press <i>another</i> key before the tapping term is up. The four <b>flavors</b> differ in what they do then:</p>
+  <table class="wrap">
+    <tr><th>Flavor</th><th>What decides</th><th>Feels like</th></tr>
+    <tr><td class="ui">Hold-preferred</td><td>Holds as soon as another key is pressed.</td><td>Fast for shortcuts. Risky on letter keys: quick typing triggers holds.</td></tr>
+    <tr><td class="ui">Balanced</td><td>Holds if another key is pressed <i>and released</i> while this one is down.</td><td>The usual choice for home-row mods. Overlapping letters in fast typing stay as letters.</td></tr>
+    <tr><td class="ui">Tap-preferred</td><td>Holds only after the tapping term, whatever else you press.</td><td>Safest against accidental holds; you must wait out the term for every hold.</td></tr>
+    <tr><td class="ui">Tap-unless-interrupted</td><td>Taps unless another key is pressed first.</td><td>For a key you mostly tap and only hold together with others.</td></tr>
+  </table>
+
+  <h3>The timing settings</h3>
+  <table class="wrap">
+    <tr><th>Setting</th><th>What it does</th><th>Advice</th></tr>
+    <tr><td class="ui">Tapping term</td><td>How long the key must be down to count as a hold on its own.</td><td>200 ms suits thumb keys. Use 250 to 300 ms on letter keys.</td></tr>
+    <tr><td class="ui">Quick tap</td><td>If you tap the key and press it again within this time, the second press is always a tap, so holding it repeats the letter.</td><td>Turn it on for letter keys. Without it you cannot hold the key to repeat.</td></tr>
+    <tr><td class="ui">Only hold after a pause in typing</td><td>If another key was pressed less than this long ago, the key is always a tap.</td><td>The best cure for stray modifiers during fast typing. Try 150 ms.</td></tr>
+    <tr><td class="ui">Tap if held alone and released</td><td>If you hold past the tapping term and release without pressing anything else, send the tap anyway.</td><td>Handy for slow, deliberate taps. Avoid on keys you hold while using the mouse.</td></tr>
+    <tr><td class="ui">Hold while undecided</td><td>Applies the hold at once, and takes it back if it turns out to be a tap.</td><td>Makes modifier-click with a mouse feel instant.</td></tr>
+  </table>
+
+  <h3>Keys that can trigger the hold</h3>
+  <p>A small keyboard drawing lets you limit which <i>other</i> keys can turn this key into a hold. Click keys to choose them, or use <span class="ui">Any key</span>, <span class="ui">Left hand</span> or <span class="ui">Right hand</span>. Pressing a key that is not chosen makes this key a tap immediately.</p>
+  <p>This is what makes home-row mods dependable. You hold Shift with one hand and press the letter with the other, so a left-hand mod should only hold for right-hand keys. Rolling two keys on the <i>same</i> hand then always types two letters. <span class="ui">Decide on release</span> delays that check until the modifier key is released, which you need when holding two modifiers on the same hand.</p>
+  <p>Firmware that knows which hand each key is on, RMK for MoErgo and the Imprint's RMK fork, offers a simpler switch instead: <span class="ui">Hold only for a key on the other hand</span>. One behavior then serves both hands, with no trigger keys to choose. On ZMK, which has no such switch, a layout that uses it is flagged; choose the other hand's keys as triggers instead.</p>
+
+  <h2>Home-row mods</h2>
+  <p>Home-row mods put Control, Option, Command and Shift under the fingers of your resting position: tap <b>F</b> for f, hold it for Shift. Your hands never leave the home row to reach a modifier.</p>
+  <figure><div class="frame">{{GO60_HRM}}</div><figcaption>A left-hand home-row mod only becomes a hold when the next key is on the right hand (highlighted) or a thumb.</figcaption></figure>
+  <p>They are famous for being fiddly to tune. The two buttons under <span class="ui">Home-row mods</span> create hold-taps that are already tuned sensibly:</p>
+  <ul>
+    <li><b>Balanced</b> flavor, tapping term <b>280 ms</b>, quick tap <b>175 ms</b>, hold only after a <b>150 ms</b> pause in typing.</li>
+    <li><span class="ui">Left hand</span> creates a behavior for keys on the left half that holds only for keys on the right half, and <span class="ui">Right hand</span> the reverse, both deciding on release.</li>
+  </ul>
+  <div class="box ex"><div class="h">Example: Shift on F and J</div>
+  <ol>
+    <li>In Behaviors mode, click <span class="ui">Left hand</span> and <span class="ui">Right hand</span> under Home-row mods. You get two behaviors, labeled <code>hml</code> and <code>hmr</code>.</li>
+    <li>In Keyboard mode, on the base layer, select the <b>F</b> key. In the inspector's Binding box type <code>&amp;hml LSHFT F</code> and press <kbd>Return</kbd>.</li>
+    <li>Select the <b>J</b> key, type <code>&amp;hmr RSHFT J</code> and press <kbd>Return</kbd>.</li>
+  </ol>
+  <p>The first name after the behavior is the hold, the second the tap. Modifier names are <code>LSHFT</code>, <code>LCTRL</code>, <code>LALT</code>, <code>LGUI</code> and the same starting with <code>R</code> for the right-hand versions. Continue along the row for the other modifiers; a common order from little finger to index is Control, Option, Command, Shift.</p></div>
+  <div class="box tip"><div class="h">Tuning by symptom</div>
+  <ul>
+    <li><b>Stray capitals or shortcuts while typing fast:</b> raise "Only hold after a pause in typing" (try 175 or 200 ms), or raise the tapping term.</li>
+    <li><b>Holds feel sluggish, or you get letters when you wanted a shortcut:</b> lower the tapping term a little, or lower the pause.</li>
+    <li><b>Cannot repeat a letter by holding it:</b> turn on quick tap; tap, then press and hold.</li>
+  </ul></div>
+
+  <h2>Tap-dance</h2>
+  <p>A tap-dance counts how many times you tap the key in quick succession and does something different for each count. Under <span class="ui">What each number of taps does</span> there is one box per count; <span class="ui">Add Tap</span> adds another and <span class="ui">Remove the last</span> takes one away. <span class="ui">Time allowed between taps</span> is how long the keyboard waits for another tap before acting.</p>
+  <div class="box ex"><div class="h">Example: Shift, or Caps Word on a double tap</div><p>Create a tap-dance. Set one tap to <code>&amp;sk LSHFT</code> (a sticky Shift) and two taps to <b>Caps word</b>. Assign it to a thumb key. Tap once and the next letter is capitalized; tap twice and you type in capitals until the end of the word.</p></div>
+  <p>The cost of a tap-dance is a short delay: after a single tap the keyboard has to wait to see whether a second is coming. Keep them off keys you type constantly.</p>
+
+  <h2>Mod-morph</h2>
+  <p>A mod-morph sends one thing <span class="ui">Normally</span> and another <span class="ui">With the modifiers held</span>. Under <span class="ui">Modifiers that switch it</span>, choose which modifiers trigger the switch. By default the modifier is hidden from the second binding, so Shift+Backspace can send a plain Delete; choose modifiers under <span class="ui">Modifiers passed on to the second binding</span> to let them through.</p>
+  <div class="box ex"><div class="h">Example: custom shifted punctuation</div><p>You want a key that types a comma, and a semicolon when shifted. Create a mod-morph: Normally <b>,</b> and with the modifiers held <b>;</b>. Choose both Shifts as the modifiers that switch it. Assign it in place of your comma key.</p></div>
+
+  <h2>Sticky key</h2>
+  <p>A sticky key (also called a one-shot) holds a modifier for you until the next key press: tap Shift, release it, tap <b>a</b>, get <b>A</b>. The built-in sticky key is in ZMK's notation <code>&amp;sk LSHFT</code>. Create your own when you want different timing:</p>
+  <ul>
+    <li><span class="ui">Release after</span>: how long the key stays sticky if you press nothing else.</li>
+    <li><span class="ui">Release as soon as the next key is pressed</span>: lets you roll off quickly without capitalizing two letters.</li>
+    <li><span class="ui">Let modifiers through</span>: pressing another modifier does not use up the sticky key, so you can tap Shift, then Control, then a key.</li>
+  </ul>
+
+  <h2>Macro</h2>
+  <p>A macro plays back a sequence of steps when you press its key.</p>
+  <h3>The quick way: type text</h3>
+  <p>Type into the <span class="ui">Type text</span> box and press <kbd>Return</kbd>. The text is added as a series of taps, with Shift applied where needed.</p>
+  <h3>The steps</h3>
+  <table class="wrap">
+    <tr><th>Step</th><th>What it does</th></tr>
+    <tr><td class="ui">Tap</td><td>Presses and releases a binding.</td></tr>
+    <tr><td class="ui">Press</td><td>Presses and keeps it down, until a matching Release. Use this to hold a modifier across several taps.</td></tr>
+    <tr><td class="ui">Release</td><td>Releases something pressed earlier.</td></tr>
+    <tr><td class="ui">Change wait time</td><td>From this point, wait this long between steps.</td></tr>
+    <tr><td class="ui">Change tap time</td><td>From this point, hold each tap for this long.</td></tr>
+    <tr><td class="ui">Wait for key release</td><td>Pauses until you let go of the macro's key. Steps before it happen on press; steps after it happen on release.</td></tr>
+    <tr><td class="ui">Pass parameter</td><td>Hands a value from the key's binding on to the next step, for macros that take parameters.</td></tr>
+  </table>
+  <p>Under <span class="ui">Timing</span>, <span class="ui">Wait between steps</span> and <span class="ui">Hold each tap for</span> set the pace for the whole macro. If a program misses characters from a macro, slow it down here.</p>
+  <div class="box ex"><div class="h">Example: a layer that holds a modifier</div>
+  <p>You want a key that, while held, switches to your Nav layer <i>and</i> holds Command, for switching apps with the arrow keys.</p>
+  <ol>
+    <li>Add a <span class="ui">Press</span> step and set it to <code>&amp;mo Nav</code>. Add another <span class="ui">Press</span> for <code>&amp;kp LGUI</code>.</li>
+    <li>Add <span class="ui">Wait for key release</span>.</li>
+    <li>Add two <span class="ui">Release</span> steps for the same two bindings.</li>
+  </ol></div>
+  <p><span class="ui">Parameters a key passes to this macro</span> (0, 1 or 2) is an advanced feature: it lets one macro be reused with a different key or layer on each key that uses it. Leave it at 0 unless you need that.</p>
+  <div class="box warn"><div class="h">Do not put passwords in macros</div><p>A macro is stored unprotected in the keyboard and in your project file, and anyone who presses the key gets the text.</p></div>
+</section>
+
+<section class="chapter" id="c9">
+  <header><div class="num">Chapter 9</div><h1>Combos</h1>
+  <p>Press two or more keys together to get something else.</p></header>
+
+  <p>A combo is a chord: press <b>J</b> and <b>K</b> at the same moment and the keyboard sends Escape instead of "jk". Combos give you extra keys without extra layers, and they work well for things you want close at hand but not on a key of their own: Escape, Tab, brackets, Caps Word.</p>
+  <figure><div class="frame">{{GO60_COMBO}}</div><figcaption>A two-key combo. In Combos mode the keys of the selected combo are highlighted and joined.</figcaption></figure>
+
+  <h2>Creating a combo</h2>
+  <ol class="steps">
+    <li>Click <span class="ui">Combos</span> in the mode bar, then <span class="ui">New Combo</span>.</li>
+    <li>Click the keys on the keyboard drawing that make up the combo. Click a key again to remove it. A combo needs at least two.</li>
+    <li>Under <span class="ui">Pressing them together does</span>, click the binding box and choose what the combo sends.</li>
+    <li>Give it a name so you can find it in the list later.</li>
+  </ol>
+  <p>The drawing shows the layer selected in the sidebar, so you can see which letters you are combining. A combo is defined by key <i>positions</i>, not letters: if you later move J, the combo stays on the physical keys.</p>
+
+  <h2>Combo settings</h2>
+  <table class="wrap">
+    <tr><th>Setting</th><th>What it does</th><th>Advice</th></tr>
+    <tr><td class="ui">Keys must land within</td><td>How close together the presses must be to count as a combo. The default is 50 ms.</td><td>Lower it (30 to 40 ms) if the combo fires while typing normally. Raise it if you find it hard to trigger.</td></tr>
+    <tr><td class="ui">Only after a pause in typing</td><td>The combo only works if no other key was pressed in the moment before.</td><td>The best protection for combos on letters you often roll, such as J and K.</td></tr>
+    <tr><td class="ui">Stay active until every key is released</td><td>Normally the combo's key is released when you let go of the first key. With this on, it stays held until all are released.</td><td>Turn it on for combos that act as a modifier or a layer key.</td></tr>
+    <tr><td class="ui">Active on</td><td>The layers the combo works on. With none chosen, it works on every layer.</td><td>Limit a combo to your typing layers so it cannot fire in a game.</td></tr>
+  </table>
+
+  <div class="box ex"><div class="h">Example: J + K for Escape</div>
+  <ol>
+    <li><span class="ui">New Combo</span>. Click the J and K keys.</li>
+    <li>Set the binding to <b>Esc</b>. Name it "Escape".</li>
+    <li>If "jk" words such as <i>blackjack</i> ever trigger it, lower <span class="ui">Keys must land within</span> to 35 ms.</li>
+  </ol></div>
+  <div class="box tip"><div class="h">Choosing good combos</div><p>Pick neighboring keys you can press with two fingers of one hand, and prefer pairs of letters that rarely follow each other in your language. Combos across the two halves work too.</p></div>
+  <p>ZMK limits how many combos one key can take part in and how many keys one combo can use. The limits are on the board's page, under <span class="ui">Combos</span> in its <span class="ui">Settings</span> tab; raise them there if you build a large set. Combos carry over to RMK and are written to the keyboard on RMK for MoErgo; Dygma firmware has no combos, so the mode is not offered on the Defy.</p>
+</section>
+
+<section class="chapter" id="c10">
+  <header><div class="num">Chapter 10</div><h1>Trackballs and touchpads</h1>
+  <p>Pointing mode sets up what each pointing device on your keyboard does, and how fast the mouse keys move.</p></header>
+
+  <p>The Imprint can carry a trackball on each half, and the Go60 has a touchpad on each half. Pointing mode shows one card per device, followed by two cards for the mouse keys (see <a href="#c10-mouse-keys">Mouse keys</a> below). The Glove80 has no pointing device, so on it the mode has only the mouse-key cards; the Defy's firmware has no pointing settings and the mode is not offered.</p>
+  <p>The settings described here are ZMK's. On RMK for MoErgo and the Imprint's RMK fork, the touchpads' and trackballs' behavior is written to the keyboard with the layout; on plain RMK for the Imprint, pointing settings do not carry over yet and are flagged.</p>
+
+  <h2>What the device does</h2>
+  <table class="wrap">
+    <tr><th>Choice</th><th>Meaning</th></tr>
+    <tr><td class="ui">Firmware default</td><td>Leave the device as the keyboard's firmware sets it up. Nothing is written to your configuration for it.</td></tr>
+    <tr><td class="ui">Move the pointer</td><td>The device moves the mouse pointer.</td></tr>
+    <tr><td class="ui">Scroll</td><td>The device scrolls instead: roll or swipe up and down to scroll a page.</td></tr>
+  </table>
+  <p>With two devices, a popular arrangement is one for the pointer and the other for scrolling.</p>
+
+  <h2>Speed and direction</h2>
+  <ul>
+    <li><span class="ui">Speed</span> offers seven presets from 25% to 300%. The <span class="ui">−</span> and <span class="ui">+</span> buttons beside them change the speed in steps of 5%. For scrolling, lower values (25% to 50%) are usually more comfortable.</li>
+    <li>A speed that is not one of the presets, such as one from an imported layout, is shown exactly, for example <span class="ui">92% (11/12)</span>.</li>
+    <li><span class="ui">Reverse left and right</span> and <span class="ui">Reverse up and down</span> flip a direction. Reverse up and down on a scrolling device to switch between "natural" and traditional scrolling.</li>
+    <li><span class="ui">Swap the two axes</span> exchanges horizontal and vertical, for a sensor that is mounted turned.</li>
+  </ul>
+
+  <h2>Right click</h2>
+  <p><span class="ui">A click is a right click</span> turns the device's own click, such as a tap on a touchpad, into a right click. It suits a device you use for scrolling, where a left click is rarely wanted.</p>
+
+  <h2>A layer that switches on by itself</h2>
+  <p><span class="ui">Layer to switch on while in use</span> turns a layer on whenever you move the device and off again shortly after you stop. <span class="ui">Stay on it for</span> sets how long after the last movement, in steps of 100 ms.</p>
+  <div class="box ex"><div class="h">Example: automatic mouse buttons</div>
+  <ol>
+    <li>Create a layer called <b>Mouse</b>. On it, assign <b>LCLK</b> and <b>RCLK</b> from the Mouse tab to two home-row keys. Leave everything else transparent.</li>
+    <li>In Pointing mode, on the trackball's card, choose <span class="ui">Move the pointer</span> and select <b>Mouse</b> as the layer to switch on.</li>
+    <li>Set <span class="ui">Stay on it for</span> to about 600 ms.</li>
+  </ol>
+  <p>Now moving the ball turns your home-row keys into mouse buttons, and half a second after you stop they are letters again. If letters get swallowed just after you stop moving, shorten the time.</p></div>
+  <h2>Different settings on particular layers</h2>
+  <p>Each card ends with <span class="ui">While particular layers are on</span>. Under <span class="ui">Add different settings for a layer</span>, choose a layer to give the device its own speed, direction and click settings while that layer is on. The new settings start as a copy of the device's own, ready to adjust. <span class="ui">Remove</span> takes them away again.</p>
+  <p>While one of these layers is on, its settings are used in place of the device's own; they are not added to them.</p>
+  <div class="box ex"><div class="h">Example: a slow layer for precise work</div>
+  <ol>
+    <li>Create a layer called <b>Slow</b> and put a key on your mouse layer that holds it.</li>
+    <li>In Pointing mode, on the pointer device's card, choose <b>Slow</b> under <span class="ui">Add different settings for a layer</span>.</li>
+    <li>In the new section, set <span class="ui">Speed</span> to 25%.</li>
+  </ol>
+  <p>Holding the key now slows the pointer to a quarter of its speed for as long as you hold it.</p></div>
+
+  <h2 id="c10-mouse-keys">Mouse keys</h2>
+  <p>Keys that move the pointer or scroll (Chapter 7) have cards of their own: <span class="ui">Mouse keys: pointer movement</span> and <span class="ui">Mouse keys: scrolling</span>. They work on every keyboard, with or without a trackball or touchpad. Each has speed and direction settings, and can have different settings on particular layers in the same way as a device. A common use is a slow, a fast and a very fast layer for the mouse keys.</p>
+
+  <div class="box note"><div class="h">Devices the editor leaves alone</div><p>An imported layout can contain pointer processing the editor does not understand. The card then says so and leaves it as it is. <span class="ui">Replace</span> swaps that set-up for one you can edit here.</p></div>
+</section>
+
+<section class="chapter" id="c11">
+  <header><div class="num">Chapter 11</div><h1>Lighting</h1>
+  <p>Lighting keys, lighting defaults, and painting a color onto every key of every layer.</p></header>
+
+  <h2>Two kinds of lighting</h2>
+  <p><b>Standard lighting</b> is what ZMK does out of the box: all the LEDs show one color or one animated effect, and you control it with keys. This works with every firmware the app offers.</p>
+  <p><b>Per-key lighting</b> gives each key its own color on each layer, so the lights show you what the layer does: arrows in green, the number pad in blue, the dangerous keys in red. ZMK does not include this. On ZMK it comes from community-made additions to the firmware and is <b>experimental</b>. RMK for MoErgo and the Imprint's RMK fork have it built in, with animations under the colors you do not set; Dygma firmware has it too, from a palette of sixteen colors.</p>
+  <p>Which of the two your board has depends on the firmware chosen on its page (Chapter 12). The Lighting mode appears in the editor only for a firmware with per-key lighting; colors you paint stay in the layout either way, out of sight until a firmware can show them.</p>
+
+  <h2>Standard lighting: keys and defaults</h2>
+  <p>The picker's <span class="ui">Lighting</span> tab has the keys. Put them on a system or function layer.</p>
+  <table class="wrap">
+    <tr><th>Key</th><th>What it does</th></tr>
+    <tr><td><b>RGB TOG</b>, <b>RGB ON</b>, <b>RGB OFF</b></td><td>Turn the lighting on or off.</td></tr>
+    <tr><td><b>RGB BRI</b>, <b>RGB BRD</b></td><td>Brighter, dimmer.</td></tr>
+    <tr><td><b>RGB HUI</b>, <b>RGB HUD</b></td><td>Step the color around the color wheel.</td></tr>
+    <tr><td><b>RGB SAI</b>, <b>RGB SAD</b></td><td>More vivid, more pastel.</td></tr>
+    <tr><td><b>RGB EFF</b>, <b>RGB EFR</b></td><td>Next or previous effect: solid, breathe, spectrum, swirl.</td></tr>
+    <tr><td><b>RGB SPI</b>, <b>RGB SPD</b></td><td>Speed the effect up or slow it down.</td></tr>
+    <tr><td><b>RGB COLOR HSB</b></td><td>Jump to one specific color. Set hue (0 to 360), saturation and brightness with the inspector's <span class="ui">Values</span> steppers.</td></tr>
+  </table>
+  <p>How the lights behave at power-up (on or off, starting color, starting effect, whether they switch off when idle) is under <span class="ui">Lighting</span> in the board's <span class="ui">Settings</span> tab; see Chapter 12.</p>
+  <div class="box warn"><div class="h">Brightness limits protect the keyboard</div><p>LEDs draw far more power than the rest of the keyboard and warm the case. The app will not let brightness settings go above your keyboard's limit:</p>
+  <ul>
+    <li><b>40%</b> on the <b>Go60</b>. MoErgo voids the warranty above this.</li>
+    <li><b>80%</b> on the <b>Glove80</b>. MoErgo's warranty limit; more draws current that can damage the computer.</li>
+    <li><b>50%</b> on the <b>Imprint</b>, Cyboard's own ceiling for its firmware.</li>
+    <li>The <b>Defy</b> has no published limit; Dygma's own app allows the full range.</li>
+  </ul>
+  <p>On ZMK the limit is written into the firmware's settings. RMK for MoErgo and the Imprint's RMK fork keep the same limit inside the firmware itself, so the brightness setting on the board's page is a share of it. In Lighting mode the colors are drawn at full strength so you can tell them apart; on the keyboard they are dimmed to the limit. Lighting also shortens battery life considerably on wireless keyboards.</p></div>
+
+  <h2>Per-key lighting</h2>
+  <h3>Switching it on</h3>
+  <p>Per-key lighting is a property of the firmware, so it is chosen on the board's page: open the board's <span class="ui">Firmware</span> tab and pick a firmware that has it. The Lighting mode then appears in the editor. You can change back at any time; your colors are kept in the layout either way.</p>
+  <table class="wrap">
+    <tr><th>Board</th><th>Firmware with per-key lighting</th></tr>
+    <tr><td>Imprint</td><td><b>ZMK v0.3.0 with per-key lighting (experimental)</b>, built; or <b>RMK for the Imprint (community fork, experimental)</b>, configured live.</td></tr>
+    <tr><td>Go60, Glove80</td><td><b>MoErgo ZMK with per-key lighting (community, experimental)</b>, built; or <b>RMK for MoErgo (community)</b>, configured live.</td></tr>
+    <tr><td>Defy</td><td><b>Dygma firmware</b>, which has it as standard.</td></tr>
+  </table>
+  <div class="box warn"><div class="h">Experimental firmware</div>
+  <p>On the ZMK and RMK boards, per-key lighting relies on firmware that is not part of official ZMK and is not supported by MoErgo or Cyboard.</p>
+  <ul>
+    <li><b>Go60 and Glove80 on ZMK:</b> a community branch of MoErgo's ZMK, pinned to one commit. It is based on an older MoErgo release than the standard firmware, and ZMK Studio is not offered with it. After flashing, the colors appear only once you switch the lighting effect to the per-key one: press your <b>RGB EFF</b> key until your colors show. The keyboard remembers the choice. Make sure your layout has an RGB EFF key; the app warns you if it does not.</li>
+    <li><b>Imprint on ZMK:</b> ZMK v0.3.0 with the community per-key lighting work applied, in a fork pinned to one commit. The order of the LEDs is taken from the wired Imprint and has not yet been confirmed on this keyboard, so colors may land on the wrong keys. The app warns you of this, and the <span class="ui">LED check</span> patterns below are for finding out.</li>
+    <li><b>Imprint on the RMK fork:</b> the same unconfirmed LED order, and the firmware has not yet run on an Imprint at all.</li>
+    <li><b>Go60 and Glove80 on RMK for MoErgo:</b> its authors describe it as experimental, and on the Go60 its README says the right half's LED order is an assumption.</li>
+  </ul>
+  <p>If anything misbehaves, choose the standard firmware again on the board's page, build and flash. Chapter 15 has the way back for each keyboard.</p></div>
+
+  <h3>Painting</h3>
+  <figure><div class="frame">{{GO60_LIT}}</div><figcaption>Lighting mode shows each key in the color it will have on the selected layer.</figcaption></figure>
+  <ol class="steps">
+    <li>Select a layer in the sidebar. Each layer has its own colors.</li>
+    <li>Choose a color: click a swatch, or use the color picker for any color.</li>
+    <li>Click a key to paint it, or drag across keys to paint many. One drag is one undo step.</li>
+  </ol>
+  <p>Colors are drawn at full strength so you can tell them apart. On the keyboard they are dimmed to the brightness limit.</p>
+
+  <h3>What you can paint with</h3>
+  <table class="wrap">
+    <tr><th>Paint with</th><th>What the key's light does</th></tr>
+    <tr><td class="ui">Color</td><td>Shows the chosen color whenever this layer is the one in charge.</td></tr>
+    <tr><td class="ui">Off</td><td>Stays dark.</td></tr>
+    <tr><td class="ui">Same as layer below</td><td>Shows whatever the next active layer down says, the lighting equivalent of a transparent key. This is what unpainted keys do. On RMK for MoErgo, a key no layer colors shows the firmware's animation instead.</td></tr>
+    <tr><td class="ui">Caps Lock light</td><td>Lights in the chosen color while Caps Lock is on, and is dark otherwise. Also available for Num Lock and Scroll Lock. Needs <span class="ui">Lock indicators</span> on the board's Settings tab under ZMK.</td></tr>
+    <tr><td class="ui">Battery above 20%</td><td>A battery gauge: shows the chosen color while the battery is above that level and turns red below it. Also 40%, 60% and 80%.</td></tr>
+  </table>
+  <p>Dygma firmware has no lock or battery lights; on the Defy, paint with plain colors. It also keeps a palette of sixteen colors for the whole keyboard, which the underglow shares, so a Defy layout that uses more different colors than fit is flagged before it is written.</p>
+  <div class="box ex"><div class="h">Example: a battery gauge on four keys</div><p>On a system layer, paint four keys in a row with <span class="ui">Battery above 20%</span>, <span class="ui">40%</span>, <span class="ui">60%</span> and <span class="ui">80%</span>, all in green. Switch to that layer and the row reads like a fuel gauge: four green is nearly full, two green and two red is around half.</p></div>
+
+  <h3>Whole-layer tools</h3>
+  <table class="wrap">
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td class="ui">Fill</td><td>Paints every key on the layer with the current brush.</td></tr>
+    <tr><td class="ui">Clear</td><td>Removes the layer's lighting, so it shows whatever is beneath.</td></tr>
+    <tr><td class="ui">Color by what keys do</td><td>Colors the layer automatically from its bindings: ordinary keys teal, modifiers orange, layer keys purple, navigation and function keys green, system keys red. Transparent keys follow the layer below; keys that do nothing are dark. A quick start that you can then touch up.</td></tr>
+    <tr><td class="ui">Copy from…</td><td>One button for each other layer that has lighting. Copies that layer's colors onto this one.</td></tr>
+  </table>
+
+  <h3>LED check</h3>
+  <p>Two more patterns, <span class="ui">One color per row</span> and <span class="ui">One color per column</span>, are for confirming that each LED sits under the key the app thinks it does. On a board whose LED order has not been seen on hardware, the Imprint, put one of them on the keyboard and look: a key lit in the wrong color is a key whose LED is mapped wrongly. Please report what you see, so the order can be corrected.</p>
+  <div class="box tip"><div class="h">A good pattern</div><p>Give the base layer one calm color with <span class="ui">Fill</span>. On each other layer, paint only the keys that layer changes and leave the rest as "same as layer below". When you hold a layer key, exactly the keys that have changed light up.</p></div>
+</section>
