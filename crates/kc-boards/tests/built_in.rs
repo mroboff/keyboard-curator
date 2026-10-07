@@ -290,3 +290,41 @@ fn glove80_halves_and_firmware() {
     assert_eq!(rmk.led_of(&glove80, 57), Some(40));
     assert_eq!(rmk.key_of_led(&glove80, 79), Some(79));
 }
+
+#[test]
+fn imprint_rmk_firmware_is_configured_live() {
+    let imprint = board("cyboard-imprint");
+    let rmk = imprint.profile("imprint-rmk").unwrap();
+    assert_eq!(rmk.delivery(), Delivery::Released);
+    assert!(rmk.capabilities.contains(&Capability::Pointing));
+    assert!(rmk.capabilities.contains(&Capability::PerKeyLighting));
+    let data = rmk.rmk.as_ref().unwrap();
+    assert_eq!(data.ble_profiles, 5);
+    let matrix = data.matrix.as_ref().unwrap();
+    assert_eq!((matrix.rows, matrix.cols), (14, 8));
+    assert_eq!(matrix.positions.len(), 82);
+    // The top-left key is the left half's top finger row, read from the
+    // outer column in; the thumbs are rows 0 and 7.
+    assert_eq!(matrix.position(0), Some([6, 5]));
+    assert_eq!(matrix.position(6), Some([13, 0]));
+    assert_eq!(matrix.position(70), Some([0, 3]));
+    assert_eq!(matrix.position(81), Some([7, 7]));
+    assert_eq!(matrix.key_at(0, 0), None, "no thumb key in that cell");
+    assert_eq!(matrix.key_at(1, 0), None, "the bottom row has five keys");
+    let release = data.release.as_ref().unwrap();
+    assert_eq!(release.asset.as_deref(), Some("imprint-rmk.zip"));
+    assert_eq!(release.files.len(), 2);
+    assert_eq!(
+        data.pointing.iter().map(|p| p.device).collect::<Vec<_>>(),
+        [0, 1]
+    );
+    assert_eq!(
+        data.leds.iter().map(|l| l.first).collect::<Vec<_>>(),
+        [0, 41]
+    );
+    // The right half's LEDs follow the left's; the chains start at the
+    // inner column's bottom key.
+    assert_eq!(rmk.led_of(&imprint, 41), Some(0));
+    assert_eq!(rmk.led_of(&imprint, 42), Some(41));
+    assert_eq!(rmk.key_of_led(&imprint, 81), Some(79));
+}

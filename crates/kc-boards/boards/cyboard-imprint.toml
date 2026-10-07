@@ -280,6 +280,92 @@ low_active = false
 initial_state_active = false
 '''
 
+# colonelpanic's moergo-rmk carried to the Imprint: a fork with a board crate
+# for the Imprint (crates/imprint-rmk), the shared firmware behind Moosy
+# Research's TailorKey for RMK. As on the MoErgo boards, the firmware comes
+# from the fork's releases and the layout is written to the running keyboard
+# over Rynk. FORK_OWNER is the GitHub account the fork is published under;
+# the revision is the fork's commit and the tag the release its CI makes
+# from that commit (its calendar version, the first of that day).
+[[firmware]]
+id = "imprint-rmk"
+name = "RMK for the Imprint (community fork, experimental)"
+family = "rmk"
+experimental = true
+config_name = "imprint"
+capabilities = [
+  "rgb-underglow", "per-key-lighting", "pointing", "hold-taps", "tap-dance",
+  "mod-morph", "macros", "sticky-keys", "opposite-hand-hold",
+]
+notes = [
+  "A different firmware from ZMK: a fork of colonelpanic's moergo-rmk, the community firmware behind Moosy Research's TailorKey for RMK, with a board crate for the Imprint. It adds RGB with animations and blinking keys, bilateral home-row mods and a Keyboard Control layer that shows battery, locks and connection. It is not Cyboard firmware, and Cyboard does not support it.",
+  "The firmware comes ready-made from the fork's release, checked against its checksums, and is flashed once per half. The layout is then written straight to the keyboard over USB: keys, hold-taps and their timing profiles, tap-dances, mod-morphs, macros, combos, both trackballs' behavior and per-key colors with lock and battery lights. Nothing is built.",
+  "The firmware keeps every color to 50% of full brightness itself (its channel ceiling is 128 of 255 on both halves) and leaves the LED power rail off until there is something to show, so the brightness setting here is a share of that. The LED order is the wired Imprint's, not yet confirmed on this board. The battery level is read from the controller's supply, not the fuel gauge. Nothing here has run on an Imprint yet. Keep Cyboard's firmware files at hand to go back: choose ZMK under Firmware, build it, put each half into its bootloader and flash.",
+]
+
+[firmware.rmk]
+flavor = "moergo-rmk"
+source = { url = "https://github.com/FORK_OWNER/imprint-rmk", revision = "0e16c8d6d8a7d2227c2eca4badde9bbace674c69" }
+# dependencies/rmk at that commit: the same RMK the MoErgo boards' firmware
+# and the app's Rynk client are pinned to.
+rmk_revision = "997b62f54dd29fe7c82f23a2c5b0a18816b4c5ae"
+# Five key-selectable profiles, as Cyboard's factory keymap binds BT_SEL 0-4.
+ble_profiles = 5
+layers = 16
+# The release the fork's CI publishes from that commit: the two UF2 files,
+# SHA256SUMS and manifest.json in one archive.
+release = { repository = "FORK_OWNER/imprint-rmk", tag = "v2026.10.07.1", asset = "imprint-rmk.zip", files = [
+  { side = "left", name = "imprint-rmk-0.1.0-lh.uf2" },
+  { side = "right", name = "imprint-rmk-0.1.0-rh.uf2" },
+] }
+# From rmk-palettefx at the pinned submodule, in the firmware's own order.
+effects = [
+  "Gradient", "Flow", "Vortex", "Sparkle", "Ripple", "Rain", "Reactive",
+  "Crosshair", "Tracer", "Keyfall", "Shockwave", "Comet",
+]
+palettes = [
+  "Afterburn", "Amber", "Bad Wolf", "Carnival", "Classic", "Dracula", "Groovy",
+  "Not Pink", "Phosphor", "Polarized", "Rose Gold", "Sport", "Synthwave",
+  "Thermal", "Viridis", "Watermelon",
+]
+
+# The firmware's 14x8 matrix: rows 0-6 are the left half and 7-13 the right,
+# as in Cyboard's ZMK matrix transform (imprint.dtsi, row-offset 7), in this
+# board's binding order. Rows 0 and 7 are the thumb clusters.
+[firmware.rmk.matrix]
+rows = 14
+cols = 8
+positions = [
+  [6, 5], [6, 4], [6, 3], [6, 2], [6, 1], [6, 0], [13, 0], [13, 1], [13, 2], [13, 3], [13, 4], [13, 5],
+  [5, 5], [5, 4], [5, 3], [5, 2], [5, 1], [5, 0], [12, 0], [12, 1], [12, 2], [12, 3], [12, 4], [12, 5],
+  [4, 5], [4, 4], [4, 3], [4, 2], [4, 1], [4, 0], [11, 0], [11, 1], [11, 2], [11, 3], [11, 4], [11, 5],
+  [3, 5], [3, 4], [3, 3], [3, 2], [3, 1], [3, 0], [10, 0], [10, 1], [10, 2], [10, 3], [10, 4], [10, 5],
+  [2, 5], [2, 4], [2, 3], [2, 2], [2, 1], [2, 0], [9, 0], [9, 1], [9, 2], [9, 3], [9, 4], [9, 5],
+  [1, 5], [1, 4], [1, 3], [1, 2], [1, 1], [8, 1], [8, 2], [8, 3], [8, 4], [8, 5],
+  [0, 3], [0, 2], [0, 1], [7, 1], [7, 2], [7, 3],
+  [0, 7], [0, 6], [0, 5], [7, 5], [7, 6], [7, 7],
+]
+
+# The trackballs by RMK pointing-device id: the left half's is device 0,
+# the right half's device 1.
+[[firmware.rmk.pointing]]
+listener = "trackball_central_listener"
+device = 0
+
+[[firmware.rmk.pointing]]
+listener = "trackball_peripheral_listener"
+device = 1
+
+# Its emitter table numbers the left half's LEDs 0-40 and the right half's
+# 41-81, each in chain order.
+[[firmware.rmk.leds]]
+side = "left"
+first = 0
+
+[[firmware.rmk.leds]]
+side = "right"
+first = 41
+
 [[layouts]]
 id = "physical_layout_imprint_function_row_full_bottom_row"
 name = "Imprint Function Row (5-Key Bottom Row)"

@@ -1085,3 +1085,62 @@ fn tailorkey_for_rmk_on_the_glove80_opens_as_a_layout_and_goes_back() {
         config.behavior.as_ref().unwrap().morse.profiles.len()
     );
 }
+
+fn imprint() -> (Board, FirmwareProfile) {
+    let board = kc_boards::built_in()
+        .unwrap()
+        .into_iter()
+        .find(|b| b.id == "cyboard-imprint")
+        .unwrap();
+    let profile = board.profile("imprint-rmk").unwrap().clone();
+    (board, profile)
+}
+
+/// The Imprint's factory layout translates for the Imprint build of the
+/// moergo-rmk fork: 82 keys in a 14x8 grid with the holes marked, the
+/// right half's bootloader key as the peripheral bootloader, five
+/// Bluetooth profiles, and both trackballs' settings.
+#[test]
+fn the_imprint_factory_layout_translates_for_its_rmk_fork() {
+    let (imprint, profile) = imprint();
+    let project = Project::from_template("Factory", &imprint);
+    let firmware = FirmwareConfig::new("imprint-rmk");
+    let problems = kc_rmk::runtime::check(&project, &imprint, &profile, &firmware);
+    assert!(
+        problems.iter().all(|p| p.severity != Severity::Error),
+        "{problems:#?}"
+    );
+    let translation = translate(&project, &imprint, &profile, &firmware).expect("translates");
+    let text = translation.config.to_toml().unwrap();
+    let parsed = RuntimeConfig::from_toml(&text).unwrap();
+    assert_eq!(parsed.layers.len(), 5);
+    let base: Vec<&str> = parsed.layers[0].keys.split_whitespace().collect();
+    assert_eq!(base.len(), 14 * 8);
+    assert_eq!(base.iter().filter(|c| **c == "--").count(), 14 * 8 - 82);
+    // Row 6 is the left half's top finger row, read from the outer column
+    // in: Escape sits at (6,5).
+    assert_eq!(base[6 * 8 + 5], "KC_ESC");
+    assert_eq!(base[13 * 8], "KC_F6");
+    // The thumbs: (0,3) is the left cluster's inner top key.
+    assert_eq!(base[3], "KC_ENT");
+    let control: Vec<&str> = parsed.layers[2].keys.split_whitespace().collect();
+    assert_eq!(control[3 * 8 + 5], "QK_BOOT", "left bootloader");
+    assert_eq!(control[10 * 8 + 5], "USER(12)", "right half's bootloader");
+    assert_eq!(control[5 * 8 + 5], "USER(10)", "clear the active profile");
+    assert_eq!(control[5 * 8], "USER(4)", "the fifth profile exists");
+    // What came out reads back as the same layout, trackballs included.
+    let led_to_key = |led: u16| profile.key_of_led(&imprint, led);
+    let back = import(&parsed, &imprint, &profile, "Back", &led_to_key).expect("imports");
+    assert_eq!(back.project.layers.len(), 5);
+    let pointing = &back.project.pointing;
+    assert!(
+        pointing
+            .iter()
+            .any(|p| p.listener == "trackball_central_listener"
+                && p.processors.contains(&InputProcessor::ToScroll)),
+        "{pointing:#?}"
+    );
+    for (mine, theirs) in back.project.layers.iter().zip(&project.layers) {
+        assert_eq!(mine.bindings.len(), theirs.bindings.len());
+    }
+}

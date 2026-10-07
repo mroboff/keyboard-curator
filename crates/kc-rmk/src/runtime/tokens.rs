@@ -427,6 +427,9 @@ pub fn via(binding: &Binding, cx: &Context) -> Result<u16, String> {
         }
         ("bootloader", []) => 0x7C00,
         ("sys_reset", []) => 0x7C01,
+        // The nearest thing to unlocking ZMK Studio: toggling moergo-rmk's
+        // maintenance lock, which gates what a host may change.
+        ("studio_unlock", []) => 0x7C04,
         ("caps_word", []) => 0x7C73,
         ("key_repeat", []) => 0x7C79,
         ("gresc", []) => 0x7C16,
@@ -583,6 +586,7 @@ fn side_binding(behavior: &BehaviorRef, param: &Param) -> Binding {
 /// is: a note for the user, or nothing.
 pub fn degraded(binding: &Binding, cx: &Context) -> Option<&'static str> {
     const STATUS: &str = "MoErgo's status key does nothing in RMK; the Magic layer's lock and battery lights show status instead";
+    const UNLOCK: &str = "the Studio unlock key toggles RMK's maintenance lock instead, which gates what a host may change on the keyboard";
     const PROFILE: &str = "a Bluetooth macro or tap-dance was written as RMK's own profile key, which switches to Bluetooth, selects the profile, and disconnects it on a double tap";
     match binding {
         Binding::Behavior {
@@ -590,6 +594,7 @@ pub fn degraded(binding: &Binding, cx: &Context) -> Option<&'static str> {
             params,
         } => match (label.as_str(), params.as_slice()) {
             ("rgb_ug", [Param::Command { name, .. }]) if name == "RGB_STATUS" => Some(STATUS),
+            ("studio_unlock", []) => Some(UNLOCK),
             _ => None,
         },
         Binding::Behavior {
@@ -855,6 +860,10 @@ pub fn single_binding(action: Action, rx: &Reverse) -> Read {
         Action::KeyboardControl(control) => match control {
             KeyboardAction::Bootloader => Read::new(Binding::new("bootloader", vec![])),
             KeyboardAction::Reboot => Read::new(Binding::new("sys_reset", vec![])),
+            KeyboardAction::MaintenanceModeToggle => Read::noted(
+                Binding::new("studio_unlock", vec![]),
+                "the maintenance lock toggle was read as the Studio unlock key",
+            ),
             KeyboardAction::CapsWordToggle => Read::new(Binding::new("caps_word", vec![])),
             KeyboardAction::OutputUsb => Read::new(command("out", "OUT_USB", &[])),
             KeyboardAction::OutputBluetooth => Read::new(command("out", "OUT_BLE", &[])),
