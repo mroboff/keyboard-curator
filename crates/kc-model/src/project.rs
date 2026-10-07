@@ -132,6 +132,10 @@ const TEMPLATES: &[(&str, &str)] = &[
         "moergo-go60",
         include_str!("../templates/moergo-go60.kcproj"),
     ),
+    (
+        "moergo-glove80",
+        include_str!("../templates/moergo-glove80.kcproj"),
+    ),
 ];
 
 impl Project {

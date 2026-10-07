@@ -407,7 +407,8 @@ fn every_kind_of_key_round_trips_through_the_configuration() {
         "TO(1)",
         "TG(1)",
         "OSL(1)",
-        "QK_BOOT",
+        // On the right half, so the firmware's key for that half's bootloader.
+        "USER(12)",
         "QK_RBT",
         "CW_TOGG",
         "QK_REP",
@@ -416,7 +417,7 @@ fn every_kind_of_key_round_trips_through_the_configuration() {
         "KC_WH_D",
         "USER(1)",
         "USER(3)",
-        "USER(5)",
+        "USER(10)",
         "USER(11)",
         "QK_OUTPUT_USB",
         "USER(6)",
@@ -637,10 +638,6 @@ fn a_tailorkey_style_configuration_opens_as_a_layout() {
     // The right half's bootloader key is a bootloader key, with a note;
     // the layer-and-modifier tap has no equivalent and is said so.
     assert_eq!(magic[23], Binding::new("bootloader", vec![]));
-    assert!(imported
-        .notes
-        .iter()
-        .any(|n| n.contains("right half's bootloader")));
     assert!(imported
         .notes
         .iter()
@@ -947,4 +944,144 @@ fn what_rmk_lacks_is_refused_at_the_key_with_a_reason() {
                 && p.message.contains("one and two taps"))
     );
     let _ = LayerId(0);
+}
+
+fn glove80() -> (Board, FirmwareProfile) {
+    let board = kc_boards::built_in()
+        .unwrap()
+        .into_iter()
+        .find(|b| b.id == "moergo-glove80")
+        .unwrap();
+    let profile = board.profile("moergo-rmk").unwrap().clone();
+    (board, profile)
+}
+
+/// Moosy Research's TailorKey for RMK, as the Glove80 build of moergo-rmk
+/// takes it, opens as a layout and goes out again with every key as it
+/// was, up to the firmware's own spellings.
+#[test]
+fn tailorkey_for_rmk_on_the_glove80_opens_as_a_layout_and_goes_back() {
+    let (glove80, profile) = glove80();
+    let text = include_str!("data/tailorkey-v52-bilateral-glove80.toml");
+    let config = RuntimeConfig::from_toml(text).unwrap();
+    let led_to_key = |led: u16| profile.key_of_led(&glove80, led);
+    let imported = import(&config, &glove80, &profile, "TailorKey", &led_to_key).unwrap();
+    let project = &imported.project;
+    let names: Vec<_> = project.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Base (QWERTY)",
+            "Typing",
+            "Autoshift",
+            "Gaming",
+            "Cursor",
+            "Symbol",
+            "Mouse",
+            "MouseSlow",
+            "MouseFast",
+            "MouseWarp",
+            "Lower",
+            "Magic"
+        ]
+    );
+    // Four bilateral home-row profiles, two thumb profiles and autoshift
+    // became hold-taps; the six macros came whole.
+    let count =
+        |f: &dyn Fn(&BehaviorKind) -> bool| project.behaviors.iter().filter(|b| f(&b.kind)).count();
+    assert_eq!(count(&|k| matches!(k, BehaviorKind::HoldTap(_))), 7);
+    assert_eq!(count(&|k| matches!(k, BehaviorKind::Macro(_))), 6);
+    let pinky = project
+        .behaviors
+        .iter()
+        .find(|b| b.name == "hrm_pinky")
+        .expect("the pinky profile");
+    let BehaviorKind::HoldTap(hold_tap) = &pinky.kind else {
+        panic!("a hold-tap");
+    };
+    assert!(hold_tap.opposite_hand_hold);
+    // Twenty combo slots; the six that send a layer-and-modifier hold,
+    // which a layout cannot hold, are reported rather than dropped.
+    assert_eq!(project.combos.len(), 14);
+    assert_eq!(
+        imported
+            .notes
+            .iter()
+            .filter(|n| n.contains("-Tab") && n.contains("left out"))
+            .count(),
+        6
+    );
+    assert_eq!(
+        imported.carried.settings.get(settings::COMBO_TIMEOUT),
+        Some(&SettingValue::Int(50))
+    );
+    assert_eq!(
+        imported.carried.settings.get(settings::HOLD_TIMEOUT),
+        Some(&SettingValue::Int(250))
+    );
+
+    let mut firmware = firmware();
+    firmware.absorb(imported.carried.clone());
+    assert_eq!(
+        kc_rmk::runtime::check(project, &glove80, &profile, &firmware),
+        []
+    );
+    let again = translate(project, &glove80, &profile, &firmware).expect("translates again");
+    let parsed = RuntimeConfig::from_toml(&again.config.to_toml().unwrap()).unwrap();
+    assert_eq!(parsed.layers.len(), config.layers.len());
+    // Macros are numbered in the order the layout holds them, so compare
+    // them by name; `--` is the firmware's other spelling of no key.
+    let normal = |cfg: &RuntimeConfig, cell: &str| -> String {
+        if cell == "--" {
+            return "KC_NO".to_string();
+        }
+        match cell
+            .strip_prefix("MACRO(")
+            .and_then(|rest| rest.strip_suffix(')'))
+            .and_then(|n| n.parse::<usize>().ok())
+        {
+            Some(n) => format!("MACRO({})", cfg.macros[n].name),
+            None => cell.to_string(),
+        }
+    };
+    let mut differences = Vec::new();
+    for (mine, theirs) in parsed.layers.iter().zip(&config.layers) {
+        let a: Vec<String> = mine
+            .keys
+            .split_whitespace()
+            .map(|c| normal(&parsed, c))
+            .collect();
+        let b: Vec<String> = theirs
+            .keys
+            .split_whitespace()
+            .map(|c| normal(&config, c))
+            .collect();
+        assert_eq!(a.len(), b.len(), "{}", theirs.id);
+        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+            if x != y {
+                differences.push((theirs.id.clone(), i, x.clone(), y.clone()));
+            }
+        }
+    }
+    // The one key that changes: TailorKey's `UG_TOGG` toggles the
+    // background animation, which a layout has no word for, so it was read
+    // as the lighting toggle and said so.
+    assert_eq!(
+        differences,
+        [(
+            "magic".to_string(),
+            33,
+            "BL_TOGG".to_string(),
+            "UG_TOGG".to_string()
+        )]
+    );
+    assert!(imported
+        .notes
+        .iter()
+        .any(|n| n.contains("animation toggle")));
+    assert_eq!(parsed.macros.len(), 6);
+    assert_eq!(
+        parsed.behavior.as_ref().unwrap().morse.profiles.len(),
+        config.behavior.as_ref().unwrap().morse.profiles.len()
+    );
 }

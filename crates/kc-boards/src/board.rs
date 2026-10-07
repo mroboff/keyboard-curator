@@ -354,10 +354,12 @@ pub struct Release {
     /// The repository, as `owner/name`.
     pub repository: String,
     pub tag: String,
-    /// The release asset holding the firmware: a zip archive with one
-    /// UF2 file per half, a `SHA256SUMS` list and a `manifest.json`.
-    pub asset: String,
-    /// The UF2 file inside the archive for each half.
+    /// The release asset holding the firmware, when it is one zip archive
+    /// with the UF2 files, a `SHA256SUMS` list and a `manifest.json`.
+    /// Without it, each file, `SHA256SUMS` and `manifest.json` are assets
+    /// of their own.
+    pub asset: Option<String>,
+    /// The UF2 file for each half.
     pub files: Vec<ReleaseFile>,
 }
 
@@ -788,10 +790,10 @@ impl Board {
             .ok_or_else(|| bad("needs a `release` to take the firmware from"))?;
         if release.repository.split('/').count() != 2
             || release.tag.is_empty()
-            || release.asset.is_empty()
+            || release.asset.as_ref().is_some_and(String::is_empty)
         {
             return Err(bad(
-                "the release needs an `owner/name` repository, a tag and an asset",
+                "the release needs an `owner/name` repository and a tag",
             ));
         }
         for half in &self.halves {

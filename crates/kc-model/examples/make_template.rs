@@ -76,7 +76,30 @@ fn layer_name(board: &str, node: &str) -> String {
             return (*name).to_string();
         }
     }
-    node.strip_prefix("layer_").unwrap_or(node).to_string()
+    // As the importer names them: `layer_Base` and `default_layer` are
+    // "Base" and MoErgo's `factory_test_layer` is "Factory Test".
+    if node == "default_layer" {
+        return "Base".to_string();
+    }
+    let bare = node
+        .strip_prefix("layer_")
+        .or_else(|| node.strip_suffix("_layer"))
+        .unwrap_or(node);
+    if bare.chars().any(|c| c.is_ascii_uppercase()) {
+        return bare.to_string();
+    }
+    bare.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            chars
+                .next()
+                .map(|c| c.to_ascii_uppercase())
+                .into_iter()
+                .chain(chars)
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn command(label: &str, name: &str, args: &[u32]) -> Binding {
@@ -160,6 +183,64 @@ fn go60_behaviors(p: &mut Project) -> Result<(), Error> {
     Ok(())
 }
 
+/// The Glove80's factory behaviors (glove80.keymap in moergo-sc/zmk): the
+/// Magic hold-tap and its status macro, a tap-dance that holds or switches
+/// to Lower, and a macro per Bluetooth profile that also picks Bluetooth
+/// output.
+fn glove80_behaviors(p: &mut Project) -> Result<(), Error> {
+    let plain = |steps| {
+        BehaviorKind::Macro(Macro {
+            wait_ms: None,
+            tap_ms: None,
+            params: 0,
+            steps,
+        })
+    };
+    let status = p.add_behavior(
+        "rgb_ug_status_macro",
+        "Show status lights",
+        plain(vec![MacroStep::Tap(vec![command(
+            "rgb_ug",
+            "RGB_STATUS",
+            &[],
+        )])]),
+    )?;
+    p.add_behavior(
+        "magic",
+        "Magic",
+        BehaviorKind::HoldTap(HoldTap {
+            flavor: Flavor::TapPreferred,
+            ..HoldTap::new(
+                BehaviorRef::built_in("mo"),
+                BehaviorRef::User { user: status },
+            )
+        }),
+    )?;
+    let bindings = ["mo", "to"]
+        .iter()
+        .map(|b| parse_binding(p, &format!("&{b} Lower")))
+        .collect();
+    p.add_behavior(
+        "layer_td",
+        "Lower layer",
+        BehaviorKind::TapDance(TapDance {
+            tapping_term_ms: 200,
+            bindings,
+        }),
+    )?;
+    for profile in 0..4 {
+        p.add_behavior(
+            format!("bt_{profile}"),
+            format!("Bluetooth {}", profile + 1),
+            plain(vec![MacroStep::Tap(vec![
+                command("out", "OUT_BLE", &[]),
+                command("bt", "BT_SEL", &[profile]),
+            ])]),
+        )?;
+    }
+    Ok(())
+}
+
 fn pointing(p: &mut Project, board: &str) {
     let scale = |multiplier, divisor| InputProcessor::Scale {
         multiplier,
@@ -181,6 +262,9 @@ fn pointing(p: &mut Project, board: &str) {
             ],
             overrides: vec![],
         });
+        return;
+    }
+    if board != "moergo-go60" {
         return;
     }
     let (symbol_nav, factory) = (p.layers[2].id, p.layers[4].id);
@@ -206,8 +290,38 @@ fn pointing(p: &mut Project, board: &str) {
     });
 }
 
+/// The keymap's `#define NAME <layer index>` lines, as MoErgo's keymaps
+/// name their layers.
+fn layer_defines(src: &str) -> Vec<(String, usize)> {
+    strip_comments(src)
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("#define")?;
+            let mut parts = rest.split_whitespace();
+            let name = parts.next()?;
+            let index = parts.next()?.parse().ok()?;
+            parts.next().is_none().then(|| (name.to_string(), index))
+        })
+        .collect()
+}
+
+/// A binding with its layer defines replaced by the layer indices, which
+/// the binding parser reads.
+fn with_layer_names(text: &str, defines: &[(String, usize)], p: &Project) -> String {
+    text.split_whitespace()
+        .map(|word| {
+            defines
+                .iter()
+                .find(|(name, index)| name == word && *index < p.layers.len())
+                .map_or(word.to_string(), |(_, index)| index.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn build(board: &Board, vendor: &str) -> Result<Project, Error> {
     let layers = layers(vendor)?;
+    let defines = layer_defines(vendor);
     let mut p = Project::new(format!("{} factory layout", board.name), board);
     p.layers[0].name = layer_name(&board.id, &layers[0].0);
     for (node, _) in &layers[1..] {
@@ -215,6 +329,9 @@ fn build(board: &Board, vendor: &str) -> Result<Project, Error> {
     }
     if board.id == "moergo-go60" {
         go60_behaviors(&mut p)?;
+    }
+    if board.id == "moergo-glove80" {
+        glove80_behaviors(&mut p)?;
     }
     for (index, (node, bindings)) in layers.iter().enumerate() {
         if bindings.len() != p.key_count {
@@ -227,6 +344,7 @@ fn build(board: &Board, vendor: &str) -> Result<Project, Error> {
         }
         let id = p.layers[index].id;
         for (position, text) in bindings.iter().enumerate() {
+            let text = &with_layer_names(text, &defines, &p);
             let binding = parse_binding(&p, text);
             if matches!(binding, Binding::Raw { .. }) {
                 return Err(format!("{node} key {position}: could not read `{text}`").into());

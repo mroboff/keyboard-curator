@@ -210,6 +210,18 @@ fn slug(name: &str) -> String {
     }
 }
 
+/// Whether a key sits on the half that is not the central one, by the
+/// board's LED chains.
+fn on_peripheral(board: &Board, position: usize) -> bool {
+    board.halves.iter().any(|half| {
+        !half.central
+            && half
+                .leds
+                .as_ref()
+                .is_some_and(|leds| leds.chain.contains(&position))
+    })
+}
+
 fn unique(base: String, taken: &mut HashSet<String>) -> String {
     let mut candidate = base.clone();
     let mut n = 2;
@@ -737,6 +749,13 @@ fn build(
             };
             match tokens::token(binding, &cx) {
                 Ok(token) => {
+                    // ZMK's `&bootloader` on a key of the other half restarts
+                    // that half; moergo-rmk has a key of its own for that.
+                    let token = if token == "QK_BOOT" && on_peripheral(board, position) {
+                        format!("USER({})", tokens::USER_PERIPHERAL_BOOTLOADER)
+                    } else {
+                        token
+                    };
                     grid_cells[usize::from(row) * usize::from(matrix.cols) + usize::from(col)] =
                         token;
                     if let Some(note) = tokens::degraded(binding, &cx) {
@@ -1414,12 +1433,10 @@ pub fn import(
                     .and_then(|b| b.morse.profiles.get(&entry.name))
                     .cloned()
                     .unwrap_or_default();
-                let suffix = if hold_label == "kp" {
-                    ""
-                } else {
-                    hold_label.as_str()
-                };
-                let label = im.label(&entry.name, suffix);
+                // Labeled as the profile is named, so that it goes back out
+                // under that name; a profile used both for a modifier and
+                // for a layer makes two behaviors, the second numbered.
+                let label = im.label(&entry.name, "");
                 let mut hold_tap = HoldTap::new(behavior.clone(), BehaviorRef::built_in("kp"));
                 hold_tap.flavor = flavor_of(profile_config.mode.as_deref());
                 hold_tap.tapping_term_ms = u32::from(

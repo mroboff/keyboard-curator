@@ -87,6 +87,7 @@ fn param(value: &Value) -> String {
 
 struct Writer {
     magic_layer: Option<usize>,
+    lower_layer: Option<i64>,
     /// Layers that `&layer N` shorthands refer to.
     layer_keys: Vec<i64>,
 }
@@ -101,6 +102,15 @@ impl Writer {
             .unwrap_or_default();
         match (name.as_str(), self.magic_layer) {
             ("&magic", Some(layer)) if params.is_empty() => format!("&magic {layer} 0"),
+            // The editor's key for the Lower layer: held, it is momentary;
+            // tapped twice, it switches. The same as its `&layer N` key.
+            ("&lower", _) if params.is_empty() && self.lower_layer.is_some() => {
+                let layer = self.lower_layer.unwrap_or_default();
+                if !self.layer_keys.contains(&layer) {
+                    self.layer_keys.push(layer);
+                }
+                format!("&layer_td_{layer}")
+            }
             ("&reset", _) => "&sys_reset".to_string(),
             ("&layer", _) => match params.first().and_then(|p| p.parse::<i64>().ok()) {
                 Some(layer) => {
@@ -181,6 +191,10 @@ fn convert(export: &Value) -> (String, String, Vec<String>) {
         .unwrap_or_default();
     let mut writer = Writer {
         magic_layer: names.iter().position(|n| n == "Magic"),
+        lower_layer: names
+            .iter()
+            .position(|n| n == "Lower")
+            .and_then(|n| i64::try_from(n).ok()),
         layer_keys: Vec::new(),
     };
 

@@ -135,7 +135,7 @@ fn release_error(message: impl Into<String>) -> BuildError {
     BuildError::Release(message.into())
 }
 
-/// Fetches the release's asset and checks everything about it. A GitHub
+/// Fetches the release's firmware and checks everything about it. A GitHub
 /// token is optional: releases are public, and the token only lifts the
 /// rate limit.
 pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware, BuildError> {
@@ -173,55 +173,72 @@ pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware,
         .map_err(fail)?
         .into_json()
         .map_err(|e| BuildError::Network(e.to_string()))?;
-    let asset = found
-        .assets
-        .iter()
-        .find(|a| a.name == release.asset)
-        .ok_or_else(|| BuildError::NoAsset(release.asset.clone()))?;
-    if asset.size == 0 || asset.size > MAX_ASSET_BYTES {
-        return Err(release_error(format!(
-            "the release asset {} is {} bytes, outside the size this app takes",
-            asset.name, asset.size
-        )));
-    }
-    let digest = asset
-        .digest
-        .as_deref()
-        .and_then(|d| d.strip_prefix("sha256:"))
-        .map(str::to_ascii_lowercase)
-        .ok_or_else(|| {
-            release_error(format!(
-                "GitHub publishes no SHA-256 digest for {}, so the download cannot be checked",
-                asset.name
-            ))
-        })?;
 
-    let mut bytes = Vec::with_capacity(usize::try_from(asset.size).unwrap_or_default());
-    agent
-        .get(&asset.browser_download_url)
-        .set("User-Agent", "keyboard-curator")
-        .call()
-        .map_err(fail)?
-        .into_reader()
-        .take(MAX_ASSET_BYTES + 1)
-        .read_to_end(&mut bytes)?;
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) != asset.size {
-        return Err(release_error(format!(
-            "the download of {} is {} bytes, and GitHub says {}",
-            asset.name,
-            bytes.len(),
-            asset.size
-        )));
-    }
-    let actual = sha256(&bytes);
-    if actual != digest {
-        return Err(BuildError::Digest {
-            name: asset.name.clone(),
-            expected: digest,
-            actual,
-        });
-    }
-    let (files, manifest) = unpack(&bytes, release)?;
+    // One asset, downloaded whole and checked against the digest GitHub
+    // publishes for it.
+    let download = |name: &str| -> Result<Vec<u8>, BuildError> {
+        let asset = found
+            .assets
+            .iter()
+            .find(|a| a.name == name)
+            .ok_or_else(|| BuildError::NoAsset(name.to_string()))?;
+        if asset.size == 0 || asset.size > MAX_ASSET_BYTES {
+            return Err(release_error(format!(
+                "the release asset {} is {} bytes, outside the size this app takes",
+                asset.name, asset.size
+            )));
+        }
+        let digest = asset
+            .digest
+            .as_deref()
+            .and_then(|d| d.strip_prefix("sha256:"))
+            .map(str::to_ascii_lowercase)
+            .ok_or_else(|| {
+                release_error(format!(
+                    "GitHub publishes no SHA-256 digest for {}, so the download cannot be checked",
+                    asset.name
+                ))
+            })?;
+        let mut bytes = Vec::with_capacity(usize::try_from(asset.size).unwrap_or_default());
+        agent
+            .get(&asset.browser_download_url)
+            .set("User-Agent", "keyboard-curator")
+            .call()
+            .map_err(fail)?
+            .into_reader()
+            .take(MAX_ASSET_BYTES + 1)
+            .read_to_end(&mut bytes)?;
+        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) != asset.size {
+            return Err(release_error(format!(
+                "the download of {} is {} bytes, and GitHub says {}",
+                asset.name,
+                bytes.len(),
+                asset.size
+            )));
+        }
+        let actual = sha256(&bytes);
+        if actual != digest {
+            return Err(BuildError::Digest {
+                name: asset.name.clone(),
+                expected: digest,
+                actual,
+            });
+        }
+        Ok(bytes)
+    };
+
+    let (files, manifest) = match &release.asset {
+        Some(asset) => unpack(&download(asset)?, release)?,
+        None => {
+            let sums = download("SHA256SUMS")?;
+            let manifest = download("manifest.json")?;
+            let mut files = Vec::new();
+            for file in &release.files {
+                files.push((file.name.clone(), download(&file.name)?));
+            }
+            verify(files, &sums, &manifest, release)?
+        }
+    };
     Ok(ReleasedFirmware {
         tag: found.tag_name,
         name: found.name,
@@ -232,8 +249,8 @@ pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware,
 }
 
 /// Reads the firmware files named by the board out of a release archive
-/// whose own digest has been checked, and checks each against the
-/// archive's `SHA256SUMS` and `manifest.json`.
+/// whose own digest has been checked, with the archive's `SHA256SUMS` and
+/// `manifest.json`, and checks each file against both.
 pub fn unpack(archive: &[u8], release: &Release) -> Result<(Vec<Firmware>, Manifest), BuildError> {
     let error = |e: zip::result::ZipError| BuildError::Archive(e.to_string());
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive)).map_err(error)?;
@@ -250,9 +267,26 @@ pub fn unpack(archive: &[u8], release: &Release) -> Result<(Vec<Firmware>, Manif
         entry.read_to_end(&mut bytes)?;
         Ok(bytes)
     };
-    let sums = String::from_utf8(read("SHA256SUMS")?)
+    let sums = read("SHA256SUMS")?;
+    let manifest = read("manifest.json")?;
+    let mut files = Vec::new();
+    for wanted in &release.files {
+        files.push((wanted.name.clone(), read(&wanted.name)?));
+    }
+    verify(files, &sums, &manifest, release)
+}
+
+/// Checks each firmware file against the release's `SHA256SUMS` list and
+/// `manifest.json`, and reads the manifest.
+pub fn verify(
+    files: Vec<(String, Vec<u8>)>,
+    sums: &[u8],
+    manifest: &[u8],
+    release: &Release,
+) -> Result<(Vec<Firmware>, Manifest), BuildError> {
+    let sums = String::from_utf8(sums.to_vec())
         .map_err(|_| release_error("the release's SHA256SUMS is not text"))?;
-    let manifest: Manifest = serde_json::from_slice(&read("manifest.json")?)
+    let manifest: Manifest = serde_json::from_slice(manifest)
         .map_err(|e| release_error(format!("the release's manifest could not be read: {e}")))?;
     let listed = |name: &str| -> Option<String> {
         sums.lines().find_map(|line| {
@@ -260,39 +294,36 @@ pub fn unpack(archive: &[u8], release: &Release) -> Result<(Vec<Firmware>, Manif
             (file.trim() == name).then(|| sum.trim().to_ascii_lowercase())
         })
     };
-    let mut files = Vec::new();
+    let mut checked = Vec::new();
     for wanted in &release.files {
-        let bytes = read(&wanted.name)?;
-        let actual = sha256(&bytes);
-        let in_sums = listed(&wanted.name).ok_or_else(|| {
-            release_error(format!(
-                "{} is not in the release's SHA256SUMS",
-                wanted.name
-            ))
-        })?;
+        let (name, bytes) = files
+            .iter()
+            .find(|(name, _)| *name == wanted.name)
+            .ok_or_else(|| BuildError::NoAsset(wanted.name.clone()))?;
+        let actual = sha256(bytes);
+        let in_sums = listed(name)
+            .ok_or_else(|| release_error(format!("{name} is not in the release's SHA256SUMS")))?;
         let in_manifest = manifest
             .artifacts
             .iter()
-            .find(|a| a.uf2.file == wanted.name)
+            .find(|a| a.uf2.file == *name)
             .map(|a| a.uf2.sha256.to_ascii_lowercase())
-            .ok_or_else(|| {
-                release_error(format!("{} is not in the release's manifest", wanted.name))
-            })?;
+            .ok_or_else(|| release_error(format!("{name} is not in the release's manifest")))?;
         for expected in [in_sums, in_manifest] {
             if expected != actual {
                 return Err(BuildError::Digest {
-                    name: wanted.name.clone(),
+                    name: name.clone(),
                     expected,
                     actual,
                 });
             }
         }
-        files.push(Firmware {
-            name: wanted.name.clone(),
-            bytes,
+        checked.push(Firmware {
+            name: name.clone(),
+            bytes: bytes.clone(),
         });
     }
-    Ok((files, manifest))
+    Ok((checked, manifest))
 }
 
 /// Checks that a release was built from the sources the board definition
@@ -331,7 +362,7 @@ mod tests {
         Release {
             repository: "someone/firmware".into(),
             tag: "v1".into(),
-            asset: "go60-rmk.zip".into(),
+            asset: Some("go60-rmk.zip".into()),
             files: vec![
                 ReleaseFile {
                     side: Side::Left,
@@ -430,5 +461,27 @@ mod tests {
             .to_string()
             .contains("SHA256SUMS"));
         assert!(unpack(b"not a zip", &release()).is_err());
+
+        // Files published as assets of their own are checked the same way.
+        let mut separate = release();
+        separate.asset = None;
+        let files = vec![
+            ("go60-rmk-0.1.0-lh.uf2".to_string(), left.to_vec()),
+            ("go60-rmk-0.1.0-rh.uf2".to_string(), right.to_vec()),
+        ];
+        let manifest = manifest_json(&left_sum, &right_sum);
+        let (checked, _) = verify(
+            files.clone(),
+            sums.as_bytes(),
+            manifest.as_bytes(),
+            &separate,
+        )
+        .unwrap();
+        assert_eq!(checked.len(), 2);
+        let missing = vec![("go60-rmk-0.1.0-lh.uf2".to_string(), left.to_vec())];
+        assert!(matches!(
+            verify(missing, sums.as_bytes(), manifest.as_bytes(), &separate),
+            Err(BuildError::NoAsset(name)) if name == "go60-rmk-0.1.0-rh.uf2"
+        ));
     }
 }

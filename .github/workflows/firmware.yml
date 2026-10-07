@@ -41,6 +41,11 @@ jobs:
           - moergo-go60-lighting
           - moergo-go60-addons
           - moergo-go60-addons-sequences
+          - moergo-glove80
+          - moergo-glove80-factory
+          - moergo-glove80-lighting
+          - moergo-glove80-addons
+          - moergo-glove80-addons-sequences
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -369,7 +369,11 @@ fn lighting_fixture(board: &Board) -> (Project, FirmwareConfig) {
     {
         let lights = &mut p.lighting_mut(base).unwrap().keys;
         for (position, light) in lights.iter_mut().enumerate() {
-            *light = KeyLight::Color(Rgb((position * 4) as u8, 64, 200 - (position * 3) as u8));
+            *light = KeyLight::Color(Rgb(
+                (position * 4 % 256) as u8,
+                64,
+                (200 - position * 3 % 200) as u8,
+            ));
         }
         lights[0] = KeyLight::Off;
         lights[1] = KeyLight::Lock {

@@ -4,7 +4,7 @@ A native, open-source keymap, feature and per-key lighting editor for programmab
 
 **Status: early development.** Keymap and behavior editing, per-key lighting, import, config generation, GitHub builds, guided flashing and direct updates over ZMK Studio are all built. The generated firmware configs are compiled in CI, but little has been tried on real keyboards yet.
 
-The first release targets macOS and three boards: the Cyboard Imprint (82-key, wireless) and the MoErgo Go60, on ZMK or RMK, and the Dygma Defy on Dygma's own firmware. More boards, Windows and Linux are planned afterward.
+The first release targets macOS and four boards: the Cyboard Imprint (82-key, wireless), the MoErgo Go60 and the MoErgo Glove80, on ZMK or RMK, and the Dygma Defy on Dygma's own firmware. More boards, Windows and Linux are planned afterward.
 
 ## Building
 
@@ -42,9 +42,9 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
 
 | Family | Boards | How a layout reaches the keyboard |
 |---|---|---|
-| ZMK | Imprint, Go60 | Generated config, built on GitHub, flashed as UF2. Key changes can also be sent over USB with ZMK Studio firmware. |
+| ZMK | Imprint, Go60, Glove80 | Generated config, built on GitHub, flashed as UF2. Key changes can also be sent over USB with ZMK Studio firmware. |
 | RMK (experimental) | Imprint | Generated project, built on GitHub, flashed as UF2. Compiled, never flashed. |
-| RMK for MoErgo (experimental) | Go60 | colonelpanic's moergo-rmk, taken ready-made from its releases and checked against their checksums, flashed once as UF2. The layout is then written to the running keyboard over USB with Rynk, RMK's host protocol: keys, hold-taps with their timing profiles, tap-dances, mod-morphs, macros, combos, per-key colors with lock and battery lights, and the touchpads. Reads and writes TailorKey's RMK `.toml` files. Written against the protocol's own client; no keyboard has been connected yet. |
+| RMK for MoErgo (experimental) | Go60, Glove80 | colonelpanic's moergo-rmk, taken ready-made from its releases and checked against their checksums, flashed once as UF2. The layout is then written to the running keyboard over USB with Rynk, RMK's host protocol: keys, hold-taps with their timing profiles, tap-dances, mod-morphs, macros, combos, per-key colors with lock and battery lights, and the touchpads. Reads and writes TailorKey's RMK `.toml` files. Written against the protocol's own client; no keyboard has been connected yet. |
 | Dygma | Defy | Written to the keyboard over USB, with no build. Reading is proven on a Defy; writing has only been run against a simulated keyboard. |
 
 Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.

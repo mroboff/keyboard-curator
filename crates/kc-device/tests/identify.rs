@@ -26,17 +26,24 @@ fn boards_are_recognized_by_ids_and_name() {
         usb(0x1d50, 0x615e, Some("imprint"), Some("ABCDEF")),
         // A renamed Imprint, or any other ZMK keyboard with default IDs.
         usb(0x1d50, 0x615e, Some("Mark's Board"), None),
-        // MoErgo's IDs with another model's name.
+        // MoErgo's IDs are shared by its models; the name tells them apart.
         usb(
             0x16c0,
             0x27db,
             Some("Glove80 Left"),
             Some("moergo.com:GLV80-9"),
         ),
+        // MoErgo's IDs with a name no board has.
+        usb(
+            0x16c0,
+            0x27db,
+            Some("Glove100 Left"),
+            Some("moergo.com:GLV100-9"),
+        ),
     ];
 
     let found = identify(&devices, &boards);
-    assert_eq!(found.len(), 4);
+    assert_eq!(found.len(), 5);
 
     assert_eq!(found[0].usb, devices[1]);
     assert_eq!(found[0].boards, [index("moergo-go60")]);
@@ -49,8 +56,15 @@ fn boards_are_recognized_by_ids_and_name() {
     assert_eq!(found[2].boards, [index("cyboard-imprint")]);
     assert!(!found[2].certain);
 
-    assert_eq!(found[3].boards, [index("moergo-go60")]);
-    assert!(!found[3].certain);
+    assert_eq!(found[3].boards, [index("moergo-glove80")]);
+    assert!(found[3].certain);
+
+    let mut moergo = found[4].boards.clone();
+    moergo.sort_unstable();
+    let mut expected = [index("moergo-go60"), index("moergo-glove80")];
+    expected.sort_unstable();
+    assert_eq!(moergo, expected);
+    assert!(!found[4].certain);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Checks on the board definitions that ship with the app.
 
-use kc_boards::board::{Board, Capability, Side};
+use kc_boards::board::{Board, Capability, Delivery, Side};
 use kc_boards::built_in;
 
 fn board(id: &str) -> Board {
@@ -209,4 +209,84 @@ fn every_firmware_belongs_to_a_family_with_base_features() {
     assert!(!Family::Dygma
         .base_features()
         .contains(&Capability::Devicetree));
+}
+
+#[test]
+fn glove80_layout_and_binding_order() {
+    let glove80 = board("moergo-glove80");
+    let keys = &glove80.layout("physical_layout0").unwrap().keys;
+    assert_eq!(keys.len(), 80);
+    assert_keys_distinct(&glove80);
+    // Five finger rows of ten or twelve keys, then the bottom row with the
+    // thumb fans between the hands, then the lowest row with the rest.
+    assert_eq!(keys[0].y, 50);
+    assert!(keys[46..=51]
+        .iter()
+        .all(|k| (k.y == 400 || k.y == 450) && k.rot == 0 && k.x < 600));
+    assert!(keys[52..=54].iter().all(|k| k.rot > 0 && k.rx == 450));
+    assert!(keys[55..=57].iter().all(|k| k.rot < 0 && k.rx == 1350));
+    assert!(keys[69..=71].iter().all(|k| k.rot > 0 && k.y == 550));
+    assert!(keys[72..=74].iter().all(|k| k.rot < 0 && k.y == 550));
+    assert!(keys[75..=79].iter().all(|k| k.rot == 0 && k.x >= 1300));
+    assert_eq!(glove80.starter_keys.len(), 80);
+    assert_eq!(glove80.starter_keys[23], "Q");
+    assert_eq!(glove80.starter_keys[64], "");
+}
+
+#[test]
+fn glove80_halves_and_firmware() {
+    let glove80 = board("moergo-glove80");
+    assert_eq!(glove80.brightness_cap, 80);
+    assert_eq!(glove80.flash.order, [Side::Right, Side::Left]);
+    assert_eq!(
+        glove80.half(Side::Left).unwrap().bootloader_volume,
+        "GLV80LHBOOT"
+    );
+    assert_eq!(
+        glove80.half(Side::Right).unwrap().bootloader_volume,
+        "GLV80RHBOOT"
+    );
+    assert!(glove80.half(Side::Left).unwrap().central);
+    assert_every_key_lit(&glove80);
+    // The chains start at the thumb fans.
+    let left = glove80.half(Side::Left).unwrap().leds.as_ref().unwrap();
+    assert_eq!(&left.chain[..3], &[52, 53, 54]);
+    assert_eq!(left.chain.len(), 40);
+
+    let profile = glove80.profile("moergo-zmk-26.09").unwrap();
+    assert!(profile.capabilities.contains(&Capability::Studio));
+    assert!(profile.capabilities.contains(&Capability::Pointing));
+    assert_eq!(profile.builds.len(), 2);
+    assert_eq!(profile.builds[0].board, "glove80_lh");
+    assert_eq!(profile.config_name, "glove80");
+
+    let lit = glove80.profile("moergo-zmk-perkey").unwrap();
+    assert!(lit.capabilities.contains(&Capability::PerKeyLighting));
+    assert!(!lit.capabilities.contains(&Capability::Studio));
+    assert_eq!(lit.zmk.as_ref().unwrap().revision.len(), 40);
+    assert!(lit.lighting.as_ref().is_some_and(|l| l.transparent));
+
+    // moergo-rmk, delivered from its release and configured live.
+    let rmk = glove80.profile("moergo-rmk").unwrap();
+    assert_eq!(rmk.delivery(), Delivery::Released);
+    let data = rmk.rmk.as_ref().unwrap();
+    assert_eq!(data.ble_profiles, 4);
+    let matrix = data.matrix.as_ref().unwrap();
+    assert_eq!((matrix.rows, matrix.cols), (6, 14));
+    assert_eq!(matrix.positions.len(), 80);
+    // The left thumb fan is matrix column 6, read down from row 0.
+    assert_eq!(matrix.position(52), Some([0, 6]));
+    assert_eq!(matrix.position(69), Some([3, 6]));
+    assert_eq!(matrix.key_at(0, 5), None, "no key in that cell");
+    let release = data.release.as_ref().unwrap();
+    assert!(release.asset.is_none(), "each UF2 is an asset of its own");
+    assert_eq!(release.files.len(), 2);
+    assert_eq!(
+        data.leds.iter().map(|l| l.first).collect::<Vec<_>>(),
+        [0, 40]
+    );
+    assert!(data.pointing.is_empty());
+    // The right half's LEDs follow the left's in the firmware's numbering.
+    assert_eq!(rmk.led_of(&glove80, 57), Some(40));
+    assert_eq!(rmk.key_of_led(&glove80, 79), Some(79));
 }

@@ -203,7 +203,8 @@ fn what_cannot_be_read_is_kept_and_reported() {
         row("&odd")
     );
     let (project, report) = import_keymap("Odd", &keymap, &go60).unwrap();
-    assert_eq!(project.layers[0].name, "default_layer");
+    // ZMK's customary `default_layer` is the base layer.
+    assert_eq!(project.layers[0].name, "Base");
     assert_eq!(project.layers[1].name, "Lower");
     // The alias is expanded.
     assert_eq!(
@@ -638,8 +639,110 @@ fn rmk_configuration_files_are_imported_for_the_board_they_fit() {
         .contains_key(kc_rmk::settings::BRIGHTNESS));
     // The file is found by its shape too, whatever it is called.
     assert!(kc_import::import_file("something", text, None, &boards).is_ok());
-    // A Glove80's six-row configuration fits none of these boards.
-    let glove = text.replacen("rows = 5", "rows = 6", 1);
-    let error = kc_import::import_file("glove80.toml", &glove, None, &boards).unwrap_err();
+    // A configuration with a matrix none of these boards has fits nowhere.
+    let odd = text.replacen("rows = 5", "rows = 7", 1);
+    let error = kc_import::import_file("odd.toml", &odd, None, &boards).unwrap_err();
     assert!(matches!(error, ImportError::NotRmk(_)), "{error}");
+
+    // Moosy Research's TailorKey for RMK, written for the Glove80 build of
+    // moergo-rmk, opens for the Glove80.
+    let text = include_str!("../../kc-rmk/tests/data/tailorkey-v52-bilateral-glove80.toml");
+    let imported = kc_import::import_file("tailorkey-glove80.toml", text, None, &boards).unwrap();
+    assert_eq!(boards[imported.board].id, "moergo-glove80");
+    assert_eq!(imported.report.layers, 12);
+    assert_eq!(imported.project.layers[0].name, "Base (QWERTY)");
+    assert_eq!(imported.report.combos, 14);
+    assert!(imported.report.behaviors >= 13);
+    assert!(imported
+        .carried
+        .settings
+        .contains_key(kc_rmk::settings::COMBO_TIMEOUT));
+}
+
+/// MoErgo's factory keymap for the Glove80 imports to the template new
+/// Glove80 projects start from.
+#[test]
+fn the_glove80_factory_keymap_imports_to_the_factory_template() {
+    let glove80 = board("moergo-glove80");
+    let vendor = include_str!("data/glove80.keymap");
+    let (imported, report) = import_keymap("Glove80", vendor, &glove80).unwrap();
+    let template = Project::from_template("Glove80", &glove80);
+
+    assert_eq!(report.layers, 4);
+    assert_eq!(report.behaviors, 7);
+    assert_eq!(report.raw_bindings, 0);
+    assert_eq!(report.raw_blocks, [] as [&str; 0]);
+    assert_eq!(report.notes, [] as [&str; 0]);
+
+    let names = |p: &Project| p.layers.iter().map(|l| l.name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(&imported), names(&template));
+    assert_eq!(names(&template), ["Base", "Lower", "Magic", "Factory Test"]);
+    let text = |p: &Project| {
+        p.layers
+            .iter()
+            .map(|l| {
+                l.bindings
+                    .iter()
+                    .map(|b| {
+                        kc_model::text::format_binding(p, b, kc_model::text::LayerStyle::Constant)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(text(&imported), text(&template));
+    assert_eq!(text(&template)[0][54], "&layer_td");
+    assert_eq!(text(&template)[0][64], "&magic LAYER_Magic 0");
+    assert!(imported.pointing.is_empty());
+
+    let errors: Vec<_> = kc_model::validate(&imported, &glove80, &config_for(&imported, &glove80))
+        .into_iter()
+        .filter(|p| p.severity == Severity::Error)
+        .collect();
+    assert_eq!(errors, []);
+    let files = kc_emit::generate(&imported, &glove80, &config_for(&imported, &glove80)).unwrap();
+    assert!(files.iter().any(|f| f.path == "config/glove80.keymap"));
+}
+
+/// Moosy Research's TailorKey for the Glove80, as the MoErgo Layout
+/// Editor exports it, imports whole: its twenty layers, hold-taps, macros,
+/// combos and mouse-speed layers.
+#[test]
+fn tailorkey_for_the_glove80_imports_from_the_layout_editor() {
+    use kc_import::import_moergo;
+    let glove80 = board("moergo-glove80");
+    let source = include_str!("data/tailorkey-v52-bilateral-glove80.json");
+    let (project, carried, report) = import_moergo(source, &glove80).unwrap();
+    assert_eq!(project.name, "TailorKey v5.2³ Bilateral");
+    assert_eq!(report.layers, 20);
+    assert_eq!(report.combos, 11);
+    // Everything in it is read: the editor's `&lower` and `&magic` keys too.
+    assert_eq!(report.raw_bindings, 0);
+    assert_eq!(report.raw_blocks, [] as [&str; 0]);
+    assert!(report.behaviors >= 70, "{}", report.behaviors);
+    // Mouse emulation is a firmware setting, not part of the layout; it is
+    // not one the app offers as a control, so it travels as a `.conf` line.
+    assert!(
+        carried.raw_conf.contains("CONFIG_ZMK_POINTING=y"),
+        "{}",
+        carried.raw_conf
+    );
+    // The three mouse-speed layers scale pointer movement and scrolling.
+    assert_eq!(project.pointing.len(), 2);
+    assert_eq!(project.pointing[0].listener, "mmv_input_listener");
+    assert_eq!(project.pointing[0].overrides.len(), 3);
+    assert_eq!(
+        project.pointing[0].overrides[2].processors,
+        [InputProcessor::Scale {
+            multiplier: 12,
+            divisor: 1
+        }]
+    );
+    let config = config_for(&project, &glove80);
+    let errors: Vec<_> = kc_model::validate(&project, &glove80, &config)
+        .into_iter()
+        .filter(|p| p.severity == Severity::Error)
+        .collect();
+    assert_eq!(errors, []);
+    assert!(kc_emit::generate(&project, &glove80, &config).is_ok());
 }

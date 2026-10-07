@@ -443,7 +443,9 @@ pub fn via(binding: &Binding, cx: &Context) -> Result<u16, String> {
             ("BT_SEL" | "BT_DISC", _) => return Err(too_few_profiles(cx.ble_profiles)),
             ("BT_NXT", []) => 0x7E00 | profiles,
             ("BT_PRV", []) => 0x7E00 | (profiles + 1),
-            ("BT_CLR", []) => 0x7E00 | (profiles + 2),
+            // moergo-rmk's own key for clearing the active profile, the one
+            // its MoErgo importer writes; RMK's `profiles + 2` reads the same.
+            ("BT_CLR", []) => 0x7E00 | u16::from(USER_CLEAR_ACTIVE_PROFILE),
             ("BT_CLR_ALL", []) => 0x7E00 | u16::from(USER_CLEAR_ALL_PROFILES),
             _ => return Err(format!("RMK has nothing for &bt {name}")),
         },
@@ -869,10 +871,7 @@ pub fn single_binding(action: Action, rx: &Reverse) -> Read {
         }
         Action::User(n) if n == profiles + 3 => Read::new(command("out", "OUT_TOG", &[])),
         Action::User(USER_CLEAR_ALL_PROFILES) => Read::new(command("bt", "BT_CLR_ALL", &[])),
-        Action::User(USER_PERIPHERAL_BOOTLOADER) => Read::noted(
-            Binding::new("bootloader", vec![]),
-            "the right half's bootloader key was read as a bootloader key",
-        ),
+        Action::User(USER_PERIPHERAL_BOOTLOADER) => Read::new(Binding::new("bootloader", vec![])),
         Action::User(USER_SPLIT_TRANSPORT_TOGGLE) => Read::none("the split transport toggle"),
         Action::User(n) => Read::none(format!("user key {n}")),
         other => Read::none(format!("{other:?}")),

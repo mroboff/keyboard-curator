@@ -522,6 +522,38 @@ impl Importer<'_> {
     }
 }
 
+/// A layer's name from its node's, when it has no `display-name`:
+/// `layer_Base` is "Base", ZMK's customary `default_layer` is "Base" too,
+/// and MoErgo's `factory_test_layer` is "Factory Test".
+pub fn name_from_node(node: &str) -> String {
+    if node == "default_layer" {
+        return "Base".to_string();
+    }
+    let bare = node
+        .strip_prefix("layer_")
+        .or_else(|| node.strip_suffix("_layer"))
+        .unwrap_or(node);
+    if bare.is_empty() {
+        return node.to_string();
+    }
+    if bare.chars().any(|c| c.is_ascii_uppercase()) {
+        return bare.to_string();
+    }
+    bare.split('_')
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            chars
+                .next()
+                .map(|c| c.to_ascii_uppercase())
+                .into_iter()
+                .chain(chars)
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Imports a `.keymap` file as a project for `board`.
 pub fn import_keymap(
     name: &str,
@@ -588,10 +620,7 @@ pub fn import_keymap(
     let layer_name = |node: &Node| {
         node.string("display-name")
             .or_else(|| node.string("label"))
-            .map_or_else(
-                || node.name.trim_start_matches("layer_").to_string(),
-                str::to_string,
-            )
+            .map_or_else(|| name_from_node(&node.name), str::to_string)
     };
     project.layers[0].name = layer_name(first);
     for node in &layers[1..] {
