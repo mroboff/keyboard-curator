@@ -120,7 +120,87 @@ struct ReleaseJson {
     #[serde(default)]
     name: String,
     html_url: String,
+    #[serde(default)]
+    body: Option<String>,
+    #[serde(default)]
     assets: Vec<AssetJson>,
+}
+
+/// A project's newest release, as far as its tag, title and notes go.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LatestRelease {
+    pub tag: String,
+    pub name: String,
+    /// The release's page on GitHub.
+    pub url: String,
+    /// The release notes, as written on GitHub.
+    pub notes: String,
+}
+
+/// Asks GitHub for the newest release of `repository` (`owner/name`). One
+/// unauthenticated request, carrying nothing but the app's name; drafts
+/// and prereleases are not counted.
+pub fn latest(repository: &str) -> Result<LatestRelease, BuildError> {
+    let url = format!("{API}/repos/{repository}/releases/latest");
+    let found: ReleaseJson = ureq::get(&url)
+        .set("Accept", "application/vnd.github+json")
+        .set("X-GitHub-Api-Version", "2022-11-28")
+        .set("User-Agent", "keyboard-curator")
+        .timeout(std::time::Duration::from_secs(15))
+        .call()
+        .map_err(|error| match error {
+            ureq::Error::Status(status, _) => BuildError::Api {
+                status,
+                message: if status == 404 {
+                    "the project has no release yet".to_string()
+                } else {
+                    "no details".to_string()
+                },
+            },
+            other => BuildError::Network(other.to_string()),
+        })?
+        .into_json()
+        .map_err(|e| BuildError::Network(e.to_string()))?;
+    Ok(LatestRelease {
+        tag: found.tag_name,
+        name: found.name,
+        url: found.html_url,
+        notes: found.body.unwrap_or_default(),
+    })
+}
+
+/// The numbers of a version such as `v1.2.3` or `1.2.3-beta`: the parts
+/// before any suffix, so that `1.10` sorts after `1.9`.
+fn version_numbers(text: &str) -> Vec<u64> {
+    text.trim()
+        .trim_start_matches(['v', 'V'])
+        .split(['-', '+'])
+        .next()
+        .unwrap_or_default()
+        .split('.')
+        .map_while(|part| part.parse().ok())
+        .collect()
+}
+
+/// Whether a release tag names a newer version than the one running.
+pub fn is_newer(tag: &str, current: &str) -> bool {
+    let (tag, current) = (version_numbers(tag), version_numbers(current));
+    !tag.is_empty() && tag > current
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::is_newer;
+
+    #[test]
+    fn versions_compare_by_their_numbers() {
+        assert!(is_newer("v0.2.0", "0.1.0"));
+        assert!(is_newer("1.10.0", "1.9.3"));
+        assert!(is_newer("v1.0.0", "0.9.9-beta"));
+        assert!(!is_newer("v0.1.0", "0.1.0"));
+        assert!(!is_newer("0.0.9", "0.1.0"));
+        assert!(!is_newer("nightly", "0.1.0"));
+    }
 }
 
 fn hex(bytes: &[u8]) -> String {

@@ -863,8 +863,134 @@ impl Shell {
         self.state.save();
         let (theme, appearance) = (self.state.theme, self.state.appearance);
         crate::theme::apply(theme, appearance, cx);
-        cx.set_menus(crate::menus(theme, appearance));
+        cx.set_menus(crate::menus(theme, appearance, !self.state.updates_off));
         cx.notify();
+    }
+
+    /// The keyboard shortcuts, as a sheet from the Help menu.
+    fn show_shortcuts(
+        &mut self,
+        _: &crate::ShowShortcuts,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let width = crate::SHORTCUTS
+            .iter()
+            .map(|(keys, _)| keys.chars().count())
+            .max()
+            .unwrap_or(0);
+        let lines: Vec<String> = crate::SHORTCUTS
+            .iter()
+            .map(|(keys, what)| format!("{keys:<width$}   {what}"))
+            .collect();
+        let answer = window.prompt(
+            PromptLevel::Info,
+            "Keyboard shortcuts",
+            Some(&lines.join("\n")),
+            &["OK"],
+            cx,
+        );
+        cx.spawn(async move |_, _| {
+            let _ = answer.await;
+        })
+        .detach();
+    }
+
+    /// Turns the launch-time release check on or off, from the Help menu.
+    fn toggle_update_check(
+        &mut self,
+        _: &crate::ToggleUpdateCheck,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.state.updates_off = !self.state.updates_off;
+        self.restyle(cx);
+    }
+
+    fn check_for_updates(
+        &mut self,
+        _: &crate::CheckForUpdates,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.look_for_release(true, window, cx);
+    }
+
+    /// The check the app makes as it starts, unless it has been turned
+    /// off: quiet unless there is something newer.
+    pub fn check_for_updates_at_launch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.updates_off {
+            return;
+        }
+        self.look_for_release(false, window, cx);
+    }
+
+    /// Asks GitHub for the newest release, in the background, and offers
+    /// its page when it is newer than this build. When `asked`, being up
+    /// to date or failing is reported too; otherwise only news is.
+    fn look_for_release(&mut self, asked: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let current = env!("CARGO_PKG_VERSION").to_string();
+        cx.spawn_in(window, async move |this, cx| {
+            let found = cx
+                .background_executor()
+                .spawn(async move { kc_build::release::latest(crate::REPOSITORY) })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| match found {
+                Ok(latest) if kc_build::release::is_newer(&latest.tag, &current) => {
+                    let title = format!(
+                        "Keyboard Curator {} is available",
+                        latest.tag.trim_start_matches('v')
+                    );
+                    let notes = latest.notes.trim();
+                    let detail = if notes.is_empty() {
+                        format!("You have {current}. The release page has the download.")
+                    } else {
+                        // The notes as written, cut short for a sheet.
+                        let shown: String = notes.chars().take(600).collect();
+                        format!(
+                            "You have {current}.\n\n{shown}{}",
+                            if shown.len() < notes.len() { "…" } else { "" }
+                        )
+                    };
+                    let answer = window.prompt(
+                        PromptLevel::Info,
+                        &title,
+                        Some(&detail),
+                        &["Open Release Page", "Not Now"],
+                        cx,
+                    );
+                    let url = latest.url;
+                    cx.spawn(async move |_, cx| {
+                        if answer.await == Ok(0) {
+                            cx.update(|cx| cx.open_url(&url));
+                        }
+                    })
+                    .detach();
+                }
+                Ok(_) if asked => {
+                    let answer = window.prompt(
+                        PromptLevel::Info,
+                        "You're up to date",
+                        Some(&format!(
+                            "Keyboard Curator {current} is the newest release."
+                        )),
+                        &["OK"],
+                        cx,
+                    );
+                    cx.spawn(async move |_, _| {
+                        let _ = answer.await;
+                    })
+                    .detach();
+                }
+                Ok(_) => {}
+                Err(error) if asked => {
+                    this.error = Some(format!("Could not check for updates: {error}."));
+                    cx.notify();
+                }
+                Err(_) => {}
+            });
+        })
+        .detach();
     }
 
     fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
@@ -1673,6 +1799,9 @@ impl Render for Shell {
             .on_action(cx.listener(Self::close))
             .on_action(cx.listener(Self::new_action))
             .on_action(cx.listener(Self::export))
+            .on_action(cx.listener(Self::show_shortcuts))
+            .on_action(cx.listener(Self::check_for_updates))
+            .on_action(cx.listener(Self::toggle_update_check))
             .on_action(cx.listener(|this, _: &crate::ThemeGallery, _, cx| {
                 this.set_theme(ThemeId::Gallery, cx);
             }))

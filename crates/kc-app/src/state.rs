@@ -71,6 +71,9 @@ pub struct AppState {
     pub theme: ThemeId,
     /// The folder the ZMK config was last exported to.
     pub export_dir: Option<PathBuf>,
+    /// Whether the app has been told not to look for a newer release when
+    /// it starts. Stored the way round that makes a fresh install check.
+    pub updates_off: bool,
     /// Firmware repository folders from before they were kept per
     /// keyboard, keyed by project path or `board:<id>`. A keyboard without
     /// a folder adopts the one its project used.

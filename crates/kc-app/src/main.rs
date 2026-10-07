@@ -52,6 +52,9 @@ actions!(
         ExportConfig,
         OpenHelp,
         OpenZmkDocs,
+        ShowShortcuts,
+        CheckForUpdates,
+        ToggleUpdateCheck,
         AppearanceSystem,
         AppearanceLight,
         AppearanceDark,
@@ -63,9 +66,35 @@ actions!(
     ]
 );
 
+/// The GitHub project whose releases are the app's own.
+pub const REPOSITORY: &str = "mroboff/keyboard-curator";
+
+/// Every keyboard shortcut, for the reference under Help. Kept beside the
+/// bindings below; the two must agree.
+pub const SHORTCUTS: &[(&str, &str)] = &[
+    ("⌘N", "New board or layout, for where you are"),
+    ("⌘O", "Open a layout"),
+    ("⌘I", "Import a keymap"),
+    ("⌘S", "Save the layout"),
+    ("⇧⌘S", "Save the layout as…"),
+    ("⌘E", "Export the firmware config"),
+    ("⌘W", "Close the layout or the board's page"),
+    ("⌘Z", "Undo"),
+    ("⇧⌘Z", "Redo"),
+    ("⌘C", "Copy the selected keys"),
+    ("⌘V", "Paste onto the selected keys"),
+    ("⌘]", "Next layer"),
+    ("⌘[", "Previous layer"),
+    ("⌘1 to ⌘9", "Go to that layer"),
+    ("Arrow keys", "Move the selection across the keyboard"),
+    ("Backspace or Delete", "Clear the selected keys"),
+    ("Escape", "Clear the selection"),
+    ("⌘Q", "Quit"),
+];
+
 /// The menu bar. The theme and appearance in use are checked in the View
-/// menu.
-fn menus(theme: ThemeId, appearance: Appearance) -> Vec<Menu> {
+/// menu, and whether the app looks for a newer release at launch in Help.
+fn menus(theme: ThemeId, appearance: Appearance, checks_for_updates: bool) -> Vec<Menu> {
     let themes = ThemeId::ALL.map(|id| {
         let item = match id {
             ThemeId::Gallery => MenuItem::action(id.name(), ThemeGallery),
@@ -126,7 +155,12 @@ fn menus(theme: ThemeId, appearance: Appearance) -> Vec<Menu> {
         ]),
         Menu::new("Help").items([
             MenuItem::action("Keyboard Curator Help", OpenHelp),
+            MenuItem::action("Keyboard Shortcuts", ShowShortcuts),
             MenuItem::action("ZMK Documentation", OpenZmkDocs),
+            MenuItem::separator(),
+            MenuItem::action("Check for Updates…", CheckForUpdates),
+            MenuItem::action("Check for Updates at Launch", ToggleUpdateCheck)
+                .checked(checks_for_updates),
         ]),
     ]
 }
@@ -174,7 +208,7 @@ fn main() {
             .and_then(|name| serde_json::from_value(serde_json::Value::String(name)).ok())
             .unwrap_or(state.theme);
         theme::apply(shown, state.appearance, cx);
-        cx.set_menus(menus(shown, state.appearance));
+        cx.set_menus(menus(shown, state.appearance, !state.updates_off));
         catalog::start(cx);
 
         let bounds = match state.window {
@@ -195,6 +229,11 @@ fn main() {
         .expect("failed to open window");
 
         let _ = window.update(cx, |_, window, cx| {
+            // Once a day at most would be kinder to GitHub, but the check
+            // is one small request, and only if it has not been turned off.
+            shell.update(cx, |shell, cx| {
+                shell.check_for_updates_at_launch(window, cx)
+            });
             // A project given on the command line opens straight away; a
             // keymap or Layout Editor export is imported.
             if let Some(path) = std::env::args_os().nth(1) {
