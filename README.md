@@ -37,6 +37,8 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
   - *Arena*: near-black with violet and lime, capitals, and keys lit along their lower edge by kind.
   - *Curator*: the terminal look of vm-curator, in monospace, with the editor's shortcuts in its status line.
   - *Bench*: a workshop. Light keycaps with slate and orange accents on a dark desk mat, and a pegboard behind My Boards.
+- **Help menu**: *Keyboard Shortcuts* lists every shortcut. *Check for Updates…* asks GitHub for the newest release and offers its page; the same check runs when the app starts unless *Check for Updates at Launch* is turned off. It sends nothing but the request.
+- **LED check**: the Lighting mode has two patterns, one color per row and one per column, for confirming that each LED sits under the key the board definition says. On a board whose LED order has not been seen on hardware (the Imprint), put them on the keyboard and note any key lit in the wrong color.
 - **Light and dark**: Gallery and Golden Gate come in both and follow the computer's appearance; Arena, Curator and Bench are dark. *View › Appearance* holds it to light or dark instead.
 
 ### Firmware families
@@ -85,6 +87,8 @@ cargo test --workspace
 ci/check-gui-boundary.sh
 ```
 
+`CONTRIBUTING.md` explains how the crates fit together and how a board is added. `docs/packaging.md` covers the macOS release build and `docs/release-checklist.md` the checks a release goes through on real keyboards. `docs/user-guide` holds the user guide; `docs/user-guide/build.py` prints it to PDF.
+
 ## License
 
-MIT. See `LICENSE`.
+MIT. See `LICENSE`. What the app carries from other projects, and under which terms, is listed in `THIRD-PARTY.md` (regenerate it with `ci/third-party.py`).
