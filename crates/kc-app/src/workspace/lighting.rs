@@ -5,7 +5,7 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
 use kc_model::features::{KeyLight, LockKind, Rgb};
 use kc_model::keycap::{keycap, Keycap, KeycapKind};
-use kc_model::lighting::{by_key_type, display_color, effective};
+use kc_model::lighting::{by_key_type, display_color, effective, led_check};
 use kc_zmk::Feature;
 
 use super::{chip, heading, help, section_title, Workspace};
@@ -121,6 +121,26 @@ impl Workspace {
             }
             Ok(())
         });
+    }
+
+    /// The two LED check patterns for this layout: one color per row of
+    /// the keymap, and one per column.
+    fn led_check_patterns(&self) -> (Vec<KeyLight>, Vec<KeyLight>) {
+        match self.board.layout(&self.project().layout) {
+            Some(layout) => led_check(&layout.keys),
+            None => {
+                let keys = self.project().key_count;
+                (vec![KeyLight::Inherit; keys], vec![KeyLight::Inherit; keys])
+            }
+        }
+    }
+
+    /// Whether every LED map of the board has been confirmed on hardware.
+    fn leds_verified(&self) -> bool {
+        self.board
+            .halves
+            .iter()
+            .all(|half| half.leds.as_ref().is_none_or(|leds| leds.verified))
     }
 
     fn render_lighting_tools(&self, cx: &mut Context<Self>) -> Div {
@@ -249,6 +269,31 @@ impl Workspace {
                         }),
                     ))
                     .children(others),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1()
+                    .child(section_title("LED CHECK", cx))
+                    .child(chip("lights-check-rows", "One color per row", false, cx).on_click(
+                        cx.listener(|this, _, window, cx| {
+                            let (rows, _) = this.led_check_patterns();
+                            this.set_layer_lights("LED Check by Row", rows, window, cx);
+                        }),
+                    ))
+                    .child(chip("lights-check-columns", "One color per column", false, cx).on_click(
+                        cx.listener(|this, _, window, cx| {
+                            let (_, columns) = this.led_check_patterns();
+                            this.set_layer_lights("LED Check by Column", columns, window, cx);
+                        }),
+                    ))
+                    .child(div().text_xs().text_color(muted).child(if self.leds_verified() {
+                        "For checking that each LED sits under the key the app thinks it does."
+                    } else {
+                        "This board's LED order has not been confirmed on hardware. Put these on the keyboard: a key lit in the wrong color is a key whose LED is mapped wrongly."
+                    })),
             )
             .child(help(format!(
                 "Click or drag across keys to paint. Lock lights show the chosen color while the lock is on; battery lights turn red below the level. Colors are shown at full strength; the keyboard limits brightness to {}%.{}",
