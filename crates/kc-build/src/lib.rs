@@ -1,10 +1,13 @@
-//! Firmware build back ends. GitHub Actions first; the trait leaves room for Docker and native builds.
+//! Firmware build back ends, and firmware taken ready-made from releases.
 //!
 //! The GitHub back end works on a local clone of the user's zmk-config
 //! repository: it writes the generated files, commits and pushes, follows
 //! the workflow run that push starts, and downloads the firmware it builds.
+//! [`release`] fetches a project's released firmware instead, and checks
+//! it against the project's own checksums before offering it.
 
 pub mod github;
+pub mod release;
 pub mod repo;
 
 use std::io::Read;
@@ -28,6 +31,18 @@ pub enum BuildError {
     Network(String),
     #[error("the firmware download could not be read: {0}")]
     Archive(String),
+    #[error("the release has no asset named `{0}`")]
+    NoAsset(String),
+    #[error(
+        "{name} does not match its checksum: expected {expected}, got {actual}, so it was not kept"
+    )]
+    Digest {
+        name: String,
+        expected: String,
+        actual: String,
+    },
+    #[error("{0}")]
+    Release(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }

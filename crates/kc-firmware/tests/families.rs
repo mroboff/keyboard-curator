@@ -110,3 +110,52 @@ fn rmk_layouts_generate_an_rmk_project_and_flag_what_rmk_lacks() {
     };
     assert!(problems.iter().any(|p| p.message.contains("rgb_ug")));
 }
+
+#[test]
+fn moergo_rmk_is_taken_from_a_release_and_configured_live() {
+    let go60 = board("moergo-go60");
+    let config = FirmwareConfig::new("moergo-rmk");
+    assert_eq!(config.family(&go60), kc_firmware::Family::Rmk);
+    assert_eq!(config.delivery(&go60), kc_firmware::Delivery::Released);
+    assert!(config.delivery(&go60).is_live());
+    // The generated file is the configuration the firmware's own tools
+    // read, not a build.
+    let project = Project::new("Mine", &go60);
+    let files = generate(&project, &go60, &config).unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].path, "go60.toml");
+    assert!(files[0].contents.contains("[[layer]]"));
+    // Its settings are RMK's, with the keyboard's name among them.
+    let settings = kc_firmware::settings(&go60, &config);
+    assert!(settings
+        .iter()
+        .any(|s| s.key == kc_rmk::settings::BRIGHTNESS));
+    assert_eq!(
+        kc_firmware::name_setting(&go60, &config),
+        Some(kc_rmk::settings::BLUETOOTH_NAME)
+    );
+    let effect = settings
+        .iter()
+        .find(|s| s.key == kc_rmk::settings::EFFECT)
+        .unwrap();
+    let options = kc_firmware::setting_options(&go60, &config, effect);
+    assert!(options.iter().any(|o| o == "Rain"));
+    // ZMK's settings stay ZMK's.
+    let stock = FirmwareConfig::stock(&go60);
+    assert!(kc_firmware::settings(&go60, &stock)
+        .iter()
+        .all(|s| s.key.starts_with("CONFIG_")));
+    assert!(kc_firmware::name_setting(&go60, &stock).is_some_and(|key| key.starts_with("CONFIG_")));
+    // The firmware comes from a pinned release.
+    let release = kc_firmware::release(&go60, &config).unwrap();
+    assert_eq!(release.tag, "v2026.09.18.1");
+    assert!(kc_firmware::release(&go60, &stock).is_none());
+    // And it can be asked to restart into its bootloader, where ZMK cannot.
+    assert!(kc_firmware::live::can_control(&go60, &config));
+    assert!(!kc_firmware::live::can_control(&go60, &stock));
+    // Without a keyboard on USB there is nothing to read or write, and
+    // nothing is saved.
+    let backups = std::env::temp_dir().join("kc-rynk-never-written");
+    assert!(kc_firmware::live::apply(&project, &go60, &config, None, &backups).is_err());
+    assert!(!backups.exists());
+}

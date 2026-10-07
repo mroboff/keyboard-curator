@@ -143,6 +143,7 @@ fn fixture(board: &Board) -> (Project, FirmwareConfig) {
                 require_prior_idle_ms: Some(150),
                 hold_trigger_key_positions: vec![6, 7, 8, 9, 10, 11],
                 hold_trigger_on_release: true,
+                opposite_hand_hold: false,
                 ..HoldTap::new(BehaviorRef::built_in("kp"), BehaviorRef::built_in("kp"))
             }),
         )

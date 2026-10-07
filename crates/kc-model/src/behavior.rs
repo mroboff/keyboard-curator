@@ -142,6 +142,11 @@ pub struct HoldTap {
     /// Key positions that let the hold trigger; empty means any key.
     pub hold_trigger_key_positions: Vec<usize>,
     pub hold_trigger_on_release: bool,
+    /// Hold only when the next key is on the other hand, decided by the
+    /// firmware from where the keys are. Firmware without the feature
+    /// ignores it; ZMK uses the hold-trigger key positions instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub opposite_hand_hold: bool,
 }
 
 impl HoldTap {
@@ -157,6 +162,7 @@ impl HoldTap {
             hold_while_undecided: false,
             hold_trigger_key_positions: Vec::new(),
             hold_trigger_on_release: false,
+            opposite_hand_hold: false,
         }
     }
 }

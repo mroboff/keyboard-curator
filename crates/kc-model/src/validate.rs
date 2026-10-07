@@ -318,7 +318,16 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
         }
         match &def.kind {
             BehaviorKind::HoldTap(h) => {
-                c.positions(&location, "hold-trigger", &h.hold_trigger_key_positions)
+                c.positions(&location, "hold-trigger", &h.hold_trigger_key_positions);
+                // A hold decided by hand is kept for firmware that can do
+                // it; other firmware holds for any key, or for the trigger
+                // keys when there are some.
+                if h.opposite_hand_hold && !c.features.contains(&Feature::OppositeHandHold) {
+                    c.warning(
+                        &location,
+                        "holding only for the other hand is not supported by this firmware; choose the other hand's keys as hold triggers instead",
+                    );
+                }
             }
             BehaviorKind::TapDance(t) if t.bindings.is_empty() => {
                 c.error(&location, "a tap-dance needs at least one binding")

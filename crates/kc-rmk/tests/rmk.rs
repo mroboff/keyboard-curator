@@ -2,8 +2,8 @@
 
 use kc_boards::board::{FirmwareProfile, RmkProfile};
 use kc_boards::Board;
-use kc_model::{Binding, KeyExpr, LayerId, Param, Project, Severity};
-use kc_rmk::{action, check, expressible, generate, keymap};
+use kc_model::{Binding, FirmwareConfig, KeyExpr, LayerId, Param, Project, Severity};
+use kc_rmk::{action, check, check_keymap, expressible, generate};
 use kc_zmk::Modifier;
 
 fn board(id: &str) -> (Board, FirmwareProfile, RmkProfile) {
@@ -119,9 +119,10 @@ fn the_imprint_gets_a_whole_rmk_project_on_the_vendors_flash_layout() {
         .set_binding(base, 0, Binding::layer("mo", nav))
         .unwrap();
     project.add_combo("Escape", vec![13, 14], Binding::kp(KeyExpr::new("ESC")));
-    assert!(check(&project, &rmk).is_empty());
+    assert!(check_keymap(&project, &rmk).is_empty());
 
-    let files = generate(&project, &imprint, &profile).unwrap();
+    let firmware = FirmwareConfig::new(profile.id.clone());
+    let files = generate(&project, &imprint, &profile, &firmware).unwrap();
     let file = |path: &str| {
         files
             .iter()
@@ -193,43 +194,35 @@ fn the_imprint_gets_a_whole_rmk_project_on_the_vendors_flash_layout() {
 }
 
 #[test]
-fn the_go60_supplies_only_a_keymap_to_the_moergo_firmware() {
+fn the_go60_gets_moergo_rmks_runtime_configuration_instead_of_a_build() {
     let (go60, profile, rmk) = board("moergo-go60");
+    let firmware = FirmwareConfig::new(profile.id.clone());
     let project = Project::new("Mine", &go60);
-    let files = generate(&project, &go60, &profile).unwrap();
+    let files = generate(&project, &go60, &profile, &firmware).unwrap();
     let paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
-    assert_eq!(
-        paths,
-        [
-            "keymap.toml",
-            "tools/splice_keymap.py",
-            ".github/workflows/build.yml"
-        ]
-    );
-    let keymap_file = &files[0].1;
-    let parsed: toml::Table = toml::from_str(keymap_file).unwrap();
-    let keys = parsed["keymap"]["layer"][0]["keys"].as_str().unwrap();
-    assert_eq!(keys.split_whitespace().count(), 60);
-    // Built inside that firmware's own project, at a pinned commit.
-    let workflow = &files[2].1;
+    assert_eq!(paths, ["go60.toml"]);
+    // The file is one moergo-rmk's own tools read.
+    let config = kc_rmk::moergo_config::RuntimeConfig::from_toml(&files[0].1).unwrap();
+    assert_eq!((config.rows, config.cols), (5, 14));
+    assert_eq!(config.layers.len(), 1);
+    let keys = &config.layers[0].keys;
+    // Five rows of fourteen cells: sixty keys and ten holes.
+    assert_eq!(keys.split_whitespace().count(), 70);
+    assert_eq!(keys.split_whitespace().filter(|c| *c == "--").count(), 10);
+    assert!(keys.contains("KC_EQL KC_1 KC_2"));
+    // The firmware comes from a pinned release, built from a pinned commit
+    // with a pinned RMK, which the app's protocol client matches.
     assert_eq!(rmk.source.revision.len(), 40);
-    assert!(workflow.contains(&format!("git -C firmware checkout {}", rmk.source.revision)));
-    assert!(workflow.contains("firmware/crates/go60-rmk/keyboard.toml"));
-    // That firmware's own settings count on sixteen layers, so the keymap
-    // declares them all; the ones the layout lacks are see-through.
-    assert!(keymap(&project, &rmk)
-        .unwrap()
-        .starts_with("[keymap]\nlayers = 16\n"));
-    let layers = parsed["keymap"]["layer"].as_array().unwrap();
-    assert_eq!(layers.len(), 16);
-    let unused = layers[15]["keys"].as_str().unwrap();
-    assert_eq!(unused.split_whitespace().count(), 60);
-    assert!(unused.split_whitespace().all(|action| action == "_"));
+    assert_eq!(rmk.rmk_revision.len(), 40);
+    let release = rmk.release.as_ref().unwrap();
+    assert_eq!(release.repository, "colonelpanic8/moergo-rmk");
+    assert_eq!(release.files.len(), 2);
+    // Sixteen layers, not seventeen.
     let mut tall = Project::new("Tall", &go60);
     for number in 2..=17 {
         tall.add_layer(format!("Layer {number}")).unwrap();
     }
-    assert!(kc_rmk::check(&tall, &rmk)
+    assert!(check(&tall, &go60, &profile, &firmware)
         .iter()
         .any(|p| p.message.contains("17 layers, and this firmware holds 16")));
 }
@@ -240,10 +233,11 @@ fn a_layout_rmk_cannot_hold_is_reported_and_not_generated() {
     // The factory layout leans on behaviors defined in the layout, which
     // are not translated yet.
     let factory = Project::from_template("Factory", &imprint);
-    let problems = check(&factory, &rmk);
+    let problems = check_keymap(&factory, &rmk);
     assert!(!problems.is_empty());
     assert!(problems.iter().all(|p| p.severity == Severity::Error));
-    assert!(generate(&factory, &imprint, &profile).is_err());
+    let firmware = FirmwareConfig::new(profile.id.clone());
+    assert!(generate(&factory, &imprint, &profile, &firmware).is_err());
 
     let mut project = Project::new("Mine", &imprint);
     let base = project.layers[0].id;
@@ -253,7 +247,7 @@ fn a_layout_rmk_cannot_hold_is_reported_and_not_generated() {
     project.set_binding(base, 0, lighting).unwrap();
     // A combo over a key that does nothing has no way to be named.
     project.add_combo("Bad", vec![60, 61], Binding::kp(KeyExpr::new("ESC")));
-    let problems = check(&project, &rmk);
+    let problems = check_keymap(&project, &rmk);
     assert!(problems
         .iter()
         .any(|p| p.message.contains("nothing for &rgb_ug")));

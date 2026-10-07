@@ -1,17 +1,27 @@
-//! RMK firmware: a layout written as an RMK keymap, and the project that
-//! builds it.
+//! RMK firmware: a layout written as an RMK keymap and the project that
+//! builds it, or as moergo-rmk's runtime configuration.
 //!
-//! RMK is configured by a `keyboard.toml`. The half of that file about the
-//! hardware is data, in the board definition; this crate adds the keymap
-//! and the files around it. Bindings are translated to RMK's key actions,
+//! RMK itself is configured by a `keyboard.toml`. The half of that file
+//! about the hardware is data, in the board definition; this crate adds the
+//! keymap and the files around it. moergo-rmk, built on RMK for MoErgo's
+//! boards, is instead configured on the running keyboard: the same layout
+//! becomes its runtime configuration ([`runtime`]), with the board's
+//! [`settings`]. Either way, bindings are translated to RMK's key actions,
 //! and one RMK has nothing for is reported, never dropped.
 
 pub mod keys;
+pub mod runtime;
+pub mod settings;
+
+/// The firmware's own configuration model, for callers that read or write
+/// its files.
+pub use moergo_config;
 
 use kc_boards::board::{FirmwareProfile, RmkFlavor, RmkProfile, Side};
 use kc_boards::Board;
 use kc_model::{
-    BehaviorRef, Binding, KeyExpr, LayerId, Location, Param, Problem, Project, Severity,
+    BehaviorRef, Binding, FirmwareConfig, KeyExpr, LayerId, Location, Param, Problem, Project,
+    Severity,
 };
 use kc_zmk::keycodes::{keycodes, UsagePage};
 use kc_zmk::Modifier;
@@ -154,14 +164,38 @@ pub fn action(binding: &Binding, layers: &[LayerId], ble_profiles: u8) -> Result
     })
 }
 
-/// Whether a binding can be written as an RMK key action.
+/// Whether a binding can be written for this RMK firmware: as a key action
+/// of a generated keymap, or into moergo-rmk's runtime configuration.
 pub fn expressible(binding: &Binding, project: &Project, profile: &RmkProfile) -> bool {
-    let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
-    action(binding, &layers, profile.ble_profiles).is_ok()
+    match profile.flavor {
+        RmkFlavor::Upstream => {
+            let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
+            action(binding, &layers, profile.ble_profiles).is_ok()
+        }
+        RmkFlavor::MoergoRmk => runtime::expressible(binding, project, profile),
+    }
 }
 
-/// What stops a layout from being built as RMK firmware.
-pub fn check(project: &Project, profile: &RmkProfile) -> Vec<Problem> {
+/// What stops a layout from reaching a keyboard on this RMK firmware: from
+/// being built as a keymap, or from being written as moergo-rmk's
+/// configuration.
+pub fn check(
+    project: &Project,
+    board: &Board,
+    profile: &FirmwareProfile,
+    firmware: &FirmwareConfig,
+) -> Vec<Problem> {
+    let Some(rmk) = profile.rmk.as_ref() else {
+        return Vec::new();
+    };
+    match rmk.flavor {
+        RmkFlavor::Upstream => check_keymap(project, rmk),
+        RmkFlavor::MoergoRmk => runtime::check(project, board, profile, firmware),
+    }
+}
+
+/// What stops a layout from being built as an RMK keymap.
+pub fn check_keymap(project: &Project, profile: &RmkProfile) -> Vec<Problem> {
     let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
     let mut problems = Vec::new();
     let mut error = |location: Location, message: String| {
@@ -368,17 +402,32 @@ with open(args.target, "wb") as file:
 print(f"{args.target}: {len(chunks)} blocks from {args.base:#x}, family {args.family:#x}")
 "#;
 
-/// The files of a firmware repository that builds RMK for `project`.
-/// Paths are relative to the repository's root.
+/// The files for `project` on this RMK firmware: a repository that builds
+/// RMK, or for moergo-rmk the runtime configuration its tools read, as
+/// `<config_name>.toml`. Paths are relative to the repository's root.
 pub fn generate(
     project: &Project,
     board: &Board,
     profile: &FirmwareProfile,
+    firmware: &FirmwareConfig,
 ) -> Result<Vec<(String, String)>, String> {
     let rmk = profile
         .rmk
         .as_ref()
         .ok_or("this firmware has no RMK build described")?;
+    if rmk.flavor == RmkFlavor::MoergoRmk {
+        let toml = runtime::toml(project, board, profile, firmware).map_err(|problems| {
+            problems
+                .iter()
+                .map(|p| p.message.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
+        })?;
+        return Ok(vec![(
+            format!("{}.toml", profile.config_name),
+            format!("# {NOTICE}\n# The runtime configuration of {} for the {}, as moergo-rmk's own tools read it.\n\n{toml}", profile.name, board.name),
+        )]);
+    }
     let keymap = keymap(project, rmk)?;
     let central = board
         .halves
@@ -513,77 +562,7 @@ jobs:
                 ),
             );
         }
-        RmkFlavor::MoergoRmk => {
-            // That firmware has its own project for the board, with the
-            // hardware, lighting and touchpads set up. Only the keymap is
-            // ours: it is spliced over the one in its keyboard.toml.
-            file("keymap.toml", format!("# {NOTICE}\n\n{keymap}"));
-            file("tools/splice_keymap.py", SPLICE_PY.to_string());
-            file(
-                ".github/workflows/build.yml",
-                format!(
-                    r#"# {NOTICE}
-name: Build RMK firmware
-on: [push, pull_request, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Fetch the firmware this keymap is built into
-        run: |
-          git clone {url} firmware
-          git -C firmware checkout {revision}
-          git -C firmware submodule update --init --recursive
-      - name: Put this keymap into it
-        run: python3 tools/splice_keymap.py keymap.toml firmware/{dir}/keyboard.toml
-      - uses: cachix/install-nix-action@v25
-      - name: Build
-        run: cd firmware && nix develop --command just go60-firmware
-      - uses: actions/upload-artifact@v4
-        with:
-          name: firmware
-          path: firmware/dist/**/*.uf2
-"#,
-                    url = rmk.source.url,
-                    revision = rmk.source.revision,
-                    dir = rmk.project_dir,
-                ),
-            );
-        }
+        RmkFlavor::MoergoRmk => unreachable!("handled above"),
     }
     Ok(files)
 }
-
-/// Replaces the keymap in a firmware project's `keyboard.toml` with ours:
-/// everything from `[keymap]` up to the next section that is not part of
-/// the keymap or the combos.
-const SPLICE_PY: &str = r#"#!/usr/bin/env python3
-"""Replaces the keymap of a keyboard.toml: tools/splice_keymap.py keymap.toml keyboard.toml"""
-import re
-import sys
-
-ours = open(sys.argv[1]).read()
-target = open(sys.argv[2]).read()
-ours_keymap = ours[ours.index("[keymap]") :]
-
-# The combos, if we have any, replace theirs; otherwise theirs stay.
-combo = re.search(r"^\[behavior\.combo\]\n.*?(?=^\[|\Z)", ours_keymap, re.S | re.M)
-ours_layers = ours_keymap[: combo.start()] if combo else ours_keymap
-
-start = target.index("[keymap]")
-after = re.compile(r"^\[(?!keymap\]|\[keymap\.layer\]\])", re.M).search(target, start + 1)
-end = after.start() if after else len(target)
-target = target[:start] + ours_layers.rstrip() + "\n\n" + target[end:]
-
-if combo:
-    theirs = re.search(r"^\[behavior\.combo\]\n.*?(?=^\[|\Z)", target, re.S | re.M)
-    if theirs:
-        target = target[: theirs.start()] + combo.group(0) + target[theirs.end() :]
-    else:
-        target = target.rstrip() + "\n\n" + combo.group(0)
-
-open(sys.argv[2], "w").write(target)
-print(f"spliced {ours_layers.count('[[keymap.layer]]')} layers into {sys.argv[2]}")
-"#;

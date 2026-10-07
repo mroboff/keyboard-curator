@@ -1,6 +1,6 @@
 [package]
 name = "kc-rmk"
-description = "RMK firmware: layouts as RMK keymaps, and the project that builds them"
+description = "RMK firmware: layouts as RMK keymaps and as moergo-rmk's runtime configuration, and the project that builds them"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +15,15 @@ workspace = true
 kc-boards = { version = "0.1.0", path = "../kc-boards" }
 kc-model = { version = "0.1.0", path = "../kc-model" }
 kc-zmk = { version = "0.1.0", path = "../kc-zmk" }
+# moergo-rmk's own host-side model of its runtime configuration (MIT): the
+# TOML schema Rynkbench and moergo-control read and write, its validation,
+# and its conversions to the wire. Pinned to the commit the Go60 release in
+# the board definition is built from, so the two never drift apart.
+moergo-config = { git = "https://github.com/colonelpanic8/moergo-rmk", rev = "179bd66bb45f8a12bb8ee2501f592923b023b7d0" }
+# RMK's wire types, from the same checkout (its `dependencies/rmk`), so
+# that moergo-config's types and ours are one and the same.
+rynk = { git = "https://github.com/colonelpanic8/moergo-rmk", rev = "179bd66bb45f8a12bb8ee2501f592923b023b7d0" }
+heapless = "0.9"
 
 [dev-dependencies]
 toml = "1.1.6"

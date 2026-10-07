@@ -63,6 +63,15 @@ fn only_devices_with_a_serial_number_can_be_linked() {
     );
     let link = go60.link().unwrap();
     assert_eq!(link.serial, "moergo.com:GO60-1A2B");
+    // RMK firmware marks its serial number; the keyboard stays the same
+    // device.
+    let marked = usb(
+        0x16c0,
+        0x27db,
+        Some("Go60"),
+        Some("rynk:moergo.com:GO60-1A2B"),
+    );
+    assert_eq!(marked.link().unwrap(), link);
     assert_eq!((link.vendor, link.product), (0x16c0, 0x27db));
 
     assert!(usb(1, 2, Some("Nameless"), None).link().is_none());

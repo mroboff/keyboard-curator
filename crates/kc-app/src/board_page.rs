@@ -10,12 +10,12 @@ use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, Textar
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use kc_boards::board::Source;
+use kc_boards::board::{Side, Source};
 use kc_boards::Board;
 use kc_firmware::{Delivery, Family, FirmwareError, GeneratedFile};
 use kc_model::features::SettingValue;
 use kc_model::{file, FirmwareConfig, Keyboard, KeyboardId, Project};
-use kc_zmk::settings::{Setting, SettingKind, BRIGHTNESS_SETTINGS, SETTINGS};
+use kc_zmk::settings::{Setting, SettingKind, BRIGHTNESS_SETTINGS};
 
 use crate::flash_view::FlashView;
 use crate::library::Library;
@@ -23,8 +23,6 @@ use crate::shell::connection_hint;
 use crate::state::AppState;
 use crate::tester::KeyTester;
 use crate::workspace::{badge, card, chip, display, heading, help, subheading, tab};
-
-const KEYBOARD_NAME: &str = "CONFIG_ZMK_KEYBOARD_NAME";
 
 /// The parts of a board's page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,8 +52,9 @@ pub enum BoardEvent {
     Import,
     /// Remove this board, after asking.
     Remove,
-    /// Open a layout that was just read from the keyboard, unsaved.
-    Loaded(Box<Project>),
+    /// Open a layout that was just read from the keyboard, unsaved, with
+    /// the board's settings it carried and what could not be kept.
+    Loaded(Box<kc_firmware::live::Read>),
 }
 
 impl EventEmitter<BoardEvent> for BoardPage {}
@@ -92,6 +91,8 @@ pub struct BoardPage {
     flash: Entity<FlashView>,
     tester: Entity<KeyTester>,
     build: BuildStatus,
+    /// Where fetching the ready-made firmware from its release has got to.
+    release: BuildStatus,
     /// What reading from or applying to a live-configured keyboard is
     /// doing, or how it went.
     live: Option<String>,
@@ -167,6 +168,7 @@ impl BoardPage {
             flash,
             tester,
             build: BuildStatus::Idle,
+            release: BuildStatus::Idle,
             live: None,
             live_busy: false,
             notice: None,
@@ -188,7 +190,10 @@ impl BoardPage {
         let Some(saved) = self.saved(cx) else {
             return;
         };
-        let announced = match saved.firmware.settings.get(KEYBOARD_NAME) {
+        let announced = match self
+            .name_setting(&saved.firmware)
+            .and_then(|key| saved.firmware.settings.get(key))
+        {
             Some(SettingValue::Text(text)) => text.clone(),
             _ => String::new(),
         };
@@ -221,6 +226,12 @@ impl BoardPage {
 
     pub fn keyboard(&self) -> KeyboardId {
         self.keyboard
+    }
+
+    /// The setting that holds the name the keyboard announces, for the
+    /// firmware that has one.
+    fn name_setting(&self, config: &FirmwareConfig) -> Option<&'static str> {
+        kc_firmware::name_setting(&self.board, config)
     }
 
     pub fn show_section(&mut self, section: Section, cx: &mut Context<Self>) {
@@ -316,14 +327,16 @@ impl BoardPage {
         if !name.is_empty() && name != saved.name {
             self.change(cx, |k| k.rename(id, &name));
         }
-        let announced = self.announced_name.read(cx).value().trim().to_string();
-        let stored = match saved.firmware.settings.get(KEYBOARD_NAME) {
-            Some(SettingValue::Text(text)) => text.clone(),
-            _ => String::new(),
-        };
-        if announced != stored {
-            let value = (!announced.is_empty()).then_some(SettingValue::Text(announced));
-            self.change(cx, |k| k.set_setting(id, KEYBOARD_NAME, value));
+        if let Some(key) = self.name_setting(&saved.firmware) {
+            let announced = self.announced_name.read(cx).value().trim().to_string();
+            let stored = match saved.firmware.settings.get(key) {
+                Some(SettingValue::Text(text)) => text.clone(),
+                _ => String::new(),
+            };
+            if announced != stored {
+                let value = (!announced.is_empty()).then_some(SettingValue::Text(announced));
+                self.change(cx, |k| k.set_setting(id, key, value));
+            }
         }
         let conf = self.raw_conf.read(cx).value().to_string();
         if conf != saved.firmware.raw_conf {
@@ -345,6 +358,7 @@ impl BoardPage {
         let (id, board) = (self.keyboard, self.board.clone());
         self.change(cx, |k| k.set_firmware(id, &board, &profile));
         self.build = BuildStatus::Idle;
+        self.release = BuildStatus::Idle;
     }
 
     fn toggle_addon(&mut self, addon: String, cx: &mut Context<Self>) {
@@ -447,10 +461,10 @@ impl BoardPage {
             let _ = this.update(cx, |this, cx| {
                 this.live_busy = false;
                 match read {
-                    Ok(project) => {
+                    Ok(read) => {
                         this.live =
                             Some("Read the keyboard's configuration into a new layout.".into());
-                        cx.emit(BoardEvent::Loaded(Box::new(project)));
+                        cx.emit(BoardEvent::Loaded(Box::new(read)));
                     }
                     Err(error) => this.live = Some(format!("{error}.")),
                 }
@@ -478,14 +492,22 @@ impl BoardPage {
         else {
             return;
         };
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &format!("Write “{}” to the keyboard?", layout.name),
-            Some(&format!(
+        let detail = match saved.firmware.delivery(&self.board) {
+            Delivery::Released => format!(
+                "This writes it to “{}” over USB at once: keys, hold-taps and their timing, tap-dances, mod-morphs, macros, combos, the colors under the keys and the touchpads, with the board's settings. Only what differs is written. What the keyboard holds now is saved first, in {}, as a file Rynkbench and moergo-control read.",
+                saved.name,
+                backups.display()
+            ),
+            _ => format!(
                 "This changes “{}” at once: its keys and the colors under them on every layer. Superkeys, macros, underglow and settings are left as they are. What the keyboard holds now is saved first, in {}.",
                 saved.name,
                 backups.display()
-            )),
+            ),
+        };
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            &format!("Write “{}” to the keyboard?", layout.name),
+            Some(&detail),
             &["Cancel", "Write to Keyboard"],
             cx,
         );
@@ -518,12 +540,133 @@ impl BoardPage {
                         "The keyboard already holds this layout. Nothing was written.".to_string()
                     }
                     Ok(applied) => format!(
-                        "Written to the keyboard. Its earlier configuration is saved in {}.",
+                        "Written to the keyboard and read back: {} change(s). Its earlier configuration is saved in {}.",
+                        applied.changes.len(),
                         applied
                             .backup
                             .map_or_else(String::new, |path| path.display().to_string())
                     ),
                     Err(error) => format!("Nothing more was written: {error}."),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    // Ready-made firmware
+
+    /// Fetches the chosen firmware's released files, checks them, and hands
+    /// them to the flash view.
+    fn fetch_release(&mut self, cx: &mut Context<Self>) {
+        let (board, config) = (self.board.clone(), self.config(cx));
+        let Some(release) = kc_firmware::release(&board, &config).cloned() else {
+            return;
+        };
+        self.release = BuildStatus::Working(format!(
+            "Fetching release {} from {}…",
+            release.tag, release.repository
+        ));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let fetched = cx
+                .background_executor()
+                .spawn(async move {
+                    let token = kc_build::github::find_token();
+                    kc_firmware::fetch_release(&board, &config, token.as_deref())
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                match fetched {
+                    Ok(fetched) => {
+                        let count = fetched.files.len();
+                        let files = fetched
+                            .files
+                            .into_iter()
+                            .map(|f| (f.name, f.bytes))
+                            .collect();
+                        this.flash.update(cx, |flash, cx| flash.set_firmware(files, cx));
+                        this.release = BuildStatus::Succeeded(format!(
+                            "Fetched and checked {count} firmware file(s) from release {} ({}, built from {}). Flash each half below.",
+                            fetched.tag,
+                            fetched.name,
+                            &fetched.manifest.source.commit[..fetched.manifest.source.commit.len().min(9)]
+                        ));
+                    }
+                    Err(message) => {
+                        this.release = BuildStatus::Failed { message, url: None };
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Asks the connected keyboard to restart one half into its bootloader.
+    fn enter_bootloader(&mut self, side: Side, cx: &mut Context<Self>) {
+        let (board, config) = (self.board.clone(), self.config(cx));
+        let device = self.saved(cx).and_then(|k| k.device.clone());
+        let name = if side == Side::Left { "left" } else { "right" };
+        self.live = Some(format!(
+            "Asking the {name} half to restart into its bootloader…"
+        ));
+        self.live_busy = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    kc_firmware::live::enter_bootloader(&board, &config, device.as_ref(), side)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.live_busy = false;
+                this.live = Some(match result {
+                    Ok(()) => format!(
+                        "The {name} half is restarting into its bootloader. Its drive appears below in a moment."
+                    ),
+                    Err(error) => format!("{error}."),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Erases everything the keyboard stores, after asking.
+    fn reset_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(saved) = self.saved(cx).cloned() else {
+            return;
+        };
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            &format!("Erase everything “{}” stores?", saved.name),
+            Some("The keyboard forgets its layout, its lighting, its settings and its Bluetooth pairings, and restarts on the firmware's defaults. Do this before flashing another firmware, so that nothing of this one is left in the flash it shares."),
+            &["Cancel", "Erase and Restart"],
+            cx,
+        );
+        let (board, config) = (self.board.clone(), saved.firmware.clone());
+        cx.spawn(async move |this, cx| {
+            if answer.await != Ok(1) {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.live = Some("Erasing the keyboard's stored settings…".into());
+                this.live_busy = true;
+                cx.notify();
+            });
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    kc_firmware::live::reset_settings(&board, &config, saved.device.as_ref())
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.live_busy = false;
+                this.live = Some(match result {
+                    Ok(()) => "The keyboard is erasing its settings and restarting.".to_string(),
+                    Err(error) => format!("{error}."),
                 });
                 cx.notify();
             });
@@ -537,7 +680,7 @@ impl BoardPage {
     /// the factory layout when none has been applied.
     fn layout(&self, cx: &App) -> Result<Project, String> {
         let Some(path) = self.saved(cx).and_then(|k| k.current.clone()) else {
-            if self.config(cx).family(&self.board).delivery() == Delivery::Live {
+            if self.config(cx).delivery(&self.board).is_live() {
                 return Err(
                     "This board has no current layout. Read the keyboard's own, or make one current under Layouts."
                         .into(),
@@ -936,6 +1079,40 @@ impl BoardPage {
                     })
             }
             SettingKind::Text { .. } => div().w_64().child(Input::new(&self.announced_name)),
+            SettingKind::Choice { .. } | SettingKind::Named => {
+                let chosen = match &value {
+                    Some(SettingValue::Text(text)) => Some(text.clone()),
+                    _ => None,
+                };
+                let mut row = div().flex().flex_wrap().justify_end().gap_1().max_w_96();
+                row = row.child(choose(
+                    "setting-default",
+                    "Board default".into(),
+                    chosen.is_none(),
+                    None,
+                    cx,
+                ));
+                let key_hash = key.len() * 131 + key.bytes().map(usize::from).sum::<usize>();
+                for (index, option) in kc_firmware::setting_options(&self.board, config, setting)
+                    .into_iter()
+                    .enumerate()
+                {
+                    let active = chosen.as_deref() == Some(option.as_str());
+                    let value = SettingValue::Text(option.clone());
+                    row = row.child(
+                        chip(
+                            ("setting-option", key_hash + (index + 1) * 7919),
+                            option,
+                            active,
+                            cx,
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.set_setting(key, Some(value.clone()), cx);
+                        })),
+                    );
+                }
+                row
+            }
         };
         div()
             .flex()
@@ -1187,15 +1364,22 @@ impl BoardPage {
             .board
             .profile(&config.profile)
             .map_or_else(|| config.profile.clone(), |p| p.name.clone());
+        let delivery = config.delivery(&self.board);
         let mut page = div()
             .flex()
             .flex_col()
             .gap_3()
             .child(heading("Settings", cx))
             .child(help(format!(
-                "Settings of {firmware}, the firmware chosen under Firmware. They belong to the board, and apply whichever layout it is built with."
+                "Settings of {firmware}, the firmware chosen under Firmware. They belong to the board, and apply whichever layout it is built with.{}",
+                if delivery == Delivery::Released {
+                    " A setting left at the board default is not written to the keyboard: what the keyboard holds for it stays."
+                } else {
+                    ""
+                }
             ), cx));
-        if config.family(&self.board) != Family::Zmk {
+        let settings = kc_firmware::settings(&self.board, config);
+        if settings.is_empty() {
             return page.child(
                 div()
                     .text_sm()
@@ -1204,7 +1388,7 @@ impl BoardPage {
             );
         }
         let mut group = "";
-        for setting in SETTINGS {
+        for setting in settings {
             if setting.requires.is_some_and(|f| !features.contains(&f)) {
                 continue;
             }
@@ -1213,15 +1397,25 @@ impl BoardPage {
                 page = page.child(subheading(group, cx).pt_8());
                 if group == "Lighting" {
                     page = page.child(help(
-                        format!(
-                            "This keyboard's brightness is limited to {}% to protect it.",
-                            self.board.brightness_cap
-                        ),
+                        if delivery == Delivery::Released {
+                            format!(
+                                "This keyboard's brightness is limited to {}% to protect it; the firmware keeps that limit itself, and the brightness here is a share of it.",
+                                self.board.brightness_cap
+                            )
+                        } else {
+                            format!(
+                                "This keyboard's brightness is limited to {}% to protect it.",
+                                self.board.brightness_cap
+                            )
+                        },
                         cx,
                     ));
                 }
             }
             page = page.child(self.render_setting(setting, config, cx));
+        }
+        if config.family(&self.board) != Family::Zmk {
+            return page;
         }
         page.child(subheading("Custom settings", cx).pt_8()).child(
             div()
@@ -1345,7 +1539,7 @@ impl BoardPage {
                     ),
             )
             .when(
-                saved.firmware.family(&self.board).delivery() == Delivery::Build,
+                saved.firmware.delivery(&self.board) == Delivery::Build,
                 |page| page.child(factory),
             )
             .children(rows)
@@ -1486,6 +1680,202 @@ impl BoardPage {
             })
     }
 
+    /// Firmware taken ready-made from its releases and configured live:
+    /// getting and flashing it, reading and applying the layout, and the
+    /// way back to another firmware.
+    fn render_released_section(
+        &self,
+        saved: &Keyboard,
+        config: &FirmwareConfig,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let theme = cx.theme();
+        let (muted, danger, success, warning) = (
+            theme.muted_foreground,
+            theme.danger,
+            theme.success,
+            theme.warning,
+        );
+        let firmware = self
+            .board
+            .profile(&config.profile)
+            .map_or_else(|| config.profile.clone(), |p| p.name.clone());
+        let release = kc_firmware::release(&self.board, config).cloned();
+        let connected = self.library.read(cx).is_connected(saved);
+        let busy = self.live_busy;
+        let panel = |title: &'static str, text: String| {
+            card(false, cx)
+                .w(px(640.))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(subheading(title, cx))
+                .child(div().text_sm().text_color(muted).child(text))
+        };
+        let current = match &saved.current {
+            Some(path) => format!(
+                "The current layout is “{}”.",
+                path.file_stem()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+            ),
+            None => "This board has no current layout yet.".to_string(),
+        };
+
+        let fetching = matches!(self.release, BuildStatus::Working(_));
+        let mut firmware_panel = panel(
+            "Get the firmware",
+            match &release {
+                Some(release) => format!(
+                    "{firmware} comes ready-made from release {} of {} on GitHub. It is checked against the release's checksums and against the sources this app expects before it is offered. Then flash each half below.",
+                    release.tag, release.repository
+                ),
+                None => "This firmware names no release to take.".to_string(),
+            },
+        );
+        if let Some(release) = &release {
+            let url = format!(
+                "https://github.com/{}/releases/tag/{}",
+                release.repository, release.tag
+            );
+            firmware_panel = firmware_panel.child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .when(!fetching, |row| {
+                        row.child(
+                            Button::new("fetch-release")
+                                .primary()
+                                .label(format!("Fetch Firmware {}", release.tag))
+                                .on_click(cx.listener(|this, _, _, cx| this.fetch_release(cx))),
+                        )
+                    })
+                    .child(
+                        Button::new("open-release")
+                            .ghost()
+                            .label("Open the Release")
+                            .on_click(move |_, _, cx| cx.open_url(&url)),
+                    ),
+            );
+        }
+        firmware_panel = match &self.release {
+            BuildStatus::Idle => firmware_panel,
+            BuildStatus::Working(text) => firmware_panel.child(div().text_sm().child(text.clone())),
+            BuildStatus::Succeeded(text) => {
+                firmware_panel.child(div().text_sm().text_color(success).child(text.clone()))
+            }
+            BuildStatus::Failed { message, .. } => {
+                firmware_panel.child(div().text_sm().text_color(danger).child(message.clone()))
+            }
+        };
+        // Putting a half into its bootloader needs the keyboard to be
+        // running this firmware and listening.
+        let bootloader = card(false, cx)
+            .w(px(640.))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(subheading("Restart into the bootloader", cx))
+            .child(div().text_sm().text_color(muted).child(
+                "While the keyboard runs this firmware, each half can be asked to restart into its bootloader from here, with no key combination. The right half is asked through the left, so both must be on and connected to each other.",
+            ))
+            .when(connected && !busy, |panel| {
+                panel.child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            Button::new("bootloader-left")
+                                .label("Restart Left Half")
+                                .on_click(cx.listener(|this, _, _, cx| this.enter_bootloader(Side::Left, cx))),
+                        )
+                        .child(
+                            Button::new("bootloader-right")
+                                .label("Restart Right Half")
+                                .on_click(cx.listener(|this, _, _, cx| this.enter_bootloader(Side::Right, cx))),
+                        ),
+                )
+            })
+            .when(!connected, |panel| {
+                panel.child(div().text_xs().text_color(muted).child(
+                    "Connect the keyboard's left half by USB to use these; it must be running this firmware.",
+                ))
+            });
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(firmware_panel)
+            .child(self.flash.clone())
+            .child(bootloader)
+            .child(
+                panel(
+                    "Read from the keyboard",
+                    "Opens what the keyboard holds now as a new layout: every layer's keys, hold-taps with their timing, tap-dances, mod-morphs, macros, combos, the colors under the keys and the touchpad settings. The board's settings it carries are offered to the board. Nothing is written to the keyboard. Close Rynkbench or moergo-control first; only one program can talk to the keyboard at a time.".into(),
+                )
+                .when(!busy, |panel| {
+                    panel.child(
+                        div().flex().child(
+                            Button::new("read-keyboard")
+                                .primary()
+                                .label("Read From Keyboard")
+                                .on_click(cx.listener(|this, _, _, cx| this.read_keyboard(cx))),
+                        ),
+                    )
+                }),
+            )
+            .child(
+                panel(
+                    "Apply to the keyboard",
+                    format!(
+                        "{current} Applying writes it to the keyboard at once, with no build: only what differs, after saving what the keyboard holds to a file Rynkbench and moergo-control read. The keyboard is read back afterward to see that it holds what was sent."
+                    ),
+                )
+                .when(!busy && saved.current.is_some(), |panel| {
+                    panel.child(
+                        div().flex().child(
+                            Button::new("apply-keyboard")
+                                .label("Apply To Keyboard…")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.apply_to_keyboard(window, cx);
+                                })),
+                        ),
+                    )
+                })
+                .child(
+                    div().flex().child(
+                        Button::new("export-config")
+                            .ghost()
+                            .label("Export Configuration…")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.export(window, cx);
+                            })),
+                    ),
+                ),
+            )
+            .child(
+                panel(
+                    "Going back to MoErgo's firmware",
+                    "To return to MoErgo's ZMK: erase this firmware's stored settings here, so that nothing of it is left in the flash the two share; choose MoErgo's firmware under Firmware and build it; then restart each half into its bootloader and flash it. Keep the firmware files you came from at hand. MoErgo does not support this firmware.".into(),
+                )
+                .child(div().text_xs().text_color(warning).child(
+                    "Erasing cannot be undone. What the keyboard holds is saved to a file each time a layout is applied; erase after reading or applying, not before.",
+                ))
+                .when(connected && !busy, |panel| {
+                    panel.child(
+                        div().flex().child(
+                            Button::new("reset-settings")
+                                .label("Erase Stored Settings…")
+                                .on_click(cx.listener(|this, _, window, cx| this.reset_settings(window, cx))),
+                        ),
+                    )
+                }),
+            )
+            .when_some(self.live.clone(), |page, status| {
+                page.child(div().w(px(640.)).text_sm().child(status))
+            })
+    }
+
     /// Building the firmware, exporting its config and flashing it.
     fn render_build_section(
         &self,
@@ -1584,9 +1974,9 @@ impl Render for BoardPage {
         };
         // Firmware configured live has no build; its last tab is the
         // keyboard itself.
-        let build_label = match config.family(&self.board).delivery() {
+        let build_label = match config.delivery(&self.board) {
             Delivery::Build => "Build & Flash",
-            Delivery::Live => "Keyboard",
+            Delivery::Live | Delivery::Released => "Keyboard",
         };
         let tab =
             |id: &'static str, label: &'static str, section: Section, cx: &mut Context<Self>| {
@@ -1605,9 +1995,10 @@ impl Render for BoardPage {
             Section::Firmware => Some(self.render_firmware(&config, cx)),
             Section::Settings => Some(self.render_settings(&config, cx)),
             Section::Layouts => Some(self.render_layouts(&saved, cx)),
-            Section::Build => Some(match config.family(&self.board).delivery() {
+            Section::Build => Some(match config.delivery(&self.board) {
                 Delivery::Build => self.render_build_section(&saved, &config, cx),
                 Delivery::Live => self.render_keyboard_section(&saved, cx),
+                Delivery::Released => self.render_released_section(&saved, &config, cx),
             }),
             // The tester fills the page instead of sitting in its column.
             Section::Tester => None,

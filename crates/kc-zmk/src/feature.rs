@@ -48,4 +48,9 @@ pub enum Feature {
     LeaderKey,
     /// Adaptive keys, from the zmk-adaptive-key add-on.
     AdaptiveKey,
+    /// Hold-taps that hold only when the next key is on the other hand,
+    /// which the firmware decides from the board's geometry (RMK's
+    /// `opposite_hand_hold`). ZMK does this with hold-trigger key positions
+    /// instead.
+    OppositeHandHold,
 }

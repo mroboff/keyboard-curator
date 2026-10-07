@@ -617,3 +617,29 @@ fn moergo_layout_editor_keymaps_import_completely() {
         without_combo_ids(&keymap)
     );
 }
+
+/// RMK runtime configuration files open as layouts for the board whose
+/// firmware is configured that way, with the board's settings apart.
+#[test]
+fn rmk_configuration_files_are_imported_for_the_board_they_fit() {
+    let boards = kc_boards::built_in().unwrap();
+    let text = include_str!("../../kc-rmk/tests/data/tailorkey-style-go60.toml");
+    let imported = kc_import::import_file("tailorkey.toml", text, None, &boards).unwrap();
+    assert_eq!(boards[imported.board].id, "moergo-go60");
+    assert_eq!(imported.project.name, "tailorkey");
+    assert_eq!(imported.report.layers, 3);
+    assert!(imported.report.behaviors >= 5);
+    assert_eq!(imported.report.combos, 2);
+    assert!(!imported.report.notes.is_empty());
+    assert!(imported.report.summary().contains("Imported 3 layer(s)"));
+    assert!(imported
+        .carried
+        .settings
+        .contains_key(kc_rmk::settings::BRIGHTNESS));
+    // The file is found by its shape too, whatever it is called.
+    assert!(kc_import::import_file("something", text, None, &boards).is_ok());
+    // A Glove80's six-row configuration fits none of these boards.
+    let glove = text.replacen("rows = 5", "rows = 6", 1);
+    let error = kc_import::import_file("glove80.toml", &glove, None, &boards).unwrap_err();
+    assert!(matches!(error, ImportError::NotRmk(_)), "{error}");
+}

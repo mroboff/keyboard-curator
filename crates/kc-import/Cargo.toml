@@ -1,6 +1,6 @@
 [package]
 name = "kc-import"
-description = "Imports existing ZMK keymaps and MoErgo Layout Editor JSON"
+description = "Imports existing ZMK keymaps, MoErgo Layout Editor JSON and RMK runtime configuration files"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 kc-boards = { version = "0.1.0", path = "../kc-boards" }
 kc-model = { version = "0.1.0", path = "../kc-model" }
+kc-rmk = { version = "0.1.0", path = "../kc-rmk" }
 kc-zmk = { version = "0.1.0", path = "../kc-zmk" }
 serde_json = "1.0.151"
 thiserror = "2.0.21"

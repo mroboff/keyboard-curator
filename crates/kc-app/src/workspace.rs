@@ -2145,7 +2145,7 @@ impl Workspace {
             .border_1()
             .border_color(border)
             .child(heading(format!("Apply to “{name}”"), cx))
-            .child(div().text_sm().text_color(muted).child(if self.features().contains(&Feature::Build) {
+            .child(div().text_sm().text_color(muted).child(if self.config.delivery(&self.board) == kc_firmware::Delivery::Build {
                 format!("Makes this the layout “{name}” is built with, saving it first, and takes you to the board's Build & Flash. The board's firmware and settings are not changed.")
             } else {
                 format!("Makes this the layout of “{name}”, saving it first, and takes you to the board's Keyboard tab, where it is written to the keyboard.")

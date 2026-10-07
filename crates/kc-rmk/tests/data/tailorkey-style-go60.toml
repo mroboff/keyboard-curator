@@ -1,0 +1,185 @@
+# A Go60 runtime configuration in the style of Moosy Research's TailorKey
+# for RMK (https://sites.google.com/view/tailorkey/rmk): named timing
+# profiles for bilateral home-row mods, autoshift as tap-holds, a Magic
+# layer of the firmware's own keys, combos by what their keys do, macros,
+# and lighting as colored cells and rules. Written for this app's tests
+# after the shape of TailorKey's published Glove80 file.
+
+rows = 5
+cols = 14
+default_layer = 0
+
+[[layer]]
+id = "base"
+name = "Base (QWERTY)"
+keys = """
+KC_EQL KC_1 KC_2 KC_3 KC_4 KC_5 LT(1, KC_BSPC, thumb_layer) KC_RSFT KC_6 KC_7 KC_8 KC_9 KC_0 KC_MINS
+KC_TAB KC_Q KC_W KC_E KC_R KC_T MO(2) LT(1, KC_ENT, thumb_layer) KC_Y KC_U KC_I KC_O KC_P KC_BSLS
+KC_ESC MT(KC_A, LGui, hrm_pinky) MT(KC_S, LAlt, hrm_ring) KC_D MT(KC_F, LShift, hrm_index) KC_G KC_SPC KC_DEL KC_H MT(KC_J, RShift, hrm_index) KC_K MT(KC_L, LAlt, hrm_ring) MT(KC_SCLN, RGui, hrm_pinky) KC_QUOT
+KC_LSFT KC_Z KC_X KC_C KC_V KC_B -- -- KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_RSFT
+-- -- KC_GRV KC_LEFT KC_RGHT -- -- -- -- KC_UP KC_DOWN KC_LBRC -- --
+"""
+
+[[layer]]
+id = "lower"
+name = "Lower"
+keys = """
+KC_F1 KC_F2 KC_F3 KC_F4 KC_F5 KC_F6 KC_TRNS KC_TRNS KC_F7 KC_F8 KC_F9 KC_F10 KC_F11 KC_F12
+KC_TRNS TH(KC_Q, LSFT(KC_Q), autoshift) TH(KC_W, LSFT(KC_W), autoshift) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS LMT(1, MOD_LALT, KC_TAB) MACRO(0) KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+-- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
+"""
+
+[[layer]]
+id = "magic"
+name = "Magic"
+keys = """
+USER(10) KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO USER(11)
+QK_BOOT UG_SPDU UG_SATU UG_HUEU UG_VALU BL_TOGG KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO USER(12)
+QK_RBT UG_SPDD UG_SATD UG_HUED UG_VALD UG_NEXT KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO QK_RBT
+USER(0) USER(1) USER(2) KC_NO KC_NO KC_NO -- -- KC_NO KC_NO KC_NO KC_NO KC_NO KC_NO
+-- -- QK_OUTPUT_USB QK_OUTPUT_BLUETOOTH USER(6) -- -- -- -- CW_TOGG KC_NO TO(0) -- --
+"""
+
+# The outer-column keys on the Magic layer show the battery of each half.
+[[layer.key]]
+key = [0, 0]
+color = "#ff0000"
+
+[[layer.key.rule]]
+when = { battery = { node = 0, min_level = 40 } }
+color = "#00ff00"
+
+[[layer.key]]
+key = [1, 0]
+color = "#202020"
+
+[[layer.key.rule]]
+when = { indicators = { caps_lock = true } }
+color = "#ffffff"
+
+[[combo]]
+name = "Escape"
+keys = ["KC_Q", "KC_W"]
+output = "KC_ESC"
+layer = 0
+
+[[combo]]
+name = "Toggle Lower"
+keys = ["KC_Z", "KC_X"]
+output = "TG(1)"
+
+[[macro]]
+name = "Select line"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_HOME"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_END"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LSFT"
+
+[behavior]
+combo_timeout_ms = 60
+oneshot_timeout_ms = 1000
+tap_interval_ms = 20
+tap_capslock_interval_ms = 20
+
+[behavior.morse]
+enable_flow_tap = false
+prior_idle_ms = 120
+
+[behavior.morse.default_profile]
+hold_timeout_ms = 250
+gap_timeout_ms = 250
+unilateral_tap = false
+mode = "normal"
+
+[behavior.morse.profiles.autoshift]
+hold_timeout_ms = 190
+unilateral_tap = false
+mode = "normal"
+
+[behavior.morse.profiles.hrm_index]
+enable_flow_tap = true
+hold_timeout_ms = 180
+quick_tap_ms = 300
+prior_idle_ms = 100
+opposite_hand_hold = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_pinky]
+enable_flow_tap = true
+hold_timeout_ms = 270
+quick_tap_ms = 300
+prior_idle_ms = 150
+opposite_hand_hold = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_ring]
+enable_flow_tap = true
+hold_timeout_ms = 240
+quick_tap_ms = 300
+prior_idle_ms = 100
+opposite_hand_hold = true
+mode = "normal"
+
+[behavior.morse.profiles.thumb_layer]
+hold_timeout_ms = 200
+quick_tap_ms = 300
+unilateral_tap = false
+mode = "permissive-hold"
+
+[pointing]
+
+[[pointing.device]]
+device_id = 0
+mode = "scroll"
+multiplier_x = 1
+divisor_x = 8
+multiplier_y = 1
+divisor_y = 8
+invert_y = true
+
+[[pointing.device]]
+device_id = 1
+mode = "cursor"
+multiplier_x = 3
+multiplier_y = 3
+primary_button = 2
+
+[lighting]
+brightness = 128
+output_mode = "powered-only"
+wake_layers = [2]
+scene_policy = "active-stack"
+
+[lighting.background]
+enabled = false
+hue = 0
+saturation = 0
+value = 0
+speed = 128
+mode = "solid"
+
+[lighting.effects]
+effect = "Rain"
+palette = "Dracula"
+value = 200
+speed = 100
+
+# The key under the left half's sixth LED, the Q key, lit on Lower.
+[[lighting.scene]]
+layer = 1
+led = 5
+color = "#0000ff"

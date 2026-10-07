@@ -125,29 +125,88 @@ board = "go60_rh"
 # colonelpanic's moergo-rmk (https://github.com/colonelpanic8/moergo-rmk,
 # MIT): RMK with lighting, the Cirque touchpads and a status layer for
 # MoErgo's boards, on its own fork of RMK. It is the firmware Moosy
-# Research's TailorKey for RMK is built on. It has its own project for the
-# Go60, so the app supplies only the keymap, in the same key order as this
-# board's layout, and builds inside that project at a pinned commit.
+# Research's TailorKey for RMK is built on. The firmware is taken from the
+# project's releases, one UF2 per half, and the layout is written to the
+# running keyboard over Rynk, RMK's host protocol, as the project's own
+# moergo-control and Rynkbench do.
 [[firmware]]
 id = "moergo-rmk"
 name = "RMK for MoErgo (community)"
 family = "rmk"
 experimental = true
 config_name = "go60"
+capabilities = [
+  "rgb-underglow", "per-key-lighting", "pointing", "hold-taps", "tap-dance",
+  "mod-morph", "macros", "sticky-keys", "opposite-hand-hold",
+]
 notes = [
-  "A different firmware from ZMK: colonelpanic's moergo-rmk, the community firmware behind Moosy Research's TailorKey for RMK. It adds RGB with animations, the touchpads and a status layer. It is not MoErgo firmware, and MoErgo does not support it.",
-  "For now this app supplies the keys only: plain keys, layers, mod-taps, layer-taps, sticky keys and combos. Lighting, touchpad and home-row-mod settings stay at that firmware's defaults, and hold-taps, macros and tap-dances defined in a layout are flagged.",
-  "Its authors describe it as experimental, and its Go60 image nearly fills the flash, so a large layout may fail to build. A generated keymap has been checked to be accepted by that firmware and to compile; a complete build and a real keyboard have not been tried. Keep MoErgo's firmware files at hand to go back.",
+  "A different firmware from ZMK: colonelpanic's moergo-rmk, the community firmware behind Moosy Research's TailorKey for RMK. It adds RGB with animations and blinking keys, the touchpads with click and drag, bilateral home-row mods and a Magic layer. It is not MoErgo firmware, and MoErgo does not support it.",
+  "The firmware comes ready-made from the project's release v2026.09.18.1, checked against its checksums, and is flashed once per half. The layout is then written straight to the keyboard over USB: keys, hold-taps and their timing profiles, tap-dances, mod-morphs, macros, combos, per-key colors with lock and battery lights, and the touchpads. Nothing is built.",
+  "The firmware keeps every color to 40% of full brightness itself (its channel ceiling is 102 of 255 on both halves), so the brightness setting here is a share of that. Its authors describe it as experimental, and its README says the right half's LED order is an assumption. Keep MoErgo's firmware files at hand to go back: choose MoErgo's ZMK under Firmware, build it, put each half into its bootloader from the Keyboard tab and flash.",
 ]
 
 [firmware.rmk]
 flavor = "moergo-rmk"
 source = { url = "https://github.com/colonelpanic8/moergo-rmk", revision = "179bd66bb45f8a12bb8ee2501f592923b023b7d0" }
+# dependencies/rmk at that commit; the app's Rynk client is pinned to the
+# same one, so firmware and host speak the same protocol.
+rmk_revision = "997b62f54dd29fe7c82f23a2c5b0a18816b4c5ae"
 ble_profiles = 3
-project_dir = "crates/go60-rmk"
-# That project's lighting and status settings refer to layers by number,
-# up to the sixteen its keymap declares.
+# Its keymap declares sixteen layers (crates/go60-rmk/keyboard.toml).
 layers = 16
+# The release built from that commit. go60-rmk.zip holds one UF2 per half,
+# SHA256SUMS and manifest.json.
+release = { repository = "colonelpanic8/moergo-rmk", tag = "v2026.09.18.1", asset = "go60-rmk.zip", files = [
+  { side = "left", name = "go60-rmk-0.1.0-lh.uf2" },
+  { side = "right", name = "go60-rmk-0.1.0-rh.uf2" },
+] }
+# From rmk-palettefx (Effect::NAMES and palettes/*.toml) at the pinned
+# submodule, in the firmware's own order.
+effects = [
+  "Gradient", "Flow", "Vortex", "Sparkle", "Ripple", "Rain", "Reactive",
+  "Crosshair", "Tracer", "Keyfall", "Shockwave", "Comet",
+]
+palettes = [
+  "Afterburn", "Amber", "Bad Wolf", "Carnival", "Classic", "Dracula", "Groovy",
+  "Not Pink", "Phosphor", "Polarized", "Rose Gold", "Sport", "Synthwave",
+  "Thermal", "Viridis", "Watermelon",
+]
+
+# The firmware's 5x14 matrix, from the `[layout] map` in its
+# crates/go60-rmk/keyboard.toml, in this board's binding order: four
+# twelve-key rows, the six fifth-row keys, then the two thumb arcs. The
+# left thumb arc is column 6, the right column 7.
+[firmware.rmk.matrix]
+rows = 5
+cols = 14
+positions = [
+  [0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 8], [0, 9], [0, 10], [0, 11], [0, 12], [0, 13],
+  [1, 0], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 8], [1, 9], [1, 10], [1, 11], [1, 12], [1, 13],
+  [2, 0], [2, 1], [2, 2], [2, 3], [2, 4], [2, 5], [2, 8], [2, 9], [2, 10], [2, 11], [2, 12], [2, 13],
+  [3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 8], [3, 9], [3, 10], [3, 11], [3, 12], [3, 13],
+  [4, 2], [4, 3], [4, 4], [4, 9], [4, 10], [4, 11],
+  [0, 6], [1, 6], [2, 6], [2, 7], [1, 7], [0, 7],
+]
+
+# The firmware's device ids (crates/go60-rmk/src/trackpad.rs): the left
+# half runs the split central, so its pad is device 0.
+[[firmware.rmk.pointing]]
+listener = "cirque_lh_listener"
+device = 0
+
+[[firmware.rmk.pointing]]
+listener = "cirque_rh_listener"
+device = 1
+
+# Its emitter table (crates/go60-rmk/keyboard.toml) numbers the left
+# half's LEDs 0-29 and the right half's 30-59, each in chain order.
+[[firmware.rmk.leds]]
+side = "left"
+first = 0
+
+[[firmware.rmk.leds]]
+side = "right"
+first = 30
 
 [[layouts]]
 id = "physical_layout0"

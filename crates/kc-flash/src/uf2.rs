@@ -14,6 +14,10 @@ pub struct Uf2Info {
     /// The distinct family IDs in the file, in order of first appearance.
     /// A combined left-and-right file has two.
     pub families: Vec<u32>,
+    /// The lowest address the file writes to, and the end of the highest
+    /// block: where the firmware will sit in flash.
+    pub address_start: u32,
+    pub address_end: u32,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -41,6 +45,7 @@ pub fn inspect(firmware: &[u8]) -> Result<Uf2Info, Uf2Error> {
         return Err(Uf2Error::NotUf2);
     }
     let mut families = Vec::new();
+    let (mut address_start, mut address_end) = (u32::MAX, 0);
     for block in firmware.chunks(BLOCK) {
         let magic = (word(block, 0), word(block, 4), word(block, BLOCK - 4));
         if magic != (MAGIC_START_0, MAGIC_START_1, MAGIC_END) {
@@ -50,10 +55,15 @@ pub fn inspect(firmware: &[u8]) -> Result<Uf2Info, Uf2Error> {
         if word(block, 8) & FLAG_FAMILY != 0 && !families.contains(&family) {
             families.push(family);
         }
+        let address = word(block, 12);
+        address_start = address_start.min(address);
+        address_end = address_end.max(address.saturating_add(word(block, 16)));
     }
     Ok(Uf2Info {
         blocks: firmware.len() / BLOCK,
         families,
+        address_start,
+        address_end,
     })
 }
 
@@ -61,28 +71,35 @@ pub fn inspect(firmware: &[u8]) -> Result<Uf2Info, Uf2Error> {
 pub(crate) mod tests {
     use super::*;
 
-    /// A minimal UF2 image with two blocks for each family.
+    /// A minimal UF2 image with two blocks for each family, written from
+    /// 0x26000 on.
     pub(crate) fn image(families: &[u32]) -> Vec<u8> {
         let mut out = Vec::new();
+        let mut address: u32 = 0x26000;
         for family in families {
             for _ in 0..2 {
                 let mut block = vec![0u8; BLOCK];
                 block[0..4].copy_from_slice(&MAGIC_START_0.to_le_bytes());
                 block[4..8].copy_from_slice(&MAGIC_START_1.to_le_bytes());
                 block[8..12].copy_from_slice(&FLAG_FAMILY.to_le_bytes());
+                block[12..16].copy_from_slice(&address.to_le_bytes());
+                block[16..20].copy_from_slice(&256u32.to_le_bytes());
                 block[28..32].copy_from_slice(&family.to_le_bytes());
                 block[BLOCK - 4..].copy_from_slice(&MAGIC_END.to_le_bytes());
                 out.extend(block);
+                address += 256;
             }
         }
         out
     }
 
     #[test]
-    fn families_and_block_counts_are_read() {
+    fn families_block_counts_and_addresses_are_read() {
         let info = inspect(&image(&[0x9809_B007, 0x980A_B007])).unwrap();
         assert_eq!(info.blocks, 4);
         assert_eq!(info.families, [0x9809_B007, 0x980A_B007]);
+        assert_eq!(info.address_start, 0x26000);
+        assert_eq!(info.address_end, 0x26000 + 4 * 256);
     }
 
     #[test]

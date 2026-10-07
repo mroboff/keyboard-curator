@@ -10,6 +10,11 @@ use kc_boards::Board;
 use kc_model::Device;
 use nusb::MaybeFuture as _;
 
+/// RMK firmware built with Rynk puts this in front of the keyboard's USB
+/// serial number. It is dropped, so that a keyboard is the same device
+/// whichever firmware it runs.
+pub const RYNK_SERIAL_MARK: &str = "rynk:";
+
 /// A USB device, as it describes itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsbDevice {
@@ -24,6 +29,10 @@ impl UsbDevice {
     /// no serial number, since nothing then tells it from its twins.
     pub fn link(&self) -> Option<Device> {
         let serial = self.serial.as_deref()?.trim();
+        let serial = serial
+            .strip_prefix(RYNK_SERIAL_MARK)
+            .unwrap_or(serial)
+            .trim();
         if serial.is_empty() {
             return None;
         }

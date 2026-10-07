@@ -12,7 +12,9 @@ publish = false
 workspace = true
 
 [dependencies]
+kc-boards = { version = "0.1.0", path = "../kc-boards" }
 serde = { version = "1.0.229", features = ["derive"] }
+sha2 = "0.10"
 serde_json = "1.0.151"
 thiserror = "2.0.21"
 ureq = { version = "2", features = ["json"] }

@@ -14,7 +14,7 @@ use kc_model::behavior::{
 };
 use kc_model::text::{format_binding, LayerStyle};
 use kc_model::{BehaviorId, BehaviorRef, Binding, KeyExpr, ModelError, Slot};
-use kc_zmk::Modifier;
+use kc_zmk::{Feature, Modifier};
 
 use super::{badge, chip, display, field, group, heading, help, plinth, section_title, Workspace};
 use crate::canvas::{self, Frame, Palette};
@@ -659,6 +659,15 @@ impl Workspace {
                             h.hold_while_undecided = !h.hold_while_undecided;
                         }
                     }))
+                    // Firmware that knows which hand each key is on can
+                    // decide a hold by hand; the rest use trigger keys.
+                    .when(self.features().contains(&Feature::OppositeHandHold), |column| {
+                        column.child(self.toggle("opposite-hand", "Hold only for a key on the other hand", h.opposite_hand_hold, cx, |kind| {
+                            if let BehaviorKind::HoldTap(h) = kind {
+                                h.opposite_hand_hold = !h.opposite_hand_hold;
+                            }
+                        }))
+                    })
             }))
             .child(self.fold(
                 "ht-trigger",

@@ -6,13 +6,17 @@
 use std::collections::BTreeMap;
 
 use kc_boards::board::{FirmwareProfile, Source};
-use kc_boards::{Board, Family};
+use kc_boards::{Board, Delivery, Family};
 use kc_zmk::addons::Addon;
 use kc_zmk::settings::setting_for;
 use kc_zmk::Feature;
 use serde::{Deserialize, Serialize};
 
 use crate::features::SettingValue;
+
+/// RMK's settings are keyed `rmk.<section>.<name>`, after the sections of
+/// its runtime configuration; ZMK's are Kconfig symbols.
+pub const RMK_SETTING_PREFIX: &str = "rmk.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct FirmwareConfig {
@@ -107,9 +111,24 @@ impl FirmwareConfig {
             .map_or(Family::Zmk, |p| p.family)
     }
 
+    /// How a layout reaches a keyboard running the chosen firmware.
+    pub fn delivery(&self, board: &Board) -> Delivery {
+        board
+            .profile(&self.profile)
+            .map_or(Delivery::Build, FirmwareProfile::delivery)
+    }
+
     /// Whether the firmware has the feature a setting needs. Settings the
     /// firmware lacks are kept, out of sight and out of the `.conf` file.
+    /// RMK's settings are named `rmk.…` and belong to RMK firmware; ZMK's
+    /// are Kconfig options.
     pub fn offers(&self, key: &str, board: &Board) -> bool {
+        if key.starts_with(RMK_SETTING_PREFIX) {
+            return self.family(board) == Family::Rmk;
+        }
+        if self.family(board) != Family::Zmk {
+            return false;
+        }
         setting_for(key)
             .and_then(|setting| setting.requires)
             .is_none_or(|feature| self.features(board).contains(&feature))
@@ -151,9 +170,11 @@ impl Carried {
             .settings
             .keys()
             .map(|key| {
-                setting_for(key)
-                    .map_or(key.as_str(), |s| s.name)
-                    .to_string()
+                setting_for(key).map_or_else(
+                    // An RMK setting reads as its last name part.
+                    || key.rsplit('.').next().unwrap_or(key).replace('_', " "),
+                    |s| s.name.to_string(),
+                )
             })
             .collect();
         match self

@@ -7,13 +7,28 @@ use crate::feature::Feature;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingKind {
     Bool,
-    Int { min: i64, max: i64, step: i64 },
-    Text { max_len: usize },
+    Int {
+        min: i64,
+        max: i64,
+        step: i64,
+    },
+    Text {
+        max_len: usize,
+    },
+    /// One of a fixed list of words, stored as text.
+    Choice {
+        options: &'static [&'static str],
+    },
+    /// One of a list of names the board's firmware provides, such as its
+    /// lighting effects, stored as text. The firmware's catalog says which.
+    Named,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Setting {
-    /// The Kconfig symbol, such as `CONFIG_ZMK_SLEEP`.
+    /// The Kconfig symbol, such as `CONFIG_ZMK_SLEEP`. Other firmware
+    /// families name their settings their own way, such as
+    /// `rmk.lighting.brightness`.
     pub key: &'static str,
     pub name: &'static str,
     pub description: &'static str,

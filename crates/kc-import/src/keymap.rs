@@ -141,6 +141,7 @@ impl Importer<'_> {
                         .filter_map(|p| usize::try_from(p).ok())
                         .collect(),
                     hold_trigger_on_release: node.has("hold-trigger-on-release"),
+                    opposite_hand_hold: false,
                 }))
             }
             "zmk,behavior-tap-dance" => {
@@ -770,7 +771,9 @@ pub fn import_conf(text: &str) -> Carried {
                     _ => return None,
                 },
                 SettingKind::Int { .. } => SettingValue::Int(value.parse().ok()?),
-                SettingKind::Text { .. } => SettingValue::Text(value.trim_matches('"').to_string()),
+                SettingKind::Text { .. } | SettingKind::Choice { .. } | SettingKind::Named => {
+                    SettingValue::Text(value.trim_matches('"').to_string())
+                }
             };
             Some((setting.key, parsed))
         });

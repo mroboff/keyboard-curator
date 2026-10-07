@@ -18,11 +18,12 @@ A Cargo workspace under `crates/`:
 | `kc-zmk` | ZMK keycodes, behavior catalog, Kconfig catalog, and the catalog of ZMK add-ons |
 | `kc-boards` | Board definitions as embedded data |
 | `kc-emit` | Generates the ZMK config files |
-| `kc-rmk` | RMK: layouts as RMK keymaps, and the project that builds them |
+| `kc-rmk` | RMK: layouts as RMK keymaps and the project that builds them, or as moergo-rmk's runtime configuration, with that firmware's settings |
+| `kc-rynk` | Rynk, RMK's host protocol: a keyboard's configuration read and written over USB HID, bootloader entry and settings reset |
 | `kc-dygma` | Dygma: the Focus protocol, and layouts to and from the keyboard's stored form |
 | `kc-firmware` | The app's one front door to the firmware families: check, generate, read and apply |
-| `kc-import` | Imports `.keymap` files and MoErgo Layout Editor JSON |
-| `kc-build` | Build back ends (GitHub Actions first) |
+| `kc-import` | Imports `.keymap` files, MoErgo Layout Editor JSON and RMK runtime configuration files |
+| `kc-build` | Build back ends (GitHub Actions first), and firmware fetched from GitHub releases |
 | `kc-flash` | UF2 flashing |
 | `kc-device` | Finds connected keyboards over USB and recognizes their board |
 | `kc-studio` | ZMK Studio RPC |
@@ -35,7 +36,9 @@ A Cargo workspace under `crates/`:
 - **The app's own files are the source of truth** (layout files and the saved boards); ZMK config files are generated from them, never edited in place.
 - **Layers are referenced by stable ID**, never by index. The emitter resolves IDs to indices.
 - **A firmware family is code; a firmware within a family is data.** ZMK, RMK and Dygma are families, each with its own crate. Firmwares within a family differ only by their profile in a board definition, never by code branches. The app asks `kc-firmware`, and does not branch on the family itself.
-- **Families deliver in one of two ways**: ZMK and RMK generate files that are built and flashed; Dygma is configured on the running keyboard, with no build. The board page treats both as first-class.
+- **Families deliver in one of three ways** (`Delivery`, per firmware profile): ZMK and RMK generate files that are built and flashed; Dygma is configured on the running keyboard, with no build; moergo-rmk is taken ready-made from a pinned GitHub release, checked against its checksums, flashed once, and then configured on the running keyboard over Rynk. The board page treats all three as first-class.
+- **Rynk is version-matched.** The `rynk` and `moergo-config` crates are git dependencies pinned to the same moergo-rmk commit the Go60 release is built from, and a fetched release's manifest must name that commit and that RMK commit. Moving the pin means moving the release tag, and the other way round.
+- **RMK's settings are keyed `rmk.<section>.<name>`** (catalog in `kc-rmk/src/settings.rs`) and live in the board's `FirmwareConfig` like Kconfig options do. A setting left at its default is not written to the keyboard: what the keyboard holds for it stays.
 - **Layouts are stored in one vocabulary**, the structured bindings that began as ZMK's. Each family translates them and reports what it cannot express at the key; nothing is dropped silently.
 - **Writing to a keyboard is strict**: a fixed list of commands, payloads of exactly the keyboard's size, only what differs, and a backup of what the keyboard held first. Never widen the list casually.
 - **Third-party facts carry their source.** Board data taken from other projects (Dygma's Bazecor, vendors' ZMK files, moergo-rmk) is transcribed as facts with attribution in the file. No GPL code is copied into this MIT project.

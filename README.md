@@ -43,7 +43,8 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
 | Family | Boards | How a layout reaches the keyboard |
 |---|---|---|
 | ZMK | Imprint, Go60 | Generated config, built on GitHub, flashed as UF2. Key changes can also be sent over USB with ZMK Studio firmware. |
-| RMK (experimental) | Imprint, Go60 | Generated project, built on GitHub, flashed as UF2. On the Go60 it builds colonelpanic's moergo-rmk. Compiled, never flashed. |
+| RMK (experimental) | Imprint | Generated project, built on GitHub, flashed as UF2. Compiled, never flashed. |
+| RMK for MoErgo (experimental) | Go60 | colonelpanic's moergo-rmk, taken ready-made from its releases and checked against their checksums, flashed once as UF2. The layout is then written to the running keyboard over USB with Rynk, RMK's host protocol: keys, hold-taps with their timing profiles, tap-dances, mod-morphs, macros, combos, per-key colors with lock and battery lights, and the touchpads. Reads and writes TailorKey's RMK `.toml` files. Written against the protocol's own client; no keyboard has been connected yet. |
 | Dygma | Defy | Written to the keyboard over USB, with no build. Reading is proven on a Defy; writing has only been run against a simulated keyboard. |
 
 Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
@@ -60,11 +61,12 @@ A Cargo workspace under `crates/`. Only `kc-app` may depend on the GUI framework
 | `kc-zmk` | ZMK knowledge as data: keycodes, behavior catalog, Kconfig options, and the add-on catalog |
 | `kc-boards` | Board definitions: physical layouts, LED maps, firmware profiles |
 | `kc-emit` | Generates `.keymap`, `.conf`, `west.yml` and `build.yaml` |
-| `kc-rmk` | RMK keymaps and the project that builds them |
+| `kc-rmk` | RMK keymaps and the project that builds them; layouts to and from moergo-rmk's runtime configuration |
+| `kc-rynk` | Rynk, RMK's host protocol: reading and writing a keyboard's configuration, bootloader and reset |
 | `kc-dygma` | Dygma's Focus protocol, and layouts to and from the keyboard |
 | `kc-firmware` | One front door to the firmware families |
-| `kc-import` | Imports existing `.keymap` files and MoErgo Layout Editor JSON |
-| `kc-build` | Firmware build back ends (GitHub Actions first) |
+| `kc-import` | Imports existing `.keymap` files, MoErgo Layout Editor JSON and RMK runtime configuration files |
+| `kc-build` | Firmware build back ends (GitHub Actions first), and firmware from GitHub releases |
 | `kc-flash` | UF2 bootloader detection and flashing |
 | `kc-device` | Finds connected keyboards over USB and recognizes their board |
 | `kc-studio` | ZMK Studio transport and RPC for live editing |

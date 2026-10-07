@@ -1,15 +1,17 @@
-//! Best-effort import of existing `.keymap` files and MoErgo Layout Editor JSON as a layout, with any firmware settings they carry kept apart for the board.
+//! Best-effort import of existing `.keymap` files, MoErgo Layout Editor JSON and RMK runtime configuration files as a layout, with any firmware settings they carry kept apart for the board.
 //!
 //! Importing never edits the source file. What the model understands
-//! becomes structured; everything else is carried over as raw text, and the
-//! [`Report`] says which was which.
+//! becomes structured; everything else is carried over as raw text, or
+//! left out with a note, and the [`Report`] says which was which.
 
 pub mod dts;
 mod keymap;
 mod moergo;
+mod rmk;
 
 pub use keymap::{import_conf, import_keymap};
 pub use moergo::import_moergo;
+pub use rmk::import_rmk;
 
 /// What an import did, for showing to the user.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -31,6 +33,8 @@ pub enum ImportError {
     Syntax(#[from] dts::DtsError),
     #[error("this is not a MoErgo Layout Editor export: {0}")]
     NotAnExport(String),
+    #[error("this is not a configuration an RMK keyboard takes: {0}")]
+    NotRmk(String),
     #[error("the file has no keymap")]
     NoKeymap,
     #[error(
@@ -55,8 +59,9 @@ pub struct Imported {
 }
 
 /// Imports a file for whichever of `boards` it belongs to: a MoErgo Layout
-/// Editor export if it is JSON, otherwise a keymap. A `.conf` file's text,
-/// if there is one beside a keymap, is read as firmware settings.
+/// Editor export if it is JSON, an RMK runtime configuration if it is
+/// TOML, otherwise a keymap. A `.conf` file's text, if there is one beside
+/// a keymap, is read as firmware settings.
 ///
 /// A keymap does not say which keyboard it is for, so the board is the one
 /// the file's name or contents point to, or failing that the first whose
@@ -84,6 +89,8 @@ pub fn import_file(
         !mentioned
     });
     let is_json = text.trim_start().starts_with('{');
+    let is_toml = name.to_lowercase().ends_with(".toml")
+        || text.lines().any(|line| line.trim() == "[[layer]]");
     let mut last = ImportError::NoKeymap;
     for index in order {
         let board = &boards[index];
@@ -91,6 +98,8 @@ pub fn import_file(
         let stem = stem.split('.').next().unwrap_or(stem);
         let result = if is_json {
             import_moergo(text, board)
+        } else if is_toml {
+            import_rmk(stem, text, board)
         } else {
             import_keymap(stem, text, board).map(|(project, report)| {
                 let carried = conf.map(import_conf).unwrap_or_default();

@@ -249,21 +249,32 @@ impl Shell {
             BoardEvent::ChooseLayout => self.open(&OpenProject, window, cx),
             BoardEvent::Import => self.import(&ImportProject, window, cx),
             BoardEvent::Remove => self.remove_keyboard(id, window, cx),
-            BoardEvent::Loaded(project) => {
-                let Some(board) = self.boards.iter().find(|b| b.id == project.board).cloned()
+            BoardEvent::Loaded(read) => {
+                let Some(board) = self
+                    .boards
+                    .iter()
+                    .find(|b| b.id == read.project.board)
+                    .cloned()
                 else {
                     return;
                 };
+                let mut notice =
+                    "Read from the keyboard. Save it to keep it as a layout file.".to_string();
+                if !read.notes.is_empty() {
+                    notice.push_str(" Not everything could be kept: ");
+                    notice.push_str(&read.notes.join("; "));
+                    notice.push('.');
+                }
                 let pending = Pending {
-                    project: (**project).clone(),
+                    project: read.project.clone(),
                     board,
                     path: None,
-                    notice: Some(
-                        "Read from the keyboard. Save it to keep it as a layout file.".into(),
-                    ),
-                    carried: Carried::default(),
+                    notice: Some(notice),
+                    carried: read.carried.clone(),
                 };
-                self.open_editor(pending, id, window, cx);
+                // The settings a keyboard carries belong to the board, and
+                // are offered to it as a file's would be.
+                self.show(pending, id, window, cx);
             }
         }
     }

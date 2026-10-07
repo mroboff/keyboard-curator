@@ -1,0 +1,30 @@
+[package]
+name = "kc-rynk"
+description = "RMK keyboards over Rynk, RMK's host protocol: reading a layout from a keyboard, writing one to it, and restarting it into its bootloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+kc-boards = { version = "0.1.0", path = "../kc-boards" }
+kc-model = { version = "0.1.0", path = "../kc-model" }
+kc-rmk = { version = "0.1.0", path = "../kc-rmk" }
+# The protocol client and the firmware's configuration model, pinned to the
+# commit the Go60 release is built from. Rynk can change in any release, so
+# the client and the firmware must come from the same one.
+moergo-config = { git = "https://github.com/colonelpanic8/moergo-rmk", rev = "179bd66bb45f8a12bb8ee2501f592923b023b7d0" }
+rynk = { git = "https://github.com/colonelpanic8/moergo-rmk", rev = "179bd66bb45f8a12bb8ee2501f592923b023b7d0" }
+anyhow = "1"
+# The platform's HID driver, the same one Rynk's own USB transport uses.
+async-hid = { version = "0.5.3", default-features = false, features = ["tokio", "win32"] }
+embassy-futures = "0.1"
+futures-util = "0.3"
+heapless = "0.9"
+thiserror = "2.0.21"
+tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }

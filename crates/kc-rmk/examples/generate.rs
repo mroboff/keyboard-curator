@@ -40,7 +40,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     project.add_combo("Escape", vec![13, 14], Binding::kp(KeyExpr::new("ESC")));
 
-    for (path, contents) in kc_rmk::generate(&project, board, profile)? {
+    let firmware = kc_model::FirmwareConfig::new(profile.id.clone());
+    for (path, contents) in kc_rmk::generate(&project, board, profile, &firmware)? {
         let path = std::path::Path::new(&out).join(path);
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;

@@ -181,6 +181,17 @@ pub enum Delivery {
     /// The configuration is written to the running keyboard; there is no
     /// build.
     Live,
+    /// The firmware itself is taken ready-made from the project's releases
+    /// and flashed once; the configuration is then written to the running
+    /// keyboard, as with [`Delivery::Live`].
+    Released,
+}
+
+impl Delivery {
+    /// Whether the layout is written to the running keyboard.
+    pub fn is_live(self) -> bool {
+        matches!(self, Delivery::Live | Delivery::Released)
+    }
 }
 
 impl Family {
@@ -192,6 +203,8 @@ impl Family {
         }
     }
 
+    /// How the family's firmwares usually reach the keyboard. A profile
+    /// can differ: see [`FirmwareProfile::delivery`].
     pub fn delivery(self) -> Delivery {
         match self {
             Family::Zmk | Family::Rmk => Delivery::Build,
@@ -272,14 +285,17 @@ pub struct FirmwareProfile {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RmkFlavor {
-    /// RMK itself: the app generates the whole project.
+    /// RMK itself: the app generates the whole project, which is built and
+    /// flashed.
     Upstream,
-    /// A firmware built on RMK that has its own project for the board; the
-    /// app supplies the keymap.
+    /// colonelpanic's moergo-rmk, a firmware built on RMK for MoErgo's
+    /// boards. It is taken ready-made from the project's releases and
+    /// flashed once; the layout is then written to the running keyboard
+    /// over Rynk, RMK's host protocol, as the project's own tools do.
     MoergoRmk,
 }
 
-/// What an RMK build for a board is made from.
+/// What an RMK firmware for a board is made from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RmkProfile {
@@ -300,16 +316,96 @@ pub struct RmkProfile {
     pub flash_origin: u32,
     #[serde(default)]
     pub flash_length: u32,
-    /// The board's project inside the source repository. For flavors that
-    /// build inside one.
-    #[serde(default)]
-    pub project_dir: String,
-    /// How many layers the keymap must declare, when the firmware's own
-    /// configuration counts on a fixed number. A layout with fewer is
-    /// filled out with see-through layers. Zero means as many as the
+    /// How many layers the firmware holds. Zero means as many as the
     /// layout has.
     #[serde(default)]
     pub layers: usize,
+    /// The RMK commit the firmware was built with. Rynk, its host
+    /// protocol, can change in any release, so the app speaks it with a
+    /// client pinned to this same commit and checks a release against it.
+    /// For the moergo-rmk flavor.
+    #[serde(default)]
+    pub rmk_revision: String,
+    /// Where the ready-made firmware comes from. For the moergo-rmk flavor.
+    pub release: Option<Release>,
+    /// The key matrix the firmware's configuration is written in, and
+    /// where each key of the default layout sits in it. For the moergo-rmk
+    /// flavor.
+    pub matrix: Option<RmkMatrix>,
+    /// The firmware's number for each of the board's pointing devices.
+    #[serde(default)]
+    pub pointing: Vec<RmkPointingDevice>,
+    /// Where each half's LEDs begin in the firmware's numbering, which
+    /// follows the halves' LED chains. For the moergo-rmk flavor.
+    #[serde(default)]
+    pub leds: Vec<RmkLeds>,
+    /// The lighting effects and palettes the firmware offers, by the
+    /// names it announces them under.
+    #[serde(default)]
+    pub effects: Vec<String>,
+    #[serde(default)]
+    pub palettes: Vec<String>,
+}
+
+/// A GitHub release holding a board's firmware, pinned to one tag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Release {
+    /// The repository, as `owner/name`.
+    pub repository: String,
+    pub tag: String,
+    /// The release asset holding the firmware: a zip archive with one
+    /// UF2 file per half, a `SHA256SUMS` list and a `manifest.json`.
+    pub asset: String,
+    /// The UF2 file inside the archive for each half.
+    pub files: Vec<ReleaseFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReleaseFile {
+    pub side: Side,
+    pub name: String,
+}
+
+/// The key matrix a firmware's configuration is written in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RmkMatrix {
+    pub rows: u8,
+    pub cols: u8,
+    /// `[row, col]` for each key of the default layout, in binding order.
+    pub positions: Vec<[u8; 2]>,
+}
+
+/// A pointing device as the firmware numbers it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RmkPointingDevice {
+    /// The device's input listener label in the board definition.
+    pub listener: String,
+    pub device: u8,
+}
+
+/// Where one half's LEDs begin in the firmware's numbering. The firmware
+/// numbers a half's LEDs in chain order from here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RmkLeds {
+    pub side: Side,
+    pub first: u16,
+}
+
+impl RmkMatrix {
+    /// The matrix position of a key of the default layout.
+    pub fn position(&self, key: usize) -> Option<[u8; 2]> {
+        self.positions.get(key).copied()
+    }
+
+    /// The key of the default layout at a matrix position, if any.
+    pub fn key_at(&self, row: u8, col: u8) -> Option<usize> {
+        self.positions.iter().position(|p| *p == [row, col])
+    }
 }
 
 /// Where a board's keys and lights sit in Dygma's firmware, which stores a
@@ -344,6 +440,44 @@ impl FirmwareProfile {
             }
         }
         features
+    }
+
+    /// How a layout reaches a keyboard running this firmware: the family's
+    /// way, unless the firmware is taken from releases and configured live.
+    pub fn delivery(&self) -> Delivery {
+        match self.rmk.as_ref().map(|rmk| rmk.flavor) {
+            Some(RmkFlavor::MoergoRmk) => Delivery::Released,
+            _ => self.family.delivery(),
+        }
+    }
+
+    /// The LED a key of the default layout sits under, in the firmware's
+    /// numbering, for firmware that numbers LEDs by half.
+    pub fn led_of(&self, board: &Board, key: usize) -> Option<u16> {
+        let rmk = self.rmk.as_ref()?;
+        for half in &board.halves {
+            let first = rmk.leds.iter().find(|l| l.side == half.side)?.first;
+            if let Some(index) = half.leds.as_ref()?.chain.iter().position(|k| *k == key) {
+                return Some(first + u16::try_from(index).ok()?);
+            }
+        }
+        None
+    }
+
+    /// The key of the default layout under an LED, in the firmware's
+    /// numbering.
+    pub fn key_of_led(&self, board: &Board, led: u16) -> Option<usize> {
+        let rmk = self.rmk.as_ref()?;
+        for half in &board.halves {
+            let first = rmk.leds.iter().find(|l| l.side == half.side)?.first;
+            let chain = &half.leds.as_ref()?.chain;
+            if let Some(index) = led.checked_sub(first) {
+                if let Some(key) = chain.get(usize::from(index)) {
+                    return Some(*key);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -408,6 +542,11 @@ pub enum BoardError {
     BadDygma(String),
     #[error("RMK firmware profile `{0}` needs an `rmk` section and a `config_name`")]
     IncompleteRmk(String),
+    #[error("RMK firmware profile `{profile}`: {problem}")]
+    BadRmk {
+        profile: String,
+        problem: &'static str,
+    },
     #[error("starter_keys has {found} entries, but the default layout has {keys} keys")]
     StarterKeyCount { found: usize, keys: usize },
     #[error("starter key `{0}` is not a ZMK keycode")]
@@ -565,10 +704,17 @@ impl Board {
                                 && rmk.flash_origin > 0
                                 && rmk.flash_length > 0
                         }
-                        RmkFlavor::MoergoRmk => !rmk.project_dir.is_empty(),
+                        RmkFlavor::MoergoRmk => !rmk.rmk_revision.is_empty(),
                     });
                 if !sound {
                     return Err(BoardError::IncompleteRmk(profile.id.clone()));
+                }
+                if let Some(rmk) = profile
+                    .rmk
+                    .as_ref()
+                    .filter(|r| r.flavor == RmkFlavor::MoergoRmk)
+                {
+                    self.check_moergo_rmk(profile, rmk)?;
                 }
             }
             if profile.family == Family::Dygma {
@@ -597,6 +743,70 @@ impl Board {
                         side: build.side,
                     });
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// A firmware taken from releases and configured over Rynk needs the
+    /// data that ties the layout to the keyboard: the matrix each key sits
+    /// in, a release with a file per half, and the halves' LED numbering.
+    fn check_moergo_rmk(
+        &self,
+        profile: &FirmwareProfile,
+        rmk: &RmkProfile,
+    ) -> Result<(), BoardError> {
+        let bad = |problem: &'static str| BoardError::BadRmk {
+            profile: profile.id.clone(),
+            problem,
+        };
+        let keys = self
+            .layout(&self.default_layout)
+            .map_or(0, |l| l.keys.len());
+        let matrix = rmk
+            .matrix
+            .as_ref()
+            .ok_or_else(|| bad("needs a `matrix` with every key's position"))?;
+        if matrix.positions.len() != keys {
+            return Err(bad(
+                "the matrix positions must cover every key of the default layout",
+            ));
+        }
+        if matrix
+            .positions
+            .iter()
+            .any(|[row, col]| *row >= matrix.rows || *col >= matrix.cols)
+        {
+            return Err(bad("a matrix position is outside the matrix"));
+        }
+        if matrix.positions.iter().collect::<HashSet<_>>().len() != keys {
+            return Err(bad("two keys share a matrix position"));
+        }
+        let release = rmk
+            .release
+            .as_ref()
+            .ok_or_else(|| bad("needs a `release` to take the firmware from"))?;
+        if release.repository.split('/').count() != 2
+            || release.tag.is_empty()
+            || release.asset.is_empty()
+        {
+            return Err(bad(
+                "the release needs an `owner/name` repository, a tag and an asset",
+            ));
+        }
+        for half in &self.halves {
+            if release.files.iter().filter(|f| f.side == half.side).count() != 1 {
+                return Err(bad("the release needs exactly one file for each half"));
+            }
+            if rmk.leds.iter().filter(|l| l.side == half.side).count() != 1 {
+                return Err(bad("`leds` must say where each half's LEDs begin"));
+            }
+        }
+        for device in &rmk.pointing {
+            if !self.pointing.iter().any(|p| p.listener == device.listener) {
+                return Err(bad(
+                    "a pointing device names a listener the board does not have",
+                ));
             }
         }
         Ok(())

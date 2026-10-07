@@ -13,8 +13,12 @@ workspace = true
 
 [dependencies]
 kc-boards = { version = "0.1.0", path = "../kc-boards" }
+kc-build = { version = "0.1.0", path = "../kc-build" }
 kc-dygma = { version = "0.1.0", path = "../kc-dygma" }
 kc-emit = { version = "0.1.0", path = "../kc-emit" }
+kc-flash = { version = "0.1.0", path = "../kc-flash" }
 kc-model = { version = "0.1.0", path = "../kc-model" }
 kc-rmk = { version = "0.1.0", path = "../kc-rmk" }
+kc-rynk = { version = "0.1.0", path = "../kc-rynk" }
+kc-zmk = { version = "0.1.0", path = "../kc-zmk" }
 thiserror = "2.0.21"
