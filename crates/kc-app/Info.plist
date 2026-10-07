@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The bundle's manifest. ci/bundle-macos.sh copies it into the app and
+	     fills in the two version keys from the workspace version in Cargo.toml,
+	     so 0.0.0 below is only a placeholder. -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>keyboard-curator</string>
+	<key>CFBundleIconFile</key>
+	<string>icon.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.mroboff.keyboard-curator</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Keyboard Curator</string>
+	<key>CFBundleDisplayName</key>
+	<string>Keyboard Curator</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.0.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Keyboard Curator talks to your keyboard over Bluetooth to read and update its layout.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © Mark Roboff. MIT License.</string>
+</dict>
+</plist>

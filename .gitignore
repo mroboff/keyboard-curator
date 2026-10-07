@@ -27,3 +27,6 @@
 /fixtures/*/zmk/
 /fixtures/*/zmk-keyboards/
 /fixtures/*/zmk-pmw3610-driver/
+
+# Packaged app and DMG from ci/bundle-macos.sh
+/dist/

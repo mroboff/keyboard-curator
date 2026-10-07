@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The app icon: a flat keycap on a macOS icon tile, with a small color
+  swatch for the per-key lighting the app edits. No text, so it reads at
+  every size. Rendered to icon.icns by ci/make-icon.sh.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2d3240"/>
+      <stop offset="1" stop-color="#1b1f29"/>
+    </linearGradient>
+  </defs>
+
+  <!-- The tile, in the proportions of a macOS icon: 824 of 1024 wide. -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)"/>
+
+  <!-- The keycap's lower body, the part seen below the top face. -->
+  <rect x="236" y="268" width="552" height="520" rx="72" fill="#c9ccd4"/>
+
+  <!-- The keycap's top face, set slightly up and in. -->
+  <rect x="276" y="236" width="472" height="440" rx="60" fill="#f2f3f6"/>
+
+  <!-- A small color swatch in the corner of the face: four lighting colors. -->
+  <rect x="344" y="296" width="76" height="76" rx="18" fill="#ff5c5c"/>
+  <rect x="440" y="296" width="76" height="76" rx="18" fill="#ffc542"/>
+  <rect x="536" y="296" width="76" height="76" rx="18" fill="#3dd68c"/>
+  <rect x="632" y="296" width="76" height="76" rx="18" fill="#4c8dff"/>
+</svg>

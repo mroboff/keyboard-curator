@@ -1,0 +1,105 @@
+name: Release
+
+# Builds the macOS app for Apple Silicon and Intel, packages it as a DMG
+# with ci/bundle-macos.sh and, on a version tag, attaches it to the GitHub
+# release. Signing and notarization happen only when the secrets exist;
+# without them the workflow still succeeds with an ad-hoc signed DMG.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions: {}
+
+jobs:
+  macos:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    # A step's `if` cannot read secrets directly, so the certificate
+    # secrets are mirrored into the job's environment to be tested there.
+    env:
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build for Apple Silicon
+        run: cargo build --release --locked -p kc-app --target aarch64-apple-darwin
+
+      - name: Build for Intel
+        run: cargo build --release --locked -p kc-app --target x86_64-apple-darwin
+
+      # The certificate goes into a throwaway keychain that only this job
+      # unlocks, and is never written to the checkout.
+      - name: Import the signing certificate
+        if: ${{ env.MACOS_CERTIFICATE_P12 != '' && env.MACOS_CERTIFICATE_PASSWORD != '' }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(openssl rand -hex 24)
+          certificate="$RUNNER_TEMP/certificate.p12"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm -f "$certificate"
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | grep -o '"Developer ID Application: [^"]*"' | head -n 1 | tr -d '"')
+          if [ -z "$identity" ]; then
+            echo "No Developer ID Application identity in the certificate" >&2
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "Imported $identity"
+
+      - name: Bundle, sign and notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ci/bundle-macos.sh aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Verify the bundle
+        run: |
+          codesign --verify --deep --strict --verbose=2 "dist/Keyboard Curator.app"
+          hdiutil verify dist/Keyboard-Curator-*-macos.dmg
+
+      - name: Upload the DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Keyboard-Curator-macos
+          path: dist/Keyboard-Curator-*-macos.dmg
+          if-no-files-found: error
+
+      # The release is created as a draft so the notes can be written before
+      # it is published; a release that already exists is reused.
+      - name: Attach the DMG to the release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --draft --title "$tag" --notes "Keyboard Curator $tag"
+          fi
+          gh release upload "$tag" dist/Keyboard-Curator-*-macos.dmg --clobber
+
+      - name: Remove the signing keychain
+        if: ${{ always() && env.MACOS_SIGNING_IDENTITY != '' }}
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
