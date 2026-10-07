@@ -284,7 +284,7 @@ initial_state_active = false
 # for the Imprint (crates/imprint-rmk), the shared firmware behind Moosy
 # Research's TailorKey for RMK. As on the MoErgo boards, the firmware comes
 # from the fork's releases and the layout is written to the running keyboard
-# over Rynk. FORK_OWNER is the GitHub account the fork is published under;
+# over Rynk. The fork lives at github.com/mroboff/imprint-rmk;
 # the revision is the fork's commit and the tag the release its CI makes
 # from that commit (its calendar version, the first of that day).
 [[firmware]]
@@ -305,7 +305,7 @@ notes = [
 
 [firmware.rmk]
 flavor = "moergo-rmk"
-source = { url = "https://github.com/FORK_OWNER/imprint-rmk", revision = "0e16c8d6d8a7d2227c2eca4badde9bbace674c69" }
+source = { url = "https://github.com/mroboff/imprint-rmk", revision = "0e16c8d6d8a7d2227c2eca4badde9bbace674c69" }
 # dependencies/rmk at that commit: the same RMK the MoErgo boards' firmware
 # and the app's Rynk client are pinned to.
 rmk_revision = "997b62f54dd29fe7c82f23a2c5b0a18816b4c5ae"
@@ -314,7 +314,7 @@ ble_profiles = 5
 layers = 16
 # The release the fork's CI publishes from that commit: the two UF2 files,
 # SHA256SUMS and manifest.json in one archive.
-release = { repository = "FORK_OWNER/imprint-rmk", tag = "v2026.10.07.1", asset = "imprint-rmk.zip", files = [
+release = { repository = "mroboff/imprint-rmk", tag = "v2026.10.07.1", asset = "imprint-rmk.zip", files = [
   { side = "left", name = "imprint-rmk-0.1.0-lh.uf2" },
   { side = "right", name = "imprint-rmk-0.1.0-rh.uf2" },
 ] }
