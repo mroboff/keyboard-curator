@@ -305,7 +305,7 @@ notes = [
 
 [firmware.rmk]
 flavor = "moergo-rmk"
-source = { url = "https://github.com/mroboff/imprint-rmk", revision = "8d9af2815157004ea90e776b19ff428061cae430" }
+source = { url = "https://github.com/mroboff/imprint-rmk", revision = "76d1bd168c43a5a0b2d14d359d236f47c8e4d7fe" }
 # dependencies/rmk at that commit: the same RMK the MoErgo boards' firmware
 # and the app's Rynk client are pinned to.
 rmk_revision = "997b62f54dd29fe7c82f23a2c5b0a18816b4c5ae"
