@@ -72,7 +72,8 @@
       <div class="side"><div style="color:#8a93a3;margin-bottom:3px"><span class="callout-n">1</span>LAYERS</div>
         <div class="row on">0 &nbsp;Base</div><div class="row">1 &nbsp;Keypad</div><div class="row">2 &nbsp;SymbolNav</div><div class="row">3 &nbsp;Magic</div><div class="row">4 &nbsp;Factory</div>
         <div style="margin-top:14px;color:#8a93a3">SELECTED LAYER</div><div class="chip" style="width:100%;margin-top:2px">Base</div>
-        <div style="margin-top:3px"><span class="chip">↑</span> <span class="chip">↓</span> <span class="chip">Duplicate</span></div></div>
+        <div style="margin-top:3px"><span class="chip">↑ Up</span> <span class="chip">↓ Down</span></div>
+        <div style="margin-top:3px"><span class="chip">Duplicate</span> <span class="chip">Delete</span></div></div>
       <div>
         <div class="modes"><span class="callout-n">2</span><span class="chip on">Keyboard</span><span class="chip">Lighting</span><span class="chip">Behaviors</span><span class="chip">Combos</span><span class="chip">Pointing</span><span class="chip">Advanced</span><span class="chip">Generated Files</span><span class="chip">Apply</span></div>
         <div class="canvas"><span class="callout-n">3</span>{{GO60_SELECT}}</div>
@@ -242,6 +243,7 @@
     <tr><td>Rename</td><td>Type in the name box and press <kbd>Return</kbd>.</td></tr>
     <tr><td>Reorder</td><td>Drag a layer onto another's place, or use <span class="ui">↑</span> and <span class="ui">↓</span>.</td></tr>
     <tr><td>Duplicate</td><td><span class="ui">Duplicate</span> copies the layer, its keys and its lighting, and places the copy below.</td></tr>
+    <tr><td>Describe</td><td>Above the keys, <span class="ui">Add a description</span> opens a text box for what the layer is for and how to reach it; click the text later to change it. The description is written above the layer in the generated keymap as a comment, and read back when a keymap is imported.</td></tr>
     <tr><td>Delete</td><td><span class="ui">Delete</span>. If other keys switch to this layer, the app tells you how many and asks first.</td></tr>
     <tr><td>Color tag</td><td>Click a colored circle to tag the layer. The tag tints the keyboard drawing while you edit that layer and shows as a dot in the list. Click it again to remove it. Tags are for your eyes only; they do not change the keyboard's lights.</td></tr>
     <tr><td>Switch layers quickly</td><td><kbd>⌘</kbd><kbd>1</kbd> to <kbd>⌘</kbd><kbd>9</kbd> jump to a layer; <kbd>⌘</kbd><kbd>]</kbd> and <kbd>⌘</kbd><kbd>[</kbd> step through them.</td></tr>
@@ -253,7 +255,7 @@
   <p>If you confirm, keys that switched to the deleted layer are set to do nothing, and any rule, combo restriction or pointing setting that mentioned the layer is removed. One undo brings everything back.</p>
 
   <h2>How many layers?</h2>
-  <p>ZMK allows 32 in total. The <span class="ui">Spare layers for ZMK Studio</span> counter reserves empty slots that ZMK Studio can later turn into layers without a build; they count toward the 32. If you do not use ZMK Studio, leave it alone. RMK for MoErgo and the Imprint's RMK fork hold 16 layers, and the Defy holds 10; a layout with more is flagged before it is written.</p>
+  <p>ZMK allows 32 in total. ZMK Studio can only add a layer into a slot that was built into the firmware, so the <span class="ui">Spare layers for ZMK Studio</span> counter in Advanced mode reserves empty slots after your layers that it can later fill without a build; they count toward the 32. If you do not add layers in ZMK Studio, leave it at 0. RMK for MoErgo and the Imprint's RMK fork hold 16 layers, and the Defy holds 10; a layout with more is flagged before it is written.</p>
 
   <div class="box ex"><div class="h">Example: a navigation layer</div>
   <ol>

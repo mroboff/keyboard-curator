@@ -57,6 +57,8 @@ fn rich_project() -> (Project, Board) {
     let base = p.layers[0].id;
     let nav = p.add_layer("Nav").unwrap();
     let magic = p.add_layer("Magic").unwrap();
+    p.layer_mut(nav).unwrap().description =
+        "Arrows and paging under the right hand.\nHeld from the left thumb.".to_string();
 
     p.set_binding(base, 0, kp("LC(LS(K))")).unwrap();
     p.set_binding(base, 1, Binding::layer("mo", nav)).unwrap();
@@ -517,6 +519,10 @@ fn project_files_round_trip_and_diff_cleanly() {
     let text = file::to_json(&p);
     assert_eq!(file::from_json(&text).unwrap(), p);
     assert!(text.starts_with("{\n  \"format\": 2,\n  \"name\": \"Rich\","));
+    // A description is written only where there is one; a layer without
+    // one reads back empty from files written before there were any.
+    assert_eq!(text.matches("\"description\"").count(), 1);
+    assert!(text.contains("Arrows and paging under the right hand.\\nHeld"));
     // Each binding sits on its own line, so changing a key changes one line.
     assert!(text
         .contains("\n        {\"behavior\": \"kp\", \"params\": [{\"key\": \"LC(LS(K))\"}]},\n"));

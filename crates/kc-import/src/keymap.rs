@@ -623,8 +623,10 @@ pub fn import_keymap(
             .map_or_else(|| name_from_node(&node.name), str::to_string)
     };
     project.layers[0].name = layer_name(first);
+    project.layers[0].description = first.comment.clone();
     for node in &layers[1..] {
-        project.add_layer(layer_name(node))?;
+        let id = project.add_layer(layer_name(node))?;
+        project.layer_mut(id)?.description = node.comment.clone();
     }
     let reserved = keymap
         .children

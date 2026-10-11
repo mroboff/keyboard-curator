@@ -67,9 +67,12 @@ fn generated_keymaps_survive_a_round_trip() {
             continue;
         }
         let path = entry.path().join("project.kcproj");
-        let Ok(project) = file::load(&path) else {
+        let Ok(mut project) = file::load(&path) else {
             continue;
         };
+        // A layer's description travels as the comment above it.
+        let base = project.layers[0].id;
+        project.layer_mut(base).unwrap().description = "The letters.".to_string();
         let board = board(&project.board);
         // The firmware is the board's, not something a keymap states.
         let config = config_for(&project, &board);
@@ -83,6 +86,7 @@ fn generated_keymaps_survive_a_round_trip() {
             path.display()
         );
         assert_eq!(report.layers, project.layers.len());
+        assert_eq!(imported.layers[0].description, "The letters.");
         assert_eq!(report.behaviors, project.behaviors.len());
         assert_eq!(report.combos, project.combos.len());
         assert_eq!(imported.reserved_layers, project.reserved_layers);

@@ -290,6 +290,19 @@ fn the_go60_grid_follows_its_thumb_clusters() {
 }
 
 #[test]
+fn a_layer_description_is_written_above_it_as_a_comment() {
+    let go60 = board("moergo-go60");
+    let mut project = Project::new("Mine", &go60);
+    let base = project.layers[0].id;
+    project.layer_mut(base).unwrap().description =
+        "Letters, with home-row mods.\n\n  Hold Space for symbols.  \n".to_string();
+    let keymap = kc_emit::keymap(&project, &go60, &stock(&go60)).unwrap();
+    assert!(keymap.contains(
+        "\n        // Letters, with home-row mods.\n        // Hold Space for symbols.\n        layer_0_Base {"
+    ));
+}
+
+#[test]
 fn duplicate_layer_names_fall_back_to_indices() {
     let go60 = board("moergo-go60");
     let mut project = Project::new("Dupes", &go60);

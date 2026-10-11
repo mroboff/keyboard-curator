@@ -564,6 +564,9 @@ pub fn keymap(
     w.line(2, "compatible = \"zmk,keymap\";");
     for (index, layer) in project.layers.iter().enumerate() {
         w.line(0, "");
+        for line in layer.description.lines().filter(|l| !l.trim().is_empty()) {
+            w.line(2, &format!("// {}", line.trim()));
+        }
         w.line(2, &format!("layer_{index}_{} {{", node_name(&layer.name)));
         let name = layer.name.replace('\\', "").replace('"', "'");
         w.line(3, &format!("display-name = \"{name}\";"));

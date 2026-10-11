@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::color_picker::ColorPickerState;
-use gpui_kit::component::input::{Input, InputEvent, InputState, TextareaState};
+use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -245,6 +245,10 @@ pub struct Workspace {
     search: Entity<InputState>,
     binding_input: Entity<InputState>,
     layer_name: Entity<InputState>,
+    /// What the shown layer is for, edited above the keys.
+    layer_description: Entity<TextareaState>,
+    /// The description is open for editing.
+    describing: bool,
 }
 
 /// A small toggle button, filled when active.
@@ -512,6 +516,22 @@ impl Workspace {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search keys"));
         let binding_input = cx.new(|cx| InputState::new(window, cx).placeholder("&kp A"));
         let layer_name = cx.new(|cx| InputState::new(window, cx).placeholder("Layer name"));
+        let layer_description = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .placeholder("What this layer is for, and how to reach it.")
+        });
+        // The description is applied when focus leaves it, and closes.
+        cx.subscribe_in(
+            &layer_description,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::Blur) {
+                    this.describing = false;
+                    this.after_change(window, cx);
+                }
+            },
+        )
+        .detach();
 
         cx.subscribe(&search, |_, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
@@ -598,6 +618,8 @@ impl Workspace {
             search,
             binding_input,
             layer_name,
+            layer_description,
+            describing: false,
         };
         workspace.sync_inputs(window, cx);
         // For checking a screen from the command line: KC_MODE=advanced.
@@ -730,6 +752,17 @@ impl Workspace {
                 self.notice = Some(format!("{error}."));
             }
         }
+        let description = self.layer_description.read(cx).value().trim().to_string();
+        if let Some(id) = shown.layer.filter(|id| {
+            self.project()
+                .layer(*id)
+                .is_some_and(|l| l.description != description)
+        }) {
+            let _ = self.editor.edit("Describe Layer", |p| {
+                p.layer_mut(id)?.description = description;
+                Ok(())
+            });
+        }
         self.commit_advanced_inputs(cx);
     }
 
@@ -816,6 +849,25 @@ impl Workspace {
             self.layer_name
                 .update(cx, |input, cx| input.set_value(name, window, cx));
         }
+        let description = self
+            .project()
+            .layer(self.layer)
+            .map(|l| l.description.clone())
+            .unwrap_or_default();
+        if self.layer_description.read(cx).value() != description {
+            self.layer_description
+                .update(cx, |input, cx| input.set_value(description, window, cx));
+        }
+    }
+
+    /// Opens the shown layer's description for editing.
+    fn describe_layer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.describing = true;
+        self.layer_description
+            .read(cx)
+            .focus_handle(cx)
+            .focus(window, cx);
+        cx.notify();
     }
 
     fn features(&self) -> Vec<Feature> {
@@ -1453,7 +1505,6 @@ impl Workspace {
                     }))
             })
             .collect::<Vec<_>>();
-        let reserved = self.project().reserved_layers;
         div()
             .w_56()
             .h_full()
@@ -1494,19 +1545,24 @@ impl Workspace {
                     .border_color(border)
                     .child(section_title("SELECTED LAYER", cx))
                     .child(Input::new(&self.layer_name))
+                    // Moving on one row, copying and removing on the next.
                     .child(
                         div()
                             .flex()
-                            .flex_wrap()
                             .gap_1()
-                            .child(chip("layer-up", "↑", false, cx).on_click(cx.listener(
+                            .child(chip("layer-up", "↑ Up", false, cx).on_click(cx.listener(
                                 |this, _, window, cx| this.move_layer(false, window, cx),
                             )))
-                            .child(chip("layer-down", "↓", false, cx).on_click(
-                                cx.listener(|this, _, window, cx| {
-                                    this.move_layer(true, window, cx)
-                                }),
-                            ))
+                            .child(
+                                chip("layer-down", "↓ Down", false, cx).on_click(cx.listener(
+                                    |this, _, window, cx| this.move_layer(true, window, cx),
+                                )),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap_1()
                             .child(chip("layer-duplicate", "Duplicate", false, cx).on_click(
                                 cx.listener(|this, _, window, cx| this.duplicate_layer(window, cx)),
                             ))
@@ -1519,25 +1575,6 @@ impl Workspace {
                             }),
                     )
                     .child(div().flex().items_center().gap_1p5().children(tags))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .text_xs()
-                                    .text_color(muted)
-                                    .child(format!("Spare layers for ZMK Studio: {reserved}")),
-                            )
-                            .child(chip("reserved-fewer", "−", false, cx).on_click(cx.listener(
-                                |this, _, window, cx| this.change_reserved(-1, window, cx),
-                            )))
-                            .child(chip("reserved-more", "+", false, cx).on_click(cx.listener(
-                                |this, _, window, cx| this.change_reserved(1, window, cx),
-                            ))),
-                    )
                     .child(
                         Button::new("add-layer")
                             .ghost()
@@ -1589,6 +1626,12 @@ impl Workspace {
             .layer(self.layer)
             .map(|l| l.name.clone())
             .unwrap_or_default();
+        let description = self
+            .project()
+            .layer(self.layer)
+            .map(|l| l.description.clone())
+            .unwrap_or_default();
+        let foreground = cx.theme().foreground;
         let held = (0..self.layout_keys().len())
             .filter(|p| {
                 keycap(self.project(), self.layer, *p).is_some_and(|cap| cap.hold.is_some())
@@ -1646,6 +1689,33 @@ impl Workspace {
                     .child(div().flex_1())
                     .child(div().pb_1().text_sm().text_color(muted).child(count)),
             )
+            // What the layer is for: read here, edited in place.
+            .child(if self.describing {
+                div()
+                    .max_w(px(720.))
+                    .child(Textarea::new(&self.layer_description).h(px(88.)))
+                    .into_any_element()
+            } else if description.is_empty() {
+                div()
+                    .child(
+                        chip("describe-layer", "Add a description", false, cx).on_click(
+                            cx.listener(|this, _, window, cx| this.describe_layer(window, cx)),
+                        ),
+                    )
+                    .into_any_element()
+            } else {
+                div()
+                    .id("layer-description")
+                    .max_w(px(720.))
+                    .text_sm()
+                    .line_height(relative(1.45))
+                    .text_color(muted)
+                    .cursor_pointer()
+                    .hover(|text| text.text_color(foreground))
+                    .child(description)
+                    .on_click(cx.listener(|this, _, window, cx| this.describe_layer(window, cx)))
+                    .into_any_element()
+            })
             .child(
                 plinth(cx)
                     .flex_1()

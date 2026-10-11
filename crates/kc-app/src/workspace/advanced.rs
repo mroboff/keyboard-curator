@@ -229,12 +229,33 @@ impl Workspace {
                 )
             })
             .collect::<Vec<_>>();
+        let reserved = self.project().reserved_layers;
         let page = div()
             .w(px(760.))
             .flex()
             .flex_col()
             .gap_3()
             .child(self.render_rules(cx))
+            .child(heading("Spare layers for ZMK Studio", cx).pt_8())
+            .child(help("ZMK Studio can only add a layer into a slot that was built into the firmware. Each spare layer is an empty slot kept for it, after your layers; the slots count toward ZMK's limit of 32. Leave this at 0 unless you add layers in ZMK Studio.", cx))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(chip("reserved-fewer", "−", false, cx).on_click(cx.listener(
+                        |this, _, window, cx| this.change_reserved(-1, window, cx),
+                    )))
+                    .child(div().w_8().text_sm().text_center().child(reserved.to_string()))
+                    .child(chip("reserved-more", "+", false, cx).on_click(cx.listener(
+                        |this, _, window, cx| this.change_reserved(1, window, cx),
+                    )))
+                    .child(div().text_xs().text_color(muted).child(match reserved {
+                        0 => "No spare layers.".to_string(),
+                        1 => "One empty slot after your layers.".to_string(),
+                        n => format!("{n} empty slots after your layers."),
+                    })),
+            )
             .child(heading("Custom devicetree", cx).pt_8())
             .child(help("Text added here is written into the keymap file as it is, for anything the editor does not cover. Behaviors defined here appear in the key picker's Custom tab. Firmware settings are on the board's page.", cx))
             .when(!starters.is_empty(), |page| {

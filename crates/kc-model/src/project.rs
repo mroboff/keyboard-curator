@@ -24,6 +24,11 @@ pub struct Layer {
     pub name: String,
     /// A color tag for the layer list. Not sent to the keyboard.
     pub color: Option<Rgb>,
+    /// What the layer is for, in the user's words. Shown above the keys in
+    /// the editor and written above the layer in the generated keymap as a
+    /// comment.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
     /// One binding per key position of the project's physical layout.
     pub bindings: Vec<Binding>,
 }
@@ -259,6 +264,7 @@ impl Project {
             id,
             name,
             color: None,
+            description: String::new(),
             bindings: vec![Binding::trans(); self.key_count],
         });
         id
