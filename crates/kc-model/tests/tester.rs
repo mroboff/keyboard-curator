@@ -32,12 +32,13 @@ fn blank() -> (Project, kc_model::LayerId, kc_model::LayerId) {
 }
 
 #[test]
-fn a_press_is_matched_to_every_key_that_can_send_it() {
+fn a_press_is_matched_to_the_first_layer_with_a_key_that_sends_it() {
     let (mut project, base, nav) = blank();
     project
         .set_binding(base, 0, Binding::kp(KeyExpr::new("A")))
         .unwrap();
-    // The same key by another of its names, on another layer.
+    // The same key again on another layer: the keyboard starts on the
+    // first, so that is the key lit.
     project
         .set_binding(nav, 5, Binding::kp(KeyExpr::new("A")))
         .unwrap();
@@ -47,13 +48,64 @@ fn a_press_is_matched_to_every_key_that_can_send_it() {
     project
         .set_binding(nav, 2, Binding::kp(KeyExpr::new("ENTER")))
         .unwrap();
+    // A key no key of the first layer sends is matched where it is.
+    project
+        .set_binding(nav, 7, Binding::kp(KeyExpr::new("B")))
+        .unwrap();
+    // Two keys of one layer that send the same key both light.
+    project
+        .set_binding(base, 8, Binding::kp(KeyExpr::new("C")))
+        .unwrap();
+    project
+        .set_binding(base, 9, Binding::kp(KeyExpr::new("C")))
+        .unwrap();
 
-    assert_eq!(positions_sending(&project, "A"), [0, 5]);
+    assert_eq!(positions_sending(&project, "A"), [0]);
     // Names are compared by the key they mean, not by spelling.
-    assert_eq!(positions_sending(&project, "RET"), [1, 2]);
-    assert_eq!(positions_sending(&project, "ENTER"), [1, 2]);
-    assert!(positions_sending(&project, "B").is_empty());
+    assert_eq!(positions_sending(&project, "RET"), [1]);
+    assert_eq!(positions_sending(&project, "ENTER"), [1]);
+    assert_eq!(positions_sending(&project, "B"), [7]);
+    assert_eq!(positions_sending(&project, "C"), [8, 9]);
+    assert!(positions_sending(&project, "D").is_empty());
     assert!(positions_sending(&project, "NOT_A_KEY").is_empty());
+}
+
+/// KEY-71: on a layout with many layers, such as TailorKey on the Go60,
+/// pressing A lit A, S and Z, because S sends A on a gaming layer and Z
+/// sends Cmd-A on a cursor layer.
+#[test]
+fn a_press_lights_one_key_on_a_layout_with_many_layers() {
+    let (mut project, base, cursor) = blank();
+    let gaming = project.add_layer("Gaming").unwrap();
+    // Home-row mods: Ctrl when held, A when tapped.
+    project
+        .set_binding(base, 25, Binding::new("mt", vec![key("LCTRL"), key("A")]))
+        .unwrap();
+    project
+        .set_binding(base, 26, Binding::kp(KeyExpr::new("S")))
+        .unwrap();
+    project
+        .set_binding(base, 37, Binding::kp(KeyExpr::new("Z")))
+        .unwrap();
+    project
+        .set_binding(
+            cursor,
+            37,
+            Binding::kp(KeyExpr::new("A").with(Modifier::LGui)),
+        )
+        .unwrap();
+    project
+        .set_binding(gaming, 26, Binding::kp(KeyExpr::new("A")))
+        .unwrap();
+
+    assert_eq!(positions_sending(&project, "A"), [25]);
+    assert_eq!(positions_sending(&project, "S"), [26]);
+    assert_eq!(positions_sending(&project, "Z"), [37]);
+    assert_eq!(positions_sending(&project, "LCTRL"), [25]);
+    // Only the cursor layer sends Cmd, so Cmd is matched there.
+    assert_eq!(positions_sending(&project, "LGUI"), [37]);
+    let can = testable(&project);
+    assert_eq!(can.iter().filter(|t| **t).count(), 3);
 }
 
 #[test]
@@ -108,6 +160,11 @@ fn keys_that_send_nothing_to_the_computer_cannot_be_tested() {
     project
         .set_binding(nav, 3, Binding::kp(KeyExpr::new("F5")))
         .unwrap();
+    // A key the base layer already sends: a press of A lights the base
+    // layer's key, so this one is never lit.
+    project
+        .set_binding(nav, 5, Binding::kp(KeyExpr::new("A")))
+        .unwrap();
     project
         .set_binding(
             base,
@@ -120,7 +177,7 @@ fn keys_that_send_nothing_to_the_computer_cannot_be_tested() {
 
     let can = testable(&project);
     assert_eq!(can.len(), project.key_count);
-    assert_eq!(can[..5], [true, false, false, true, false]);
+    assert_eq!(can[..6], [true, false, false, true, false, false]);
     assert_eq!(can.iter().filter(|t| **t).count(), 2);
 }
 

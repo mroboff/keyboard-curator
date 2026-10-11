@@ -235,7 +235,8 @@ impl KeyTester {
     }
 
     /// A key, named as the toolkit names it, went down on the computer's
-    /// keyboard: light every key of the layout that can send it.
+    /// keyboard: light the keys of the layout that send it, on the first
+    /// layer that has one.
     fn press(&mut self, key: &str, names: &[&str], cx: &mut Context<Self>) {
         if self.held.contains_key(key) {
             return;
@@ -511,7 +512,7 @@ impl Render for KeyTester {
                 .child(section_title(title, cx))
         };
         let help = format!(
-            "{} Press keys on the keyboard, or click them here to play. The computer only reports what a key sends, so a press lights every key of the layout that can send it, on any layer.{} Hold ⌘ to use shortcuts.",
+            "{} Press keys on the keyboard, or click them here to play. The computer only reports what a key sends, so a press lights the key of the first layer that sends it, or, when none does, the keys of the first layer that has one.{} Hold ⌘ to use shortcuts.",
             self.source,
             match untestable {
                 0 => String::new(),
