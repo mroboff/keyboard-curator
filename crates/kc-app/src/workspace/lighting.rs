@@ -354,6 +354,7 @@ impl Workspace {
             tint: None,
             links: Vec::new(),
             colors,
+            bands: Vec::new(),
         };
         let bounds = self.canvas_bounds.clone();
         let key_under = |this: &Self, position: Point<Pixels>| {

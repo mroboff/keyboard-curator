@@ -74,6 +74,17 @@ pub struct Device {
     pub x: f32,
     pub y: f32,
     pub size: f32,
+    /// Drawn lit, as when the key tester sees the pointer move.
+    pub active: bool,
+}
+
+/// One slice of a key drawn in slices, one per function, for the key
+/// tester: its legend and the color it is drawn in, or none for the
+/// key's own.
+#[derive(Debug, Clone)]
+pub struct Band {
+    pub label: String,
+    pub fill: Option<Hsla>,
 }
 
 /// The key under a pointer position, if any.
@@ -188,6 +199,10 @@ pub struct Frame {
     pub links: Vec<(Vec<usize>, bool)>,
     /// The color each key is lit, for the lighting view. Empty elsewhere.
     pub colors: Vec<Option<Hsla>>,
+    /// Keys drawn in slices, one per function, for the key tester: each
+    /// slice's legend and color. A key with no slices is drawn from its
+    /// keycap. Empty elsewhere.
+    pub bands: Vec<Vec<Band>>,
 }
 
 /// The outline of a key, inset by the key gap, with rounded corners.
@@ -302,12 +317,17 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             y: device.y,
         });
         let radius = if device.round { size / 2. } else { size * 0.16 };
+        let (fill, border) = if device.active {
+            (palette.accent.opacity(0.5), palette.accent)
+        } else {
+            (palette.key.opacity(0.3), palette.key_border)
+        };
         window.paint_quad(quad(
             Bounds::centered_at(center, gpui_kit::size(size, size)),
             radius,
-            palette.key.opacity(0.3),
+            fill,
             px(1.),
-            palette.key_border,
+            border,
             Default::default(),
         ));
         paint_text(
@@ -376,8 +396,26 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         } else {
             *key
         };
-        if let Some(path) = key_path(&face, view, None) {
-            window.paint_path(path, fill);
+        let bands = frame.bands.get(index).map_or(&[][..], |b| b.as_slice());
+        if bands.is_empty() {
+            if let Some(path) = key_path(&face, view, None) {
+                window.paint_path(path, fill);
+            }
+        } else {
+            // One slice per function, stacked from the top, each in its
+            // own color.
+            let count = bands.len() as i32;
+            for (slice, band) in bands.iter().enumerate() {
+                let slice = slice as i32;
+                let part = Key {
+                    y: face.y + face.h * slice / count,
+                    h: face.h / count,
+                    ..face
+                };
+                if let Some(path) = key_path(&part, view, None) {
+                    window.paint_path(path, band.fill.unwrap_or(fill));
+                }
+            }
         }
         let selected = frame.selected.contains(&index);
         let (width, color) = if selected {
@@ -402,6 +440,31 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         // muted text is chosen for the page, not for a keycap.
         let muted_text = text.opacity(0.7);
         let max_width = unit * 0.86;
+        if !bands.is_empty() {
+            let count = bands.len() as i32;
+            let height = px(face.h as f32 * view.scale) / count as f32;
+            for (slice, band) in bands.iter().enumerate() {
+                let part = Key {
+                    y: face.y + face.h * slice as i32 / count,
+                    h: face.h / count,
+                    ..face
+                };
+                let color = match band.fill {
+                    Some(fill) => text_on(fill, palette.key),
+                    None => legend,
+                };
+                paint_text(
+                    &band.label,
+                    view.to_screen(part.center()),
+                    (unit * 0.26).min(height * 0.62),
+                    max_width,
+                    color,
+                    window,
+                    cx,
+                );
+            }
+            continue;
+        }
         match &cap.hold {
             Some(hold) => {
                 let up = point(center.x, center.y - unit * 0.14);

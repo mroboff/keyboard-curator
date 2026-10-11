@@ -838,6 +838,7 @@ impl Workspace {
                 x: d.x as f32,
                 y: d.y as f32,
                 size: d.size as f32,
+                active: false,
             })
             .collect()
     }
@@ -1575,6 +1576,7 @@ impl Workspace {
                 .map(tag_color),
             links: Vec::new(),
             colors: Vec::new(),
+            bands: Vec::new(),
         };
         let bounds = self.canvas_bounds.clone();
 
