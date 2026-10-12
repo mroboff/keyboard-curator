@@ -333,6 +333,7 @@ impl Workspace {
             legend: String::new(),
             hold: None,
             kind: KeycapKind::None,
+            marks: Vec::new(),
         };
         let colors = (0..keys.len())
             .map(|position| {

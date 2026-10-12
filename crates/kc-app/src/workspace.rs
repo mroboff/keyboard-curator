@@ -6,6 +6,7 @@ mod behaviors;
 mod combos;
 mod lighting;
 mod pointing;
+mod setup;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -21,7 +22,6 @@ use kc_boards::board::PointingKind;
 use kc_boards::geometry::{self, Direction};
 use kc_boards::Board;
 use kc_model::clipboard;
-use kc_model::edit::{self, Hold};
 use kc_model::features::Rgb;
 use kc_model::keycap::{keycap, Keycap, KeycapKind};
 use kc_model::picker::{picker_items, PickerGroup};
@@ -242,6 +242,19 @@ pub struct Workspace {
     auto_advance: bool,
     /// Describes the picker entry under the pointer.
     hint: Option<String>,
+    /// The slot of the selected key the picker fills, with the key it was
+    /// chosen on; none means the tap.
+    key_slot: Option<(usize, setup::KeySlot)>,
+    /// A slot added to a key but not filled yet, kept out of the layout
+    /// until something is chosen for it.
+    pending_slot: Option<(usize, setup::KeySlot)>,
+    /// The hold's modifier chips mean the right-hand modifiers.
+    right_mods: bool,
+    /// The part of the selected key's feel being named as a template.
+    naming: Option<kc_model::setup::Part>,
+    template_name: Entity<InputState>,
+    /// The Advanced part of the key setup panel is open.
+    advanced_open: bool,
     search: Entity<InputState>,
     binding_input: Entity<InputState>,
     layer_name: Entity<InputState>,
@@ -567,6 +580,17 @@ impl Workspace {
         };
         let behavior_name = line("Name", window, cx);
         let behavior_label = line("label", window, cx);
+        let template_name = line("Template name", window, cx);
+        cx.subscribe_in(
+            &template_name,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::PressEnter { .. }) {
+                    this.save_template(window, cx);
+                }
+            },
+        )
+        .detach();
         let macro_text = line("Text to type", window, cx);
         let combo_name = line("Name", window, cx);
         let raw_behaviors = cx.new(|cx| TextareaState::new(window, cx));
@@ -615,6 +639,12 @@ impl Workspace {
             group: PickerGroup::Basic,
             auto_advance: true,
             hint: None,
+            key_slot: None,
+            pending_slot: None,
+            right_mods: false,
+            naming: None,
+            template_name,
+            advanced_open: false,
             search,
             binding_input,
             layer_name,
@@ -1202,11 +1232,10 @@ impl Workspace {
             self.assign_to_target(picked, false, window, cx);
             return;
         }
-        let Some(current) = self.selected_binding() else {
+        if self.selected_binding().is_none() {
             return;
-        };
-        let binding = edit::assign(current, &picked);
-        self.apply_binding(binding, self.auto_advance, window, cx);
+        }
+        self.pick_into_slots(picked, window, cx);
     }
 
     fn edit_layers(
@@ -1593,6 +1622,7 @@ impl Workspace {
             legend: String::new(),
             hold: None,
             kind: KeycapKind::None,
+            marks: Vec::new(),
         };
         let keycaps = (0..keys.len())
             .map(|position| keycap(self.project(), self.layer, position).unwrap_or(blank.clone()))
@@ -1922,263 +1952,6 @@ impl Workspace {
                         "Click a binding above to select it. Choose from the list, or type any ZMK binding and press Return.",
                     )),
             )
-    }
-
-    fn render_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (border, muted) = (theme.border, theme.muted_foreground);
-        let panel = div()
-            .w_80()
-            .h_full()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .p_3()
-            .border_l_1()
-            .border_color(border);
-        let (Some(position), Some(binding)) = (self.primary(), self.selected_binding()) else {
-            return panel.child(section_title("NO KEY SELECTED", cx)).child(
-                div()
-                    .text_sm()
-                    .text_color(muted)
-                    .child("Click a key to edit it."),
-            );
-        };
-
-        let colors = crate::theme::look(cx).colors;
-        let shown = keycap(self.project(), self.layer, position);
-        let specimen = div()
-            .flex()
-            .items_center()
-            .gap_3()
-            .child(
-                div()
-                    .size_12()
-                    .flex_shrink_0()
-                    .rounded_lg()
-                    .bg(colors.key_lip)
-                    .border_1()
-                    .border_color(colors.key_border)
-                    .child(
-                        div()
-                            .h_10()
-                            .rounded_lg()
-                            .bg(colors.key)
-                            .text_color(colors.key_text)
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .justify_center()
-                            .when_some(shown, |face, cap| {
-                                face.child(display(cap.legend, 14., cx)).when_some(
-                                    cap.hold,
-                                    |face, hold| {
-                                        face.child(
-                                            div()
-                                                .text_size(px(9.))
-                                                .text_color(colors.key_text.opacity(0.7))
-                                                .child(hold),
-                                        )
-                                    },
-                                )
-                            }),
-                    ),
-            )
-            .child(display(
-                match self.selection.len() {
-                    1 => format!("Key {position}"),
-                    n => format!("{n} keys"),
-                },
-                20.,
-                cx,
-            ));
-        let mut panel = panel
-            .child(specimen)
-            .child(section_title("BINDING", cx))
-            .child(Input::new(&self.binding_input))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(muted)
-                    .child(match self.selection.len() {
-                        1 => format!("Key {position}. Type any ZMK binding and press Return."),
-                        n => format!("{n} keys selected. Changes apply to all of them."),
-                    }),
-            );
-
-        // A key that uses one of the user's own behaviors says which kind
-        // it is, since the name alone does not.
-        let own = match binding {
-            Binding::Behavior {
-                behavior: kc_model::BehaviorRef::User { user },
-                ..
-            } => self.project().behavior(*user),
-            _ => None,
-        };
-        if let Some(def) = own {
-            let id = def.id;
-            panel = panel
-                .child(section_title("BEHAVIOR", cx))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(div().flex_1().min_w_0().text_sm().child(def.display_name()))
-                        .child(badge(def.kind.name(), cx.theme().foreground)),
-                )
-                .child(div().text_xs().text_color(muted).child(def.kind.summary()))
-                .when(Mode::Behaviors.available(&self.features()), |panel| {
-                    panel.child(div().flex().child(
-                        chip("edit-behavior", "Edit Behavior", false, cx).on_click(cx.listener(
-                            move |this, _, window, cx| {
-                                this.behavior = Some(id);
-                                this.set_mode(Mode::Behaviors, window, cx);
-                            },
-                        )),
-                    ))
-                });
-        }
-
-        let arguments = edit::command_args(binding);
-        if !arguments.is_empty() {
-            panel = panel.child(section_title("VALUES", cx));
-        }
-        for (index, (arg, value)) in arguments.into_iter().enumerate() {
-            let step = if arg.max - arg.min > 50 { 10 } else { 1 };
-            let nudge = move |delta: i64| {
-                move |this: &mut Self,
-                      _: &ClickEvent,
-                      window: &mut Window,
-                      cx: &mut Context<Self>| {
-                    let changed = this
-                        .selected_binding()
-                        .and_then(|b| edit::with_command_arg(b, index, i64::from(value) + delta));
-                    if let Some(binding) = changed {
-                        this.apply_binding(binding, false, window, cx);
-                    }
-                }
-            };
-            panel = panel.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_sm()
-                            .child(format!("{}: {value}", arg.name)),
-                    )
-                    .child(
-                        chip(("arg-fewer", index), "−", false, cx)
-                            .on_click(cx.listener(nudge(-i64::from(step)))),
-                    )
-                    .child(
-                        chip(("arg-more", index), "+", false, cx)
-                            .on_click(cx.listener(nudge(i64::from(step)))),
-                    ),
-            );
-        }
-
-        // Layer parameters, other than a layer-tap's (the hold row covers it).
-        let layer_params: Vec<(usize, LayerId)> = match binding {
-            Binding::Behavior { params, .. } if edit::hold(binding) == Hold::None => params
-                .iter()
-                .enumerate()
-                .filter_map(|(index, p)| match p {
-                    kc_model::Param::Layer(id) => Some((index, *id)),
-                    _ => None,
-                })
-                .collect(),
-            _ => Vec::new(),
-        };
-        for (index, current) in layer_params {
-            let choices = self
-                .project()
-                .layers
-                .iter()
-                .map(|l| {
-                    let id = l.id;
-                    chip(
-                        ("param-layer", (index << 16) | id.0 as usize),
-                        l.name.clone(),
-                        id == current,
-                        cx,
-                    )
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        let changed = this
-                            .selected_binding()
-                            .and_then(|b| edit::with_layer(b, index, id));
-                        if let Some(binding) = changed {
-                            this.apply_binding(binding, false, window, cx);
-                        }
-                    }))
-                })
-                .collect::<Vec<_>>();
-            panel = panel
-                .child(section_title("LAYER", cx))
-                .child(div().flex().flex_wrap().gap_1().children(choices));
-        }
-
-        if let Some(tap) = edit::tap_key(binding) {
-            let modifiers = MODIFIERS.map(|(modifier, symbol)| {
-                let active = tap.mods.contains(&modifier);
-                chip(("modifier", modifier as usize), symbol, active, cx).on_click(cx.listener(
-                    move |this, _, window, cx| {
-                        let toggled = this
-                            .selected_binding()
-                            .and_then(|b| edit::toggle_modifier(b, modifier));
-                        if let Some(binding) = toggled {
-                            this.apply_binding(binding, false, window, cx);
-                        }
-                    },
-                ))
-            });
-            let held = edit::hold(binding);
-            let hold_chip = |id: ElementId, label: String, hold: Hold, cx: &mut Context<Self>| {
-                chip(id, label, held == hold, cx).on_click(cx.listener(
-                    move |this, _, window, cx| {
-                        let changed = this
-                            .selected_binding()
-                            .and_then(|b| edit::with_hold(b, hold));
-                        if let Some(binding) = changed {
-                            this.apply_binding(binding, false, window, cx);
-                        }
-                    },
-                ))
-            };
-            let mut holds = vec![hold_chip("hold-none".into(), "None".into(), Hold::None, cx)];
-            for (modifier, symbol) in MODIFIERS {
-                holds.push(hold_chip(
-                    ("hold-modifier", modifier as usize).into(),
-                    symbol.to_string(),
-                    Hold::Modifier(modifier),
-                    cx,
-                ));
-            }
-            let layers: Vec<(LayerId, String)> = self
-                .project()
-                .layers
-                .iter()
-                .filter(|l| l.id != self.layer)
-                .map(|l| (l.id, l.name.clone()))
-                .collect();
-            for (id, name) in layers {
-                holds.push(hold_chip(
-                    ("hold-layer", id.0 as usize).into(),
-                    name,
-                    Hold::Layer(id),
-                    cx,
-                ));
-            }
-            panel = panel
-                .child(section_title("WITH MODIFIERS", cx))
-                .child(div().flex().gap_1().children(modifiers))
-                .child(section_title("WHEN HELD", cx))
-                .child(div().flex().flex_wrap().gap_1().children(holds));
-        }
-        panel
     }
 
     /// Why a keyboard that answered must not be updated from this project:
@@ -2703,12 +2476,12 @@ impl Workspace {
                     .map(|main| match self.mode {
                         Mode::Keyboard => main.child(self.render_canvas(cx)).child(
                             div()
-                                .h_72()
+                                .h_80()
                                 .flex()
                                 .border_t_1()
                                 .border_color(border)
                                 .child(self.render_picker(cx))
-                                .child(self.render_inspector(cx)),
+                                .child(self.render_key_setup(cx)),
                         ),
                         Mode::Lighting => main.child(self.render_lighting(cx)),
                         // The key picker is only there for behaviors that

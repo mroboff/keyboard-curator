@@ -12,7 +12,6 @@ use gpui_kit::*;
 use kc_model::behavior::{
     BehaviorKind, Flavor, HoldTap, Macro, MacroStep, ModMorph, StickyKey, TapDance,
 };
-use kc_model::text::{format_binding, LayerStyle};
 use kc_model::{BehaviorId, BehaviorRef, Binding, KeyExpr, ModelError, Slot};
 use kc_zmk::{Feature, Modifier};
 
@@ -42,34 +41,11 @@ enum New {
 }
 
 const NEW: [(&str, New); 5] = [
-    ("Hold-tap", New::HoldTap),
-    ("Tap-dance", New::TapDance),
-    ("Mod-morph", New::ModMorph),
-    ("Sticky key", New::StickyKey),
+    ("Hold & tap", New::HoldTap),
+    ("Multi-tap", New::TapDance),
+    ("Shift override", New::ModMorph),
+    ("Sticky", New::StickyKey),
     ("Macro", New::Macro),
-];
-
-const FLAVORS: [(Flavor, &str, &str); 4] = [
-    (
-        Flavor::HoldPreferred,
-        "Hold-preferred",
-        "Holds as soon as another key is pressed.",
-    ),
-    (
-        Flavor::Balanced,
-        "Balanced",
-        "Holds if another key is pressed and released while this one is down.",
-    ),
-    (
-        Flavor::TapPreferred,
-        "Tap-preferred",
-        "Holds only after the tapping term.",
-    ),
-    (
-        Flavor::TapUnlessInterrupted,
-        "Tap-unless-interrupted",
-        "Taps unless another key is pressed first.",
-    ),
 ];
 
 pub(super) fn subscribe(
@@ -170,7 +146,7 @@ impl Workspace {
     }
 
     /// Key positions on one hand, judged by the layout's center line.
-    fn hand_positions(&self, right: bool) -> Vec<usize> {
+    pub(super) fn hand_positions(&self, right: bool) -> Vec<usize> {
         let keys = self.layout_keys();
         let Some(bounds) = kc_boards::geometry::bounds(keys) else {
             return Vec::new();
@@ -248,7 +224,7 @@ impl Workspace {
         let text = self
             .project()
             .slot(slot)
-            .map(|b| format_binding(self.project(), b, LayerStyle::Index))
+            .map(|b| kc_model::words::describe(self.project(), b))
             .unwrap_or_default();
         chip(id, text, self.slot == Some(slot), cx).on_click(cx.listener(
             move |this, _, window, cx| {
@@ -417,7 +393,7 @@ impl Workspace {
     }
 
     /// A button showing the choice made, which opens a menu of the choices.
-    fn select(
+    pub(super) fn select(
         &self,
         id: &'static str,
         shown: &'static str,
@@ -471,7 +447,7 @@ impl Workspace {
 
     /// A part of a form that starts folded away under its title, with a
     /// line on what it holds; clicking the title opens it.
-    fn fold(
+    pub(super) fn fold(
         &self,
         id: &'static str,
         title: &'static str,
@@ -535,11 +511,10 @@ impl Workspace {
     }
 
     fn render_hold_tap(&self, h: &HoldTap, cx: &mut Context<Self>) -> Div {
-        let flavor_name = FLAVORS.iter().find(|f| f.0 == h.flavor).map_or("", |f| f.1);
-        let flavors = FLAVORS
-            .iter()
-            .map(|(flavor, name, _)| {
-                let flavor = *flavor;
+        let flavor_name = h.flavor.name();
+        let flavors = Flavor::ALL
+            .into_iter()
+            .map(|flavor| {
                 let pick: Pick = Rc::new(move |this, window, cx| {
                     this.edit_behavior("Change Flavor", window, cx, |kind| {
                         if let BehaviorKind::HoldTap(h) = kind {
@@ -547,19 +522,15 @@ impl Workspace {
                         }
                     });
                 });
-                (*name, *name == flavor_name, pick)
+                (flavor.name(), flavor == h.flavor, pick)
             })
             .collect();
         let flavor = self.select("flavor", flavor_name, flavors, cx);
-        let flavor_help = FLAVORS.iter().find(|f| f.0 == h.flavor).map_or("", |f| f.2);
+        let flavor_help = h.flavor.detail();
 
         let palette = Palette::themed(cx);
         let keys = self.layout_keys().to_vec();
-        let blank = kc_model::keycap::Keycap {
-            legend: String::new(),
-            hold: None,
-            kind: kc_model::keycap::KeycapKind::Key,
-        };
+        let blank = kc_model::keycap::Keycap::new("", kc_model::keycap::KeycapKind::Key);
         let frame = Frame {
             keycaps: vec![blank; keys.len()],
             keys,
@@ -625,8 +596,8 @@ impl Workspace {
             )
             .child(
                 group("DECIDING BETWEEN HOLD AND TAP", cx)
-                    .child(field("How it decides", flavor_help, flavor, cx))
-                    .child(self.stepper("tapping-term", "Tapping term", format!("{} ms", h.tapping_term_ms), cx, |this, d, window, cx| {
+                    .child(field("Decide by", flavor_help, flavor, cx))
+                    .child(self.stepper("tapping-term", "Counts as a hold after", format!("{} ms", h.tapping_term_ms), cx, |this, d, window, cx| {
                 this.edit_behavior("Change Tapping Term", window, cx, |kind| {
                     if let BehaviorKind::HoldTap(h) = kind {
                         h.tapping_term_ms = h.tapping_term_ms.saturating_add_signed(d as i32 * 10).max(10);
@@ -797,7 +768,7 @@ impl Workspace {
             .into_iter()
             .enumerate()
             .map(|(index, modifier)| {
-                let name = modifier.keycode();
+                let name = kc_model::words::modifier_name(modifier);
                 chip((id, index), name, current.contains(&modifier), cx).on_click(cx.listener(
                     move |this, _, window, cx| {
                         this.edit_behavior("Change Modifiers", window, cx, |kind| {

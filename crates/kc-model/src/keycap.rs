@@ -32,14 +32,29 @@ pub struct Keycap {
     /// What holding the key does, for hold-tap style bindings.
     pub hold: Option<String>,
     pub kind: KeycapKind,
+    /// What the legend and hold cannot show: a second tap, a shift
+    /// override, stickiness.
+    pub marks: Vec<Mark>,
 }
 
 impl Keycap {
-    fn new(legend: impl Into<String>, kind: KeycapKind) -> Self {
+    pub fn new(legend: impl Into<String>, kind: KeycapKind) -> Self {
         Self {
             legend: legend.into(),
             hold: None,
             kind,
+            marks: Vec::new(),
+        }
+    }
+}
+
+impl Mark {
+    /// The mark as drawn in a keycap's corner.
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Mark::MultiTap => "×2",
+            Mark::Shifted => "⇧",
+            Mark::Sticky => "◌",
         }
     }
 }
@@ -95,14 +110,7 @@ fn param_legend(project: &Project, param: &Param) -> String {
         Param::Key(expr) => key_legend(expr),
         Param::Layer(id) => layer_name(project, *id),
         Param::Constant(name) => name.clone(),
-        Param::Command { name, args } => {
-            // `BT_SEL 2` reads better as `BT SEL 2` on a keycap.
-            let mut text = name.replace('_', " ");
-            for arg in args {
-                text.push_str(&format!(" {arg}"));
-            }
-            text
-        }
+        Param::Command { name, args } => crate::words::command_legend(name, args),
         Param::Number(n) => n.to_string(),
     }
 }
@@ -118,6 +126,7 @@ fn built_in(project: &Project, label: &str, params: &[Param]) -> Keycap {
             legend: second.unwrap_or_default(),
             hold: first,
             kind: KeycapKind::Key,
+            marks: Vec::new(),
         },
         "mo" | "to" | "tog" | "sl" => Keycap {
             legend: first.unwrap_or_default(),
@@ -131,11 +140,13 @@ fn built_in(project: &Project, label: &str, params: &[Param]) -> Keycap {
                 .to_string(),
             ),
             kind: KeycapKind::Layer,
+            marks: Vec::new(),
         },
         "sk" | "kt" => Keycap {
             legend: first.unwrap_or_default(),
             hold: Some(if label == "sk" { "sticky" } else { "toggle" }.to_string()),
             kind: KeycapKind::Key,
+            marks: Vec::new(),
         },
         "mkp" | "mmv" | "msc" => Keycap::new(first.unwrap_or_default(), KeycapKind::Key),
         "bt" | "out" | "rgb_ug" | "bl" | "ext_power" => {
@@ -150,6 +161,15 @@ fn built_in(project: &Project, label: &str, params: &[Param]) -> Keycap {
 
 /// The keycap for a binding, without resolving transparency.
 pub fn keycap_for(project: &Project, binding: &Binding) -> Keycap {
+    let mut cap = keycap_inner(project, binding);
+    // Marks are read once, at the top: what the slots add to the key.
+    if binding.user_behavior().is_some() {
+        cap.marks = marks(project, binding);
+    }
+    cap
+}
+
+fn keycap_inner(project: &Project, binding: &Binding) -> Keycap {
     let (behavior, params) = match binding {
         Binding::Raw { raw } => return Keycap::new(raw.clone(), KeycapKind::Raw),
         Binding::Behavior { behavior, params } => (behavior, params.as_slice()),
@@ -162,9 +182,9 @@ pub fn keycap_for(project: &Project, binding: &Binding) -> Keycap {
             };
             match &def.kind {
                 BehaviorKind::HoldTap(h) => {
-                    let tap = keycap_for(project, &side_binding(project, &h.tap, params.get(1)));
+                    let tap = keycap_inner(project, &side_binding(project, &h.tap, params.get(1)));
                     let hold = side_binding(project, &h.hold, params.first());
-                    let hold = match keycap_for(project, &hold) {
+                    let hold = match keycap_inner(project, &hold) {
                         Keycap {
                             legend,
                             hold: Some(what),
@@ -176,24 +196,26 @@ pub fn keycap_for(project: &Project, binding: &Binding) -> Keycap {
                         legend: tap.legend,
                         hold: Some(hold),
                         kind: tap.kind,
+                        marks: Vec::new(),
                     }
                 }
                 BehaviorKind::StickyKey(s) => {
                     let inner =
-                        keycap_for(project, &side_binding(project, &s.behavior, params.first()));
+                        keycap_inner(project, &side_binding(project, &s.behavior, params.first()));
                     Keycap {
                         legend: inner.legend,
                         hold: Some("sticky".to_string()),
                         kind: inner.kind,
+                        marks: Vec::new(),
                     }
                 }
                 // A multi-tap or shift override shows what a plain tap does;
-                // `marks` says the rest.
+                // the marks say the rest.
                 BehaviorKind::TapDance(t) => match t.bindings.first() {
-                    Some(first) => keycap_for(project, first),
+                    Some(first) => keycap_inner(project, first),
                     None => Keycap::new("", KeycapKind::None),
                 },
-                BehaviorKind::ModMorph(m) => keycap_for(project, &m.normal),
+                BehaviorKind::ModMorph(m) => keycap_inner(project, &m.normal),
                 BehaviorKind::Macro(_) => Keycap::new(def.display_name(), KeycapKind::System),
             }
         }

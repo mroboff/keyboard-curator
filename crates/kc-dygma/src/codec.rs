@@ -226,7 +226,10 @@ pub fn encode(binding: &Binding, layers: &[LayerId]) -> Result<u16, String> {
                 .ok_or("on Dygma firmware a layer-tap taps a plain key, without modifiers")?;
             Ok(LAYER_TAP + 256 * layer_index(*layer, layers, SHORT_LAYERS)? + tap)
         }
-        _ => Err(format!("Dygma firmware has nothing for &{label}")),
+        _ => {
+            let name = kc_zmk::behaviors::built_in(label).map_or(label, |b| b.name);
+            Err(format!("Dygma firmware has nothing for {name}"))
+        }
     }
 }
 

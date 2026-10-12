@@ -122,8 +122,8 @@ impl Checker<'_> {
                         self.error(
                             location,
                             format!(
-                                "&{} takes {expected} parameter(s), found {}",
-                                def.label,
+                                "{} takes {expected} value(s), found {}",
+                                def.display_name(),
                                 params.len()
                             ),
                         );

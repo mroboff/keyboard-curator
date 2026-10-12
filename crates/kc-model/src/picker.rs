@@ -162,12 +162,14 @@ fn behavior_items(
             ParamKind::Keycode => {}
             ParamKind::Layer => {
                 for layer in &project.layers {
+                    let text = crate::words::layer_action(label, &layer.name)
+                        .unwrap_or_else(|| format!("{}: {}", def.name, layer.name));
                     out.push(PickerItem::new(
                         group,
-                        format!("{} {}", label, layer.name),
-                        format!("{}: {}", def.name, layer.name),
+                        text.clone(),
+                        text,
                         Binding::layer(label, layer.id),
-                        "layer",
+                        &format!("layer {label} {}", def.name),
                     ));
                 }
             }
@@ -205,7 +207,7 @@ fn behavior_items(
                         };
                         out.push(PickerItem::new(
                             group,
-                            format!("{}{suffix}", command.name.replace('_', " ")),
+                            crate::words::command_legend(command.name, &args),
                             format!("{}{suffix}", command.description),
                             Binding::new(
                                 label,
@@ -316,7 +318,7 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
             PickerItem::new(
                 PickerGroup::Custom,
                 label.clone(),
-                format!("Custom behavior &{label}, written by hand under Advanced"),
+                format!("{label}: a behavior written by hand under Advanced"),
                 Binding::Raw {
                     raw: format!("&{label}{}", " 0".repeat(cells)),
                 },

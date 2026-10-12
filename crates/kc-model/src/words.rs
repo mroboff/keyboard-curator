@@ -42,6 +42,51 @@ pub fn modifier_symbols(mods: &[Modifier]) -> String {
     seen.concat()
 }
 
+/// A command as a short keycap legend: `BT 2`, `Light on`, `Hue +`. Commands
+/// without a short form are written out from their name.
+pub fn command_legend(name: &str, args: &[u32]) -> String {
+    let first = args.first().map(u32::to_string).unwrap_or_default();
+    match name {
+        "BT_SEL" => format!("BT {first}"),
+        "BT_NXT" => "BT next".into(),
+        "BT_PRV" => "BT prev".into(),
+        "BT_CLR" => "BT clear".into(),
+        "BT_CLR_ALL" => "BT clear all".into(),
+        "BT_DISC" => format!("BT {first} off"),
+        "OUT_USB" => "USB".into(),
+        "OUT_BLE" => "Bluetooth".into(),
+        "OUT_TOG" => "USB/BT".into(),
+        "OUT_NONE" => "No output".into(),
+        "RGB_TOG" | "BL_TOG" => "Light".into(),
+        "RGB_ON" | "BL_ON" => "Light on".into(),
+        "RGB_OFF" | "BL_OFF" => "Light off".into(),
+        "RGB_HUI" => "Hue +".into(),
+        "RGB_HUD" => "Hue −".into(),
+        "RGB_SAI" => "Sat +".into(),
+        "RGB_SAD" => "Sat −".into(),
+        "RGB_BRI" | "BL_INC" => "Bright +".into(),
+        "RGB_BRD" | "BL_DEC" => "Bright −".into(),
+        "RGB_SPI" => "Speed +".into(),
+        "RGB_SPD" => "Speed −".into(),
+        "RGB_EFF" => "Effect ›".into(),
+        "RGB_EFR" => "‹ Effect".into(),
+        "RGB_COLOR_HSB" => "Color".into(),
+        "RGB_STATUS" => "Status".into(),
+        "BL_CYCLE" => "Bright ›".into(),
+        "BL_SET" => format!("Bright {first}"),
+        "EP_ON" => "Power on".into(),
+        "EP_OFF" => "Power off".into(),
+        "EP_TOG" => "Power".into(),
+        _ => {
+            let mut text = name.replace('_', " ");
+            for arg in args {
+                text.push_str(&format!(" {arg}"));
+            }
+            text
+        }
+    }
+}
+
 /// What a layer behavior does with a layer, in words: `Nav while held`.
 pub fn layer_action(label: &str, layer: &str) -> Option<String> {
     Some(match label {

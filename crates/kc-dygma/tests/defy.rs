@@ -207,7 +207,7 @@ fn codes_without_a_binding_are_kept_as_they_are() {
 fn what_dygma_firmware_lacks_is_refused_with_a_reason() {
     let l = layers(10);
     let refused = |binding: Binding| encode(&binding, &l).unwrap_err();
-    assert!(refused(Binding::new("caps_word", vec![])).contains("nothing for &caps_word"));
+    assert!(refused(Binding::new("caps_word", vec![])).contains("nothing for Caps word"));
     assert!(refused(Binding::Raw {
         raw: "&my_macro".into()
     })
@@ -410,7 +410,7 @@ fn a_layout_dygma_firmware_cannot_hold_is_reported_and_not_written() {
     let problems = check(&project, &profile);
     assert!(problems.iter().all(|p| p.severity == Severity::Error));
     let said = |text: &str| problems.iter().any(|p| p.message.contains(text));
-    assert!(said("nothing for &caps_word"));
+    assert!(said("nothing for Caps word"));
     assert!(said("no lock or battery lights"));
     assert!(said("11 layers, and this keyboard holds 10"));
     assert!(matches!(

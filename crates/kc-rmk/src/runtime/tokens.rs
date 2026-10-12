@@ -437,7 +437,7 @@ pub fn via(binding: &Binding, cx: &Context) -> Result<u16, String> {
             .iter()
             .find(|(behavior, constant, _)| *behavior == label && constant == name)
             .map(|(_, _, code)| u16::from(*code))
-            .ok_or_else(|| format!("RMK has nothing for &{label} {name}"))?,
+            .ok_or_else(|| format!("RMK has nothing for {}", friendly(label, name)))?,
         ("bt", [Param::Command { name, args }]) => match (name.as_str(), args.as_slice()) {
             // RMK's profile key also disconnects, on a double tap.
             ("BT_SEL" | "BT_DISC", [profile]) if *profile < profiles.into() => {
@@ -450,13 +450,13 @@ pub fn via(binding: &Binding, cx: &Context) -> Result<u16, String> {
             // its MoErgo importer writes; RMK's `profiles + 2` reads the same.
             ("BT_CLR", []) => 0x7E00 | u16::from(USER_CLEAR_ACTIVE_PROFILE),
             ("BT_CLR_ALL", []) => 0x7E00 | u16::from(USER_CLEAR_ALL_PROFILES),
-            _ => return Err(format!("RMK has nothing for &bt {name}")),
+            _ => return Err(format!("RMK has nothing for {}", friendly("bt", name))),
         },
         ("out", [Param::Command { name, .. }]) => match name.as_str() {
             "OUT_USB" => 0x7784,
             "OUT_BLE" => 0x7786,
             "OUT_TOG" => 0x7E00 | (profiles + 3),
-            _ => return Err(format!("RMK has nothing for &out {name}")),
+            _ => return Err(format!("RMK has nothing for {}", friendly("out", name))),
         },
         // Status is shown by a layer's lock and battery lights, not by a
         // key, so MoErgo's status key does nothing here.
@@ -465,8 +465,8 @@ pub fn via(binding: &Binding, cx: &Context) -> Result<u16, String> {
             .iter()
             .find(|(command, _)| command == name)
             .map(|(_, code)| *code)
-            .ok_or_else(|| format!("RMK has nothing for &rgb_ug {name}"))?,
-        _ => return Err(format!("RMK has nothing for &{label}")),
+            .ok_or_else(|| format!("RMK has nothing for {}", friendly("rgb_ug", name)))?,
+        _ => return Err(format!("RMK has nothing for {}", friendly(label, ""))),
     })
 }
 
@@ -925,4 +925,15 @@ pub fn is_default_profile(profile: u8) -> bool {
 /// A wire action's text, for notes and reports.
 pub fn describe(action: KeyAction) -> String {
     format_keycode(moergo_config::rynk_keycode::to_via_keycode(action))
+}
+
+/// A built-in behavior and its command in words, for messages: the
+/// catalog's name for the behavior, and the command's short legend.
+fn friendly(label: &str, command: &str) -> String {
+    let name = kc_zmk::behaviors::built_in(label).map_or(label, |b| b.name);
+    if command.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} ({})", kc_model::words::command_legend(command, &[]))
+    }
 }

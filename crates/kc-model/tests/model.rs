@@ -602,7 +602,7 @@ fn keycaps_show_what_a_key_does() {
     assert_eq!(momentary.hold.as_deref(), Some("hold"));
     assert_eq!(momentary.kind, KeycapKind::Layer);
 
-    assert_eq!(cap(&p, base, 2).legend, "BT SEL 2");
+    assert_eq!(cap(&p, base, 2).legend, "BT 2");
     assert_eq!(cap(&p, base, 2).kind, KeycapKind::System);
 
     // The user-defined hold-tap shows both sides.
@@ -743,13 +743,10 @@ fn the_picker_offers_what_the_firmware_supports() {
     assert_eq!(find("A").unwrap().binding, kp("A"));
     assert_eq!(find("A").unwrap().group, PickerGroup::Basic);
     assert_eq!(
-        find("mo Nav").unwrap().binding,
+        find("Nav while held").unwrap().binding,
         Binding::layer("mo", p.layers[1].id)
     );
-    assert_eq!(
-        find("BT SEL 4").unwrap().binding,
-        command("bt", "BT_SEL", &[4])
-    );
+    assert_eq!(find("BT 4").unwrap().binding, command("bt", "BT_SEL", &[4]));
     assert_eq!(find("Left click").unwrap().group, PickerGroup::Mouse);
     assert_eq!(find("Nav tap-dance").unwrap().group, PickerGroup::Custom);
     // A behavior the user named says what kind it is; built-in keys do not
@@ -763,12 +760,12 @@ fn the_picker_offers_what_the_firmware_supports() {
     }
     assert!(find("Transparent").is_some() && find("Bootloader").is_some());
     // MoErgo's status command is offered on the Go60; backlight is not.
-    assert!(find("RGB STATUS").is_some());
-    assert!(find("BL TOG").is_none());
+    assert!(find("Status").is_some());
+    assert!(!items.iter().any(|i| i.matches("bl_tog")));
     // Multi-argument commands and parameterized behaviors start from
     // defaults and are tuned in the inspector.
     assert_eq!(
-        find("RGB COLOR HSB").unwrap().binding,
+        find("Color").unwrap().binding,
         command("rgb_ug", "RGB_COLOR_HSB", &[180, 50, 50])
     );
     assert_eq!(
@@ -782,7 +779,7 @@ fn the_picker_offers_what_the_firmware_supports() {
     let imprint = board("cyboard-imprint");
     let plain = Project::new("Plain", &imprint);
     let imprint_items = picker_items(&plain, &imprint.firmware[0].features());
-    assert!(!imprint_items.iter().any(|i| i.label == "RGB STATUS"));
+    assert!(!imprint_items.iter().any(|i| i.label == "Status"));
 
     // Search matches names, aliases and descriptions, in any order.
     let hits = |q: &str| items.iter().filter(|i| i.matches(q)).count();
@@ -790,7 +787,7 @@ fn the_picker_offers_what_the_firmware_supports() {
     assert!(items
         .iter()
         .any(|i| i.description == "Play/Pause" && i.matches("pause play c_pp")));
-    assert!(find("BT SEL 2").unwrap().matches("bluetooth profile"));
+    assert!(find("BT 2").unwrap().matches("bluetooth profile"));
     assert_eq!(hits("zzzz"), 0);
     assert_eq!(hits(""), items.len());
     // Every assignable binding is valid for the board.

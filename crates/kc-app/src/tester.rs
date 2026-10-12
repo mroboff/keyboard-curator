@@ -621,6 +621,7 @@ impl Render for KeyTester {
             legend: String::new(),
             hold: None,
             kind: KeycapKind::None,
+            marks: Vec::new(),
         };
         let plain = Keycap {
             kind: KeycapKind::Key,

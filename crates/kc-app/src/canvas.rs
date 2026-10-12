@@ -482,6 +482,29 @@ fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
                 cx,
             ),
         }
+        // What the slots add beyond tap and hold, small in the corner.
+        if !cap.marks.is_empty() {
+            let marks: String = cap
+                .marks
+                .iter()
+                .map(|m| m.symbol())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let corner = view.to_screen(face.center());
+            let corner = point(
+                corner.x + px(face.w as f32 * view.scale) * 0.5 - unit * 0.2,
+                corner.y - px(face.h as f32 * view.scale) * 0.5 + unit * 0.14,
+            );
+            paint_text(
+                &marks,
+                corner,
+                unit * 0.13,
+                max_width,
+                muted_text,
+                window,
+                cx,
+            );
+        }
     }
 
     for (positions, active) in &frame.links {

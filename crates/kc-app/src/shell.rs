@@ -1399,6 +1399,7 @@ impl Shell {
             legend: String::new(),
             hold: None,
             kind: KeycapKind::None,
+            marks: Vec::new(),
         };
         let first = exhibit.layout.layers.first().map(|l| l.id);
         let frame = Frame {

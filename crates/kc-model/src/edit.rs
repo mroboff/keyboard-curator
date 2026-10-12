@@ -75,6 +75,32 @@ pub fn toggle_modifier(binding: &Binding, modifier: Modifier) -> Option<Binding>
     Some(build(hold(binding), tap))
 }
 
+/// The modifiers a binding holds down, when it is a modifier key with any
+/// number of modifier wrappers: `&kp LS(LCTRL)` is Shift and Control.
+pub fn modifier_set(binding: &Binding) -> Option<Vec<Modifier>> {
+    let ("kp", [Param::Key(key)]) = built_in(binding)? else {
+        return None;
+    };
+    let base = Modifier::from_keycode(&key.key)?;
+    let mut set = key.mods.clone();
+    set.push(base);
+    set.sort();
+    set.dedup();
+    Some(set)
+}
+
+/// A binding that holds the modifiers in `set` down: the first as the key,
+/// the rest as wrappers. `None` for an empty set.
+pub fn modifiers_binding(set: &[Modifier]) -> Option<Binding> {
+    let mut set = set.to_vec();
+    set.sort();
+    set.dedup();
+    let (first, rest) = set.split_first()?;
+    let mut key = KeyExpr::new(first.keycode());
+    key.mods = rest.to_vec();
+    Some(Binding::kp(key))
+}
+
 /// The binding a key gets when `picked` is chosen in the picker. Picking a
 /// plain key for a binding that taps a key and does something else as well
 /// (a mod-tap, layer-tap or user-defined hold-tap) replaces only what a tap

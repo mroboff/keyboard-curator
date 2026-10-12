@@ -102,7 +102,7 @@ fn what_rmk_lacks_is_refused_with_a_reason() {
         raw: "&my_macro".into()
     })
     .contains("devicetree"));
-    assert!(refused(command("rgb_ug", "RGB_TOG", &[])).contains("nothing for &rgb_ug"));
+    assert!(refused(command("rgb_ug", "RGB_TOG", &[])).contains("nothing for RGB lighting"));
     assert!(refused(Binding::new("sk", vec![key("A")])).contains("single modifier"));
     assert!(refused(Binding::layer("mo", LayerId(9))).contains("no longer exists"));
     // A profile the firmware does not keep.
@@ -250,7 +250,7 @@ fn a_layout_rmk_cannot_hold_is_reported_and_not_generated() {
     let problems = check_keymap(&project, &rmk);
     assert!(problems
         .iter()
-        .any(|p| p.message.contains("nothing for &rgb_ug")));
+        .any(|p| p.message.contains("nothing for RGB lighting")));
     assert!(problems
         .iter()
         .any(|p| p.message.contains("must each do something")));

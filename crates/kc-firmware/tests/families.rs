@@ -56,7 +56,7 @@ fn dygma_layouts_are_checked_for_what_the_firmware_holds_and_never_built() {
     project.set_binding(base, 1, caps_word).unwrap();
     let problems = errors(&project, &defy, &config);
     assert_eq!(problems.len(), 1);
-    assert!(problems[0].message.contains("nothing for &caps_word"));
+    assert!(problems[0].message.contains("nothing for Caps word"));
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn rmk_layouts_generate_an_rmk_project_and_flag_what_rmk_lacks() {
     let Err(FirmwareError::Invalid(problems)) = generate(&project, &imprint, &config) else {
         panic!("a layout RMK cannot hold must not generate");
     };
-    assert!(problems.iter().any(|p| p.message.contains("rgb_ug")));
+    assert!(problems.iter().any(|p| p.message.contains("RGB lighting")));
 }
 
 #[test]

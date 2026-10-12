@@ -60,11 +60,7 @@ impl Workspace {
 
     fn render_combo_form(&self, combo: &Combo, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
-        let text = kc_model::text::format_binding(
-            self.project(),
-            &combo.binding,
-            kc_model::text::LayerStyle::Index,
-        );
+        let text = kc_model::words::describe(self.project(), &combo.binding);
         let id = combo.id;
         let layers = self
             .project()
@@ -224,6 +220,7 @@ impl Workspace {
             legend: String::new(),
             hold: None,
             kind: KeycapKind::None,
+            marks: Vec::new(),
         };
         let frame = Frame {
             keycaps: (0..keys.len())

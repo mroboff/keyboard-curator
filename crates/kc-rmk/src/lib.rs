@@ -160,7 +160,10 @@ pub fn action(binding: &Binding, layers: &[LayerId], ble_profiles: u8) -> Result
         ("out", [Param::Command { name, .. }]) if name == "OUT_TOG" => {
             format!("User{}", profiles + 3)
         }
-        _ => return Err(format!("RMK has nothing for &{label}")),
+        _ => {
+            let name = kc_zmk::behaviors::built_in(label).map_or(label, |b| b.name);
+            return Err(format!("RMK has nothing for {name}"));
+        }
     })
 }
 
