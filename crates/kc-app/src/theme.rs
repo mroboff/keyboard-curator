@@ -65,7 +65,6 @@ impl ThemeId {
     fn source(self) -> &'static str {
         match self {
             ThemeId::Gallery => include_str!("../assets/themes/gallery.json"),
-            ThemeId::GoldenGate => include_str!("../assets/themes/golden-gate.json"),
             ThemeId::Arena => include_str!("../assets/themes/arena.json"),
             ThemeId::Curator => include_str!("../assets/themes/curator.json"),
             ThemeId::Bench => include_str!("../assets/themes/bench.json"),
@@ -396,10 +395,9 @@ mod tests {
             assert!(!file.display_font.is_empty());
         }
         assert!(ThemeFile::load(ThemeId::default()).only().is_none());
-        // Gallery and Golden Gate come in light and dark; the others are
-        // dark by nature.
+        // Gallery comes in light and dark; the others are dark by nature.
         for theme in ThemeId::ALL {
-            let both = matches!(theme, ThemeId::Gallery | ThemeId::GoldenGate);
+            let both = theme == ThemeId::Gallery;
             let only = ThemeFile::load(theme).only();
             assert_eq!(only.is_none(), both, "{theme:?}");
             if !both {

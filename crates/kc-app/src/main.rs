@@ -59,7 +59,6 @@ actions!(
         AppearanceLight,
         AppearanceDark,
         ThemeGallery,
-        ThemeGoldenGate,
         ThemeArena,
         ThemeCurator,
         ThemeBench
@@ -98,7 +97,6 @@ fn menus(theme: ThemeId, appearance: Appearance, checks_for_updates: bool) -> Ve
     let themes = ThemeId::ALL.map(|id| {
         let item = match id {
             ThemeId::Gallery => MenuItem::action(id.name(), ThemeGallery),
-            ThemeId::GoldenGate => MenuItem::action(id.name(), ThemeGoldenGate),
             ThemeId::Arena => MenuItem::action(id.name(), ThemeArena),
             ThemeId::Curator => MenuItem::action(id.name(), ThemeCurator),
             ThemeId::Bench => MenuItem::action(id.name(), ThemeBench),

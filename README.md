@@ -33,13 +33,12 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
 - **Import a Keymap**, on a board's page, opens an existing `.keymap` file or a MoErgo Layout Editor export as a new layout. Firmware settings found with it are offered to the board.
 - **Themes**: *View › Theme* chooses the app's look. Each is a data file, and the typefaces they use are carried in the app (all under the SIL Open Font License).
   - *Gallery*, the default: the keyboard set out like an exhibit, with sculpted keycaps on a plinth, large display type and one accent color.
-  - *Golden Gate*: macOS glass. The window is see-through and blurs the desktop behind it; system type, capsule buttons.
   - *Arena*: near-black with violet and lime, capitals, and keys lit along their lower edge by kind.
   - *Curator*: the terminal look of vm-curator, in monospace, with the editor's shortcuts in its status line.
   - *Bench*: a workshop. Light keycaps with slate and orange accents on a dark desk mat, and a pegboard behind My Boards.
 - **Help menu**: *Keyboard Shortcuts* lists every shortcut. *Check for Updates…* asks GitHub for the newest release and offers its page; the same check runs when the app starts unless *Check for Updates at Launch* is turned off. It sends nothing but the request.
 - **LED check**: the Lighting mode has two patterns, one color per row and one per column, for confirming that each LED sits under the key the board definition says. On a board whose LED order has not been seen on hardware (the Imprint), put them on the keyboard and note any key lit in the wrong color.
-- **Light and dark**: Gallery and Golden Gate come in both and follow the computer's appearance; Arena, Curator and Bench are dark. *View › Appearance* holds it to light or dark instead.
+- **Light and dark**: Gallery comes in both and follows the computer's appearance; Arena, Curator and Bench are dark. *View › Appearance* holds it to light or dark instead.
 
 ### Firmware families
 

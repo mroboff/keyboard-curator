@@ -1819,9 +1819,6 @@ impl Render for Shell {
             .on_action(cx.listener(|this, _: &crate::ThemeGallery, _, cx| {
                 this.set_theme(ThemeId::Gallery, cx);
             }))
-            .on_action(cx.listener(|this, _: &crate::ThemeGoldenGate, _, cx| {
-                this.set_theme(ThemeId::GoldenGate, cx);
-            }))
             .on_action(cx.listener(|this, _: &crate::ThemeArena, _, cx| {
                 this.set_theme(ThemeId::Arena, cx);
             }))

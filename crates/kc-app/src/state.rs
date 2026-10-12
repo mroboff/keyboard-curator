@@ -32,16 +32,14 @@ pub enum Appearance {
 pub enum ThemeId {
     #[default]
     Gallery,
-    GoldenGate,
     Arena,
     Curator,
     Bench,
 }
 
 impl ThemeId {
-    pub const ALL: [ThemeId; 5] = [
+    pub const ALL: [ThemeId; 4] = [
         ThemeId::Gallery,
-        ThemeId::GoldenGate,
         ThemeId::Arena,
         ThemeId::Curator,
         ThemeId::Bench,
@@ -50,7 +48,6 @@ impl ThemeId {
     pub fn name(self) -> &'static str {
         match self {
             ThemeId::Gallery => "Gallery",
-            ThemeId::GoldenGate => "Golden Gate",
             ThemeId::Arena => "Arena",
             ThemeId::Curator => "Curator",
             ThemeId::Bench => "Bench",
@@ -68,6 +65,9 @@ pub struct AppState {
     pub recent: Vec<PathBuf>,
     pub window: Option<WindowFrame>,
     pub appearance: Appearance,
+    /// A theme the app no longer has (Golden Gate, retired 2026-10-12)
+    /// falls back to the default rather than losing the whole state.
+    #[serde(deserialize_with = "theme_or_default")]
     pub theme: ThemeId,
     /// The folder the ZMK config was last exported to.
     pub export_dir: Option<PathBuf>,
@@ -129,6 +129,11 @@ impl AppState {
     }
 }
 
+fn theme_or_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<ThemeId, D::Error> {
+    let name = String::deserialize(d)?;
+    Ok(serde_json::from_value(serde_json::Value::String(name)).unwrap_or_default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,5 +184,15 @@ mod tests {
             state.earlier_repo(None, "moergo-go60"),
             Some("/repos/go60".into())
         );
+    }
+
+    #[test]
+    fn a_retired_theme_in_saved_state_falls_back_to_the_default() {
+        let state: AppState =
+            serde_json::from_str(r#"{"theme": "golden_gate", "appearance": "dark"}"#).unwrap();
+        assert_eq!(state.theme, ThemeId::Gallery);
+        assert_eq!(state.appearance, Appearance::Dark);
+        let kept: AppState = serde_json::from_str(r#"{"theme": "bench"}"#).unwrap();
+        assert_eq!(kept.theme, ThemeId::Bench);
     }
 }
