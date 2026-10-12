@@ -17,6 +17,9 @@ use crate::features::SettingValue;
 /// RMK's settings are keyed `rmk.<section>.<name>`, after the sections of
 /// its runtime configuration; ZMK's are Kconfig symbols.
 pub const RMK_SETTING_PREFIX: &str = "rmk.";
+/// Dygma's settings are keyed `dygma.<section>.<name>`, each standing for
+/// one Focus command.
+pub const DYGMA_SETTING_PREFIX: &str = "dygma.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct FirmwareConfig {
@@ -125,6 +128,9 @@ impl FirmwareConfig {
     pub fn offers(&self, key: &str, board: &Board) -> bool {
         if key.starts_with(RMK_SETTING_PREFIX) {
             return self.family(board) == Family::Rmk;
+        }
+        if key.starts_with(DYGMA_SETTING_PREFIX) {
+            return self.family(board) == Family::Dygma;
         }
         if self.family(board) != Family::Zmk {
             return false;

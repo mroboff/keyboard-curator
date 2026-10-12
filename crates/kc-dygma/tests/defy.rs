@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use kc_boards::board::DygmaProfile;
 use kc_boards::Board;
 use kc_dygma::codec::{decode, encode, kept, NONE, TRANSPARENT};
-use kc_dygma::{check, expressible, Focus, FocusError, WRITES};
+use kc_dygma::{check, expressible, Focus, FocusError};
 use kc_model::features::{KeyLight, LockKind, Rgb};
 use kc_model::{Binding, KeyExpr, LayerId, Param, Severity};
 use kc_zmk::Modifier;
@@ -39,6 +39,26 @@ impl Simulated {
         values.insert("hardware.chip_id".into(), "0123456789abcdef".into());
         values.insert("keymap.onlyCustom".into(), "1".into());
         values.insert("settings.defaultLayer".into(), "0".into());
+        for (command, value) in [
+            ("qukeys.holdTimeout", "250"),
+            ("qukeys.overlapThreshold", "80"),
+            ("superkeys.timeout", "250"),
+            ("mouse.speed", "20"),
+            ("led.mode", "0"),
+            ("led.brightness", "153"),
+            ("idleleds.time_limit", "300"),
+            ("idleleds.true_sleep", "0"),
+            ("wireless.battery.savingMode", "0"),
+            ("wireless.rf.power", "2"),
+            ("wireless.rf.channelHop", "false"),
+            ("wireless.bluetooth.deviceName", "Defy"),
+            ("wireless.battery.left.level", "80"),
+            ("wireless.battery.right.level", "75"),
+            ("wireless.battery.left.status", "1"),
+            ("wireless.battery.right.status", "0"),
+        ] {
+            values.insert(command.into(), value.into());
+        }
         values.insert(
             "keymap.custom".into(),
             numbers(profile.layers * profile.slots, "0"),
@@ -401,8 +421,6 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         ("keymap.custom", profile.layers * profile.slots),
         ("palette", profile.palette * 4),
         ("colormap.map", profile.layers * profile.leds),
-        ("keymap.onlyCustom", 1),
-        ("settings.defaultLayer", 1),
         ("superkeys.map", after.superkeys.len()),
         ("macros.map", after.macros.len()),
     ];
@@ -415,17 +433,29 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
             continue;
         }
         writes += 1;
-        assert!(WRITES.contains(&command), "{command}");
-        let size = sizes.iter().find(|(name, _)| *name == command).unwrap().1;
-        assert_eq!(payload, size, "{command}");
+        assert!(kc_dygma::writable(command), "{command}");
+        match sizes.iter().find(|(name, _)| *name == command) {
+            Some((_, size)) => assert_eq!(payload, *size, "{command}"),
+            None => assert_eq!(payload, 1, "{command}"),
+        }
     }
     // Only the keymap differed, so only the keymap was written.
     assert_eq!(writes, 1);
+    // Wireless commands are only ever read, and only the settings and
+    // battery ones.
+    for line in &keyboard.received {
+        if let Some(rest) = line.strip_prefix("wireless.") {
+            assert!(!rest.contains(' '), "{line}");
+            assert!(
+                kc_dygma::settings::is_command(line) || rest.starts_with("battery."),
+                "{line}"
+            );
+        }
+    }
     for dangerous in [
         "eeprom",
         "upgrade",
         "hardware.flash",
-        "wireless",
         "macros.trigger",
         "settings.version",
         "settings.crc",
@@ -690,4 +720,95 @@ fn macros_are_macros_on_the_key() {
     let problems = check(&project, &profile);
     assert!(problems.iter().any(|p| p.message.contains("released")));
     assert!(!expressible(&Binding::user(own, vec![]), &project));
+}
+
+#[test]
+fn settings_are_read_and_written_as_the_keyboard_lists_them() {
+    use kc_model::features::SettingValue;
+    use kc_model::FirmwareConfig;
+
+    let (board, profile) = defy();
+    let mut focus = Focus::new(Simulated::new(&profile));
+    let before = focus.read_image().unwrap();
+    let carried = before.carried();
+    assert_eq!(
+        carried.settings["dygma.typing.hold_timeout"],
+        SettingValue::Int(250)
+    );
+    assert_eq!(
+        carried.settings["dygma.keymap.default_layer"],
+        SettingValue::Int(1),
+        "counted from 1"
+    );
+    assert_eq!(
+        carried.settings["dygma.lights.mode"],
+        SettingValue::Text("Layer colors".into())
+    );
+    assert_eq!(
+        carried.settings["dygma.wireless.rf_channel_hop"],
+        SettingValue::Bool(false)
+    );
+    assert_eq!(
+        before.battery_summary().as_deref(),
+        Some("Battery: left 80% charging, right 75% discharging")
+    );
+
+    // The board changes two settings; only those are written, the switch
+    // in the words the keyboard used.
+    let mut config = FirmwareConfig::stock(&board);
+    config.absorb(carried);
+    config
+        .settings
+        .insert("dygma.typing.hold_timeout".into(), SettingValue::Int(200));
+    config.settings.insert(
+        "dygma.wireless.rf_channel_hop".into(),
+        SettingValue::Bool(true),
+    );
+    let project = before.to_project("Mine", &board, &profile).unwrap();
+    let after = before
+        .with_project(&project, &profile)
+        .unwrap()
+        .with_settings(&config);
+    let sent = focus.write_changes(&before, &after).unwrap();
+    assert_eq!(sent, ["qukeys.holdTimeout", "wireless.rf.channelHop"]);
+    let keyboard = focus.into_inner();
+    assert!(
+        keyboard
+            .received
+            .contains(&"qukeys.holdTimeout 200".to_string()),
+        "{:?}",
+        keyboard.received
+    );
+    assert!(keyboard
+        .received
+        .contains(&"wireless.rf.channelHop true".to_string()));
+    assert!(!keyboard
+        .received
+        .iter()
+        .any(|line| line.starts_with("mouse.speed ")));
+
+    // A wired Defy lists no wireless commands: none are read, carried or
+    // written, and the board's wireless settings are left alone.
+    let mut wired = Simulated::new(&profile);
+    wired
+        .values
+        .retain(|command, _| !command.starts_with("wireless."));
+    let mut focus = Focus::new(wired);
+    let before = focus.read_image().unwrap();
+    assert!(before.battery_summary().is_none());
+    assert!(!before
+        .carried()
+        .settings
+        .contains_key("dygma.wireless.rf_channel_hop"));
+    let after = before
+        .with_project(&project, &profile)
+        .unwrap()
+        .with_settings(&config);
+    let sent = focus.write_changes(&before, &after).unwrap();
+    assert_eq!(sent, ["qukeys.holdTimeout"]);
+    assert!(!focus
+        .into_inner()
+        .received
+        .iter()
+        .any(|line| line.starts_with("wireless")));
 }

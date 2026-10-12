@@ -13,6 +13,7 @@
 
 pub mod codec;
 pub mod macros;
+pub mod settings;
 pub mod superkeys;
 
 use std::io::{Read, Write};
@@ -27,31 +28,37 @@ use serde::{Deserialize, Serialize};
 
 /// The commands this crate reads with. None takes an argument, so none can
 /// change anything.
-const READS: [&str; 12] = [
+const READS: [&str; 14] = [
     "help",
     "version",
     "hardware.version",
     "hardware.chip_id",
     "keymap.custom",
-    "keymap.onlyCustom",
-    "settings.defaultLayer",
     "palette",
     "colormap.map",
     "superkeys.map",
     "macros.map",
     "macros.memory",
+    "wireless.battery.left.level",
+    "wireless.battery.right.level",
+    "wireless.battery.left.status",
+    "wireless.battery.right.status",
 ];
 
-/// The only commands this crate writes with.
-pub const WRITES: [&str; 7] = [
+/// The only commands this crate writes with, besides the settings in
+/// [`settings::MAPPINGS`].
+pub const WRITES: [&str; 5] = [
     "keymap.custom",
     "palette",
     "colormap.map",
-    "keymap.onlyCustom",
-    "settings.defaultLayer",
     "superkeys.map",
     "macros.map",
 ];
+
+/// Whether a command may ever be written.
+pub fn writable(command: &str) -> bool {
+    WRITES.contains(&command) || settings::is_command(command)
+}
 
 /// Commands every Focus firmware has, sent whether or not `help` lists
 /// them: the list itself, and what identifies the keyboard.
@@ -150,7 +157,7 @@ impl<T: Read + Write> Focus<T> {
     /// only when the keyboard lists them; a command it lacks reads as
     /// `None`.
     fn read(&mut self, command: &str) -> Result<Option<String>, FocusError> {
-        if !READS.contains(&command) {
+        if !READS.contains(&command) && !settings::is_command(command) {
             return Err(FocusError::Refused(command.to_string()));
         }
         if !self.has(command)? {
@@ -193,7 +200,7 @@ impl<T: Read + Write> Focus<T> {
     /// Writes a value. Only the commands in [`WRITES`] are sent, and only
     /// when the keyboard lists them.
     fn write<N: ToString>(&mut self, command: &str, values: &[N]) -> Result<(), FocusError> {
-        if !WRITES.contains(&command) || !self.has(command)? {
+        if !writable(command) || !self.has(command)? {
             return Err(FocusError::Refused(command.to_string()));
         }
         let payload: Vec<String> = values.iter().map(ToString::to_string).collect();
@@ -203,22 +210,42 @@ impl<T: Read + Write> Focus<T> {
 
     /// Reads everything this app works with from the keyboard.
     pub fn read_image(&mut self) -> Result<Image, FocusError> {
-        fn scalar<N: std::str::FromStr>(text: Option<String>) -> Option<N> {
-            text.and_then(|t| t.trim().parse().ok())
-        }
         Ok(Image {
             version: self.read_required("version")?,
             hardware: self.read("hardware.version")?.unwrap_or_default(),
             chip_id: self.read_required("hardware.chip_id")?,
             commands: self.commands()?.to_vec(),
             keymap: self.read_numbers("keymap.custom")?,
-            only_custom: scalar(self.read("keymap.onlyCustom")?),
-            default_layer: scalar(self.read("settings.defaultLayer")?),
+            settings: {
+                let mut found = std::collections::BTreeMap::new();
+                for mapping in settings::MAPPINGS {
+                    if let Some(text) = self.read(mapping.command)? {
+                        found.insert(mapping.command.to_string(), text.trim().to_string());
+                    }
+                }
+                found
+            },
+            battery: {
+                let mut found = std::collections::BTreeMap::new();
+                for command in [
+                    "wireless.battery.left.level",
+                    "wireless.battery.right.level",
+                    "wireless.battery.left.status",
+                    "wireless.battery.right.status",
+                ] {
+                    if let Some(text) = self.read(command)? {
+                        found.insert(command.to_string(), text.trim().to_string());
+                    }
+                }
+                found
+            },
             palette: self.read_numbers("palette")?,
             colormap: self.read_numbers("colormap.map")?,
             superkeys: self.read_numbers_if_any("superkeys.map")?,
             macros: self.read_numbers_if_any("macros.map")?,
-            macro_memory: scalar(self.read("macros.memory")?),
+            macro_memory: self
+                .read("macros.memory")?
+                .and_then(|t| t.trim().parse().ok()),
         })
     }
 
@@ -261,16 +288,18 @@ impl<T: Read + Write> Focus<T> {
             self.write("keymap.custom", &new.keymap)?;
             sent.push("keymap.custom");
         }
-        if let (Some(before), Some(after)) = (current.only_custom, new.only_custom) {
+        // Settings last, each one value, only where the keyboard has the
+        // command and the value differs.
+        for mapping in settings::MAPPINGS {
+            let (Some(before), Some(after)) = (
+                current.settings.get(mapping.command),
+                new.settings.get(mapping.command),
+            ) else {
+                continue;
+            };
             if before != after {
-                self.write("keymap.onlyCustom", &[after])?;
-                sent.push("keymap.onlyCustom");
-            }
-        }
-        if let (Some(before), Some(after)) = (current.default_layer, new.default_layer) {
-            if before != after {
-                self.write("settings.defaultLayer", &[after])?;
-                sent.push("settings.defaultLayer");
+                self.write(mapping.command, std::slice::from_ref(after))?;
+                sent.push(mapping.command);
             }
         }
         Ok(sent)
@@ -290,13 +319,14 @@ pub struct Image {
     pub commands: Vec<String>,
     /// One key code per slot, layer after layer.
     pub keymap: Vec<u16>,
-    /// Whether the two factory layers are hidden; `None` on firmware
-    /// without the command.
+    /// The settings the keyboard listed, by Focus command, as it wrote
+    /// them.
     #[serde(default)]
-    pub only_custom: Option<u8>,
-    /// The layer the keyboard starts on.
+    pub settings: std::collections::BTreeMap<String, String>,
+    /// The halves' battery levels and states, by command, on a wireless
+    /// keyboard.
     #[serde(default)]
-    pub default_layer: Option<u8>,
+    pub battery: std::collections::BTreeMap<String, String>,
     /// The palette's color channels, color after color.
     pub palette: Vec<u8>,
     /// One palette index per light, layer after layer.
@@ -357,6 +387,62 @@ impl Image {
     /// The image as a file, for a backup taken before writing.
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("an image always serializes")
+    }
+
+    /// The keyboard's settings as the board takes them.
+    pub fn carried(&self) -> kc_model::Carried {
+        let mut carried = kc_model::Carried::default();
+        for mapping in settings::MAPPINGS {
+            if let Some(text) = self.settings.get(mapping.command) {
+                if let Some(value) = settings::value_of(mapping.key, text) {
+                    carried.settings.insert(mapping.key.to_string(), value);
+                }
+            }
+        }
+        carried
+    }
+
+    /// The halves' batteries in words, on a wireless keyboard.
+    pub fn battery_summary(&self) -> Option<String> {
+        let state = |text: &str| match text.trim() {
+            "0" => "discharging",
+            "1" => "charging",
+            "2" => "full",
+            "3" => "faulty",
+            "4" => "disconnected",
+            _ => "unknown",
+        };
+        let left = self.battery.get("wireless.battery.left.level")?;
+        let right = self.battery.get("wireless.battery.right.level")?;
+        let left_state = self
+            .battery
+            .get("wireless.battery.left.status")
+            .map_or("", |s| state(s));
+        let right_state = self
+            .battery
+            .get("wireless.battery.right.status")
+            .map_or("", |s| state(s));
+        Some(format!(
+            "Battery: left {left}% {left_state}, right {right}% {right_state}"
+        ))
+    }
+
+    /// The image with the board's settings written in, where the keyboard
+    /// has the command; the rest of the image is unchanged.
+    pub fn with_settings(&self, config: &kc_model::FirmwareConfig) -> Image {
+        let mut image = self.clone();
+        for mapping in settings::MAPPINGS {
+            let Some(value) = config.settings.get(mapping.key) else {
+                continue;
+            };
+            let Some(current) = self.settings.get(mapping.command) else {
+                continue;
+            };
+            if let Some(text) = settings::text_of(mapping.key, value, current) {
+                image.settings.insert(mapping.command.to_string(), text);
+            }
+        }
+        image
     }
 
     /// A layout holding what the image holds: every layer, with its keys
@@ -902,13 +988,14 @@ pub fn apply(
     project: &Project,
     board: &Board,
     profile: &DygmaProfile,
+    config: &kc_model::FirmwareConfig,
     device: Option<&Device>,
     backup: impl FnOnce(&Image) -> std::io::Result<()>,
 ) -> Result<Applied, FocusError> {
     let port = find_port(board, device).ok_or(FocusError::NotFound)?;
     let mut focus = open(&port)?;
     let before = focus.read_image()?;
-    let new = before.with_project(project, profile)?;
+    let new = before.with_project(project, profile)?.with_settings(config);
     if new == before {
         return Ok(Applied {
             before,

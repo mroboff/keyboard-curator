@@ -80,12 +80,13 @@ pub fn expressible(
 }
 
 /// The settings a board's firmware offers as typed controls: ZMK's Kconfig
-/// options, or RMK's runtime settings. Dygma has none.
+/// options, RMK's runtime settings, or Dygma's Focus settings.
 pub fn settings(board: &Board, config: &FirmwareConfig) -> &'static [Setting] {
     match config.family(board) {
         Family::Zmk => kc_zmk::settings::SETTINGS,
         Family::Rmk if config.delivery(board) == Delivery::Released => kc_rmk::settings::SETTINGS,
-        Family::Rmk | Family::Dygma => &[],
+        Family::Rmk => &[],
+        Family::Dygma => kc_dygma::settings::SETTINGS,
     }
 }
 
@@ -226,8 +227,8 @@ pub mod live {
                     .map_err(|e| e.to_string())?;
                 Ok(Read {
                     project,
-                    carried: Carried::default(),
-                    notes: Vec::new(),
+                    carried: image.carried(),
+                    notes: image.battery_summary().into_iter().collect(),
                 })
             }
             (Family::Rmk, Delivery::Released) => {
@@ -261,7 +262,7 @@ pub mod live {
             (Family::Dygma, _) => {
                 let profile = dygma(board, config).ok_or_else(|| not_live(board, config))?;
                 let mut saved = None;
-                let applied = kc_dygma::apply(project, board, profile, device, |before| {
+                let applied = kc_dygma::apply(project, board, profile, config, device, |before| {
                     std::fs::create_dir_all(backups)?;
                     let path = backups.join(format!(
                         "{}-{}-{}.json",

@@ -1409,10 +1409,10 @@ impl BoardPage {
             .child(heading("Settings", cx))
             .child(help(format!(
                 "Settings of {firmware}, the firmware chosen under Firmware. They belong to the board, and apply whichever layout it is built with.{}",
-                if delivery == Delivery::Released {
-                    " A setting left at the board default is not written to the keyboard: what the keyboard holds for it stays."
-                } else {
-                    ""
+                match delivery {
+                    Delivery::Released => " A setting left at the board default is not written to the keyboard: what the keyboard holds for it stays.",
+                    Delivery::Live => " Read From Keyboard brings the keyboard's settings here, and Apply To Keyboard writes the ones that differ. Settings the keyboard does not have are left alone.",
+                    Delivery::Build => "",
                 }
             ), cx));
         let settings = kc_firmware::settings(&self.board, config);
