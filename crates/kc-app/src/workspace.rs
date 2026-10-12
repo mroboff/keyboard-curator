@@ -1866,15 +1866,6 @@ impl Workspace {
             })
             .collect::<Vec<_>>();
 
-        let hint = match (&self.hint, &self.notice, self.selection.len()) {
-            (Some(hint), _, _) => hint.clone(),
-            (None, Some(notice), _) => notice.clone(),
-            (None, None, 0) => {
-                "Select a key on the keyboard, then choose what it does.".to_string()
-            }
-            (None, None, 1) => "Choose what the selected key does.".to_string(),
-            (None, None, n) => format!("Choose what the {n} selected keys do."),
-        };
         let (advance, typing) = (self.auto_advance, self.type_to_assign);
         div()
             .flex_1()
@@ -1890,7 +1881,7 @@ impl Workspace {
                     .items_center()
                     .gap_3()
                     .child(div().w_56().child(Input::new(&self.search)))
-                    .child(div().flex_1().text_xs().text_color(muted).child(hint))
+                    .child(div().flex_1())
                     .child(
                         chip("type-to-assign", "Type to assign", typing, cx).on_click(cx.listener(
                             |this, _, window, cx| {
@@ -2201,7 +2192,6 @@ impl Workspace {
 
     fn render_mode_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
-        let muted = cx.theme().muted_foreground;
         let features = self.features();
         let tabs = Mode::TABS
             .into_iter()
@@ -2220,13 +2210,57 @@ impl Workspace {
             .border_b_1()
             .border_color(border)
             .children(tabs)
+    }
+
+    /// One place for what the app has to say: the description of the
+    /// picker entry under the pointer, a notice such as "Copied 3 key(s)"
+    /// or what the firmware hides, or a word on what to do next. The row
+    /// keeps its height when empty, so nothing jumps as the pointer moves.
+    fn render_message(&self, cx: &mut Context<Self>) -> Div {
+        let look = crate::theme::look(cx);
+        let (colors, radius) = (look.colors, look.control_radius);
+        let muted = cx.theme().muted_foreground;
+        let text = match (&self.hint, &self.notice, self.mode, self.selection.len()) {
+            (Some(hint), _, _, _) => hint.clone(),
+            (None, Some(notice), _, _) => notice.clone(),
+            (None, None, Mode::Keyboard, 0) => {
+                "Select a key on the keyboard, then choose what it does.".to_string()
+            }
+            (None, None, Mode::Keyboard, 1) => "Choose what the selected key does.".to_string(),
+            (None, None, Mode::Keyboard, n) => format!("Choose what the {n} selected keys do."),
+            _ => String::new(),
+        };
+        // A hint speaks for the thing under the pointer; a notice for the
+        // app. The dot says which.
+        let dot = if self.hint.is_some() {
+            colors.accent_text
+        } else {
+            muted
+        };
+        div()
+            .mx_5()
+            .my_2()
+            .px_4()
+            .py_2()
+            .min_h(px(38.))
+            .flex()
+            .items_center()
+            .gap_3()
+            .rounded(radius)
+            .bg(colors.plinth)
+            .border_1()
+            .border_color(colors.plinth_border)
+            .when(!text.is_empty(), |panel| {
+                panel.child(div().size_2().flex_shrink_0().rounded_full().bg(dot))
+            })
             .child(
                 div()
                     .flex_1()
-                    .px_3()
-                    .text_xs()
-                    .text_color(muted)
-                    .child(self.notice.clone().unwrap_or_default()),
+                    .min_w_0()
+                    .text_sm()
+                    .line_height(relative(1.4))
+                    .whitespace_normal()
+                    .child(text),
             )
     }
 
@@ -2475,6 +2509,7 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .child(self.render_mode_bar(cx))
+                    .child(self.render_message(cx))
                     .map(|main| match self.mode {
                         Mode::Keyboard => main.child(self.render_canvas(cx)).child(
                             div()
