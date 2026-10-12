@@ -524,6 +524,48 @@ pub const BUILT_IN: &[Behavior] = &[
             Group::System,
         )
     },
+    // Dygma's own keys. They have no ZMK form; the labels are this app's,
+    // and the Dygma family writes them as the firmware's codes.
+    Behavior {
+        requires: Some(Feature::DygmaKeys),
+        ..behavior(
+            "dygma_battery",
+            "Battery status",
+            "Show each half's battery level on the keys",
+            &[],
+            Group::System,
+        )
+    },
+    Behavior {
+        requires: Some(Feature::DygmaKeys),
+        ..behavior(
+            "dygma_bluetooth",
+            "Bluetooth pairing",
+            "Start pairing with a Bluetooth host",
+            &[],
+            Group::System,
+        )
+    },
+    Behavior {
+        requires: Some(Feature::DygmaKeys),
+        ..behavior(
+            "dygma_energy",
+            "Energy status",
+            "Show the energy-saving mode on the keys",
+            &[],
+            Group::System,
+        )
+    },
+    Behavior {
+        requires: Some(Feature::DygmaKeys),
+        ..behavior(
+            "dygma_rf",
+            "RF status",
+            "Show the radio link's status on the keys",
+            &[],
+            Group::System,
+        )
+    },
 ];
 
 /// Looks a built-in behavior up by its label (without the `&`).

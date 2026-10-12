@@ -45,11 +45,13 @@ id = "dygma-defy"
 name = "Dygma firmware"
 family = "dygma"
 experimental = true
-capabilities = ["per-key-lighting"]
+# The RGB capability is for the LED keys (next and previous effect,
+# toggle), which the firmware has; other lighting commands are not offered.
+capabilities = ["per-key-lighting", "rgb-underglow"]
 notes = [
   "Configured live over USB: there is nothing to build. A layout is written to the keyboard when you apply it, and takes effect at once.",
   "Close Dygma's Bazecor while using this app. Only one program can talk to the keyboard at a time. Firmware updates stay with Bazecor.",
-  "Superkeys, macros, mouse and media keys and the underglow colors are kept exactly as they are on the keyboard, but cannot be edited here yet.",
+  "Superkeys, macros and the underglow colors are kept exactly as they are on the keyboard, but cannot be edited here yet.",
   "Writing to a keyboard has so far only been tested against a simulated one. A backup of the keyboard's configuration is saved before the first write.",
 ]
 

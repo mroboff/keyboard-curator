@@ -216,7 +216,8 @@ impl Family {
     /// its own capabilities.
     pub fn base_features(self) -> &'static [Capability] {
         use Capability::{
-            Build, Combos, Devicetree, HoldTaps, LayerRules, Macros, ModMorph, StickyKeys, TapDance,
+            Build, Combos, Devicetree, DygmaKeys, HoldTaps, LayerRules, Macros, ModMorph,
+            StickyKeys, TapDance,
         };
         match self {
             Family::Zmk => &[
@@ -226,8 +227,8 @@ impl Family {
             // Behaviors defined in a layout are not translated to RMK yet.
             Family::Rmk => &[Build, Combos],
             // Dygma's superkeys and macros are kept as the keyboard has
-            // them, and are not edited yet.
-            Family::Dygma => &[],
+            // them until KEY-89 and KEY-90; its own keys are offered.
+            Family::Dygma => &[DygmaKeys],
         }
     }
 }

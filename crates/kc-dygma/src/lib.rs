@@ -6,9 +6,10 @@
 //! protocol. Reading works the same way in reverse.
 //!
 //! Every write goes straight to the keyboard's flash, so this crate is
-//! strict about what it sends: only the three commands in [`WRITES`], only
-//! with payloads of exactly the right size, and only what has changed.
-//! Superkeys, macros and settings are never written.
+//! strict about what it sends: only the commands in [`WRITES`], only with
+//! payloads of exactly the right size, and only what has changed. The
+//! keyboard's own list of commands, from `help`, gates everything else, so
+//! a firmware that lacks a command is never sent it.
 
 pub mod codec;
 
@@ -23,16 +24,30 @@ use serde::{Deserialize, Serialize};
 
 /// The commands this crate reads with. None takes an argument, so none can
 /// change anything.
-const READS: [&str; 5] = [
+const READS: [&str; 9] = [
+    "help",
     "version",
+    "hardware.version",
     "hardware.chip_id",
     "keymap.custom",
+    "keymap.onlyCustom",
+    "settings.defaultLayer",
     "palette",
     "colormap.map",
 ];
 
 /// The only commands this crate writes with.
-pub const WRITES: [&str; 3] = ["keymap.custom", "palette", "colormap.map"];
+pub const WRITES: [&str; 5] = [
+    "keymap.custom",
+    "palette",
+    "colormap.map",
+    "keymap.onlyCustom",
+    "settings.defaultLayer",
+];
+
+/// Commands every Focus firmware has, sent whether or not `help` lists
+/// them: the list itself, and what identifies the keyboard.
+const ALWAYS: [&str; 3] = ["help", "version", "hardware.chip_id"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum FocusError {
@@ -55,11 +70,38 @@ pub enum FocusError {
 /// A Focus conversation over any byte stream.
 pub struct Focus<T: Read + Write> {
     stream: T,
+    /// The commands the keyboard listed under `help`, once asked.
+    commands: Option<Vec<String>>,
 }
 
 impl<T: Read + Write> Focus<T> {
     pub fn new(stream: T) -> Self {
-        Self { stream }
+        Self {
+            stream,
+            commands: None,
+        }
+    }
+
+    /// The keyboard's own command list, asked for once.
+    fn commands(&mut self) -> Result<&[String], FocusError> {
+        if self.commands.is_none() {
+            let listed = self
+                .exchange("help")?
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect();
+            self.commands = Some(listed);
+        }
+        Ok(self.commands.as_deref().expect("just set"))
+    }
+
+    /// Whether the keyboard has a command, by its own account.
+    pub fn has(&mut self, command: &str) -> Result<bool, FocusError> {
+        if ALWAYS.contains(&command) {
+            return Ok(true);
+        }
+        Ok(self.commands()?.iter().any(|c| c == command))
     }
 
     /// Ends the conversation and gives the stream back.
@@ -96,16 +138,29 @@ impl<T: Read + Write> Focus<T> {
         }
     }
 
-    /// Asks for a value. Only the commands in the read list are sent.
-    fn read(&mut self, command: &str) -> Result<String, FocusError> {
+    /// Asks for a value. Only the commands in the read list are sent, and
+    /// only when the keyboard lists them; a command it lacks reads as
+    /// `None`.
+    fn read(&mut self, command: &str) -> Result<Option<String>, FocusError> {
         if !READS.contains(&command) {
             return Err(FocusError::Refused(command.to_string()));
         }
-        self.exchange(command)
+        if !self.has(command)? {
+            return Ok(None);
+        }
+        self.exchange(command).map(Some)
+    }
+
+    /// A value the keyboard must have.
+    fn read_required(&mut self, command: &str) -> Result<String, FocusError> {
+        self.read(command)?.ok_or_else(|| FocusError::Malformed {
+            command: command.to_string(),
+            problem: "the keyboard does not list this command".into(),
+        })
     }
 
     fn read_numbers<N: std::str::FromStr>(&mut self, command: &str) -> Result<Vec<N>, FocusError> {
-        self.read(command)?
+        self.read_required(command)?
             .split_whitespace()
             .map(|token| {
                 token.parse().map_err(|_| FocusError::Malformed {
@@ -116,9 +171,10 @@ impl<T: Read + Write> Focus<T> {
             .collect()
     }
 
-    /// Writes a value. Only the commands in [`WRITES`] are sent.
+    /// Writes a value. Only the commands in [`WRITES`] are sent, and only
+    /// when the keyboard lists them.
     fn write<N: ToString>(&mut self, command: &str, values: &[N]) -> Result<(), FocusError> {
-        if !WRITES.contains(&command) {
+        if !WRITES.contains(&command) || !self.has(command)? {
             return Err(FocusError::Refused(command.to_string()));
         }
         let payload: Vec<String> = values.iter().map(ToString::to_string).collect();
@@ -128,10 +184,15 @@ impl<T: Read + Write> Focus<T> {
 
     /// Reads everything this app works with from the keyboard.
     pub fn read_image(&mut self) -> Result<Image, FocusError> {
+        let scalar = |text: Option<String>| text.and_then(|t| t.trim().parse().ok());
         Ok(Image {
-            version: self.read("version")?,
-            chip_id: self.read("hardware.chip_id")?,
+            version: self.read_required("version")?,
+            hardware: self.read("hardware.version")?.unwrap_or_default(),
+            chip_id: self.read_required("hardware.chip_id")?,
+            commands: self.commands()?.to_vec(),
             keymap: self.read_numbers("keymap.custom")?,
+            only_custom: scalar(self.read("keymap.onlyCustom")?),
+            default_layer: scalar(self.read("settings.defaultLayer")?),
             palette: self.read_numbers("palette")?,
             colormap: self.read_numbers("colormap.map")?,
         })
@@ -166,6 +227,18 @@ impl<T: Read + Write> Focus<T> {
             self.write("keymap.custom", &new.keymap)?;
             sent.push("keymap.custom");
         }
+        if let (Some(before), Some(after)) = (current.only_custom, new.only_custom) {
+            if before != after {
+                self.write("keymap.onlyCustom", &[after])?;
+                sent.push("keymap.onlyCustom");
+            }
+        }
+        if let (Some(before), Some(after)) = (current.default_layer, new.default_layer) {
+            if before != after {
+                self.write("settings.defaultLayer", &[after])?;
+                sent.push("settings.defaultLayer");
+            }
+        }
         Ok(sent)
     }
 }
@@ -174,9 +247,22 @@ impl<T: Read + Write> Focus<T> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Image {
     pub version: String,
+    /// What the firmware calls the keyboard, such as `Dygma Defy`.
+    #[serde(default)]
+    pub hardware: String,
     pub chip_id: String,
+    /// Every command the keyboard listed under `help`.
+    #[serde(default)]
+    pub commands: Vec<String>,
     /// One key code per slot, layer after layer.
     pub keymap: Vec<u16>,
+    /// Whether the two factory layers are hidden; `None` on firmware
+    /// without the command.
+    #[serde(default)]
+    pub only_custom: Option<u8>,
+    /// The layer the keyboard starts on.
+    #[serde(default)]
+    pub default_layer: Option<u8>,
     /// The palette's color channels, color after color.
     pub palette: Vec<u8>,
     /// One palette index per light, layer after layer.
@@ -436,6 +522,29 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
                 profile.palette
             ),
         );
+    }
+    // Dygma's firmware has one flag per modifier, with no side: a right-hand
+    // modifier is written as the left one. Said once, not at every key.
+    let right_handed = project.layers.iter().any(|layer| {
+        layer.bindings.iter().any(|binding| match binding {
+            kc_model::Binding::Behavior { params, .. } => params.iter().any(|p| match p {
+                kc_model::Param::Key(expr) => expr.mods.iter().any(|m| {
+                    matches!(
+                        m,
+                        kc_zmk::Modifier::RCtrl | kc_zmk::Modifier::RShift | kc_zmk::Modifier::RGui
+                    )
+                }),
+                _ => false,
+            }),
+            _ => false,
+        })
+    });
+    if right_handed {
+        problems.push(Problem {
+            severity: Severity::Warning,
+            location: Location::Project,
+            message: "Dygma firmware has no right-hand modifiers: right Control, Shift and Command are written as the left ones".into(),
+        });
     }
     problems
 }

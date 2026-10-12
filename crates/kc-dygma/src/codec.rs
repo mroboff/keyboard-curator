@@ -4,8 +4,8 @@
 //! tables in Dygma's Bazecor (src/api/keymap/db) and checked against a Defy
 //! on firmware v2.2.1.
 //!
-//! Codes this app has no binding for (superkeys, macros, mouse and media
-//! keys, LED and wireless keys) are kept as they are: they become a raw
+//! Codes this app has no binding for yet (superkeys, macros, mouse warps,
+//! media keys ZMK does not name) are kept as they are: they become a raw
 //! binding that carries the number, and are written back unchanged.
 
 use kc_model::{BehaviorRef, Binding, KeyExpr, LayerId, Param};
@@ -43,6 +43,35 @@ const SHORT_LAYERS: u16 = 8;
 const MACRO: u16 = 53852;
 const SUPERKEY: u16 = 53980;
 const SLOTS: u16 = 128;
+
+/// The LED effect keys, and ZMK's commands for them.
+const LED_KEYS: [(u16, &str); 3] = [(17152, "RGB_EFF"), (17153, "RGB_EFR"), (17154, "RGB_TOG")];
+
+/// The mouse keys, and the ZMK behavior and constant for each. The warps
+/// (20517, 20518, 20521, 20522, 20576) have no ZMK form and stay raw.
+const MOUSE_KEYS: [(u16, &str, &str); 13] = [
+    (20481, "mmv", "MOVE_UP"),
+    (20482, "mmv", "MOVE_DOWN"),
+    (20484, "mmv", "MOVE_LEFT"),
+    (20488, "mmv", "MOVE_RIGHT"),
+    (20497, "msc", "SCRL_UP"),
+    (20498, "msc", "SCRL_DOWN"),
+    (20500, "msc", "SCRL_LEFT"),
+    (20504, "msc", "SCRL_RIGHT"),
+    (20545, "mkp", "LCLK"),
+    (20546, "mkp", "RCLK"),
+    (20548, "mkp", "MCLK"),
+    (20552, "mkp", "MB4"),
+    (20560, "mkp", "MB5"),
+];
+
+/// Dygma's own keys, which the catalog carries under these labels.
+const DYGMA_KEYS: [(u16, &str); 4] = [
+    (54108, "dygma_battery"),
+    (54109, "dygma_bluetooth"),
+    (54111, "dygma_energy"),
+    (54112, "dygma_rf"),
+];
 
 fn flag(modifier: Modifier) -> u16 {
     match modifier {
@@ -143,16 +172,9 @@ fn key_binding(code: u16) -> Option<Binding> {
 /// short description in front for the keycap.
 pub fn kept(code: u16) -> Binding {
     let what = match code {
-        17152 => "LED next".to_string(),
-        17153 => "LED previous".to_string(),
-        17154 => "LED toggle".to_string(),
         c if (MACRO..MACRO + SLOTS).contains(&c) => format!("Macro {}", c - MACRO + 1),
         c if (SUPERKEY..SUPERKEY + SLOTS).contains(&c) => format!("Superkey {}", c - SUPERKEY + 1),
-        20481..=20576 => "Mouse".to_string(),
-        54108 => "Battery".to_string(),
-        54109 => "Bluetooth pairing".to_string(),
-        54111 => "Energy".to_string(),
-        54112 => "RF".to_string(),
+        20481..=20576 => "Mouse warp".to_string(),
         _ => "Dygma".to_string(),
     };
     Binding::Raw {
@@ -226,6 +248,24 @@ pub fn encode(binding: &Binding, layers: &[LayerId]) -> Result<u16, String> {
                 .ok_or("on Dygma firmware a layer-tap taps a plain key, without modifiers")?;
             Ok(LAYER_TAP + 256 * layer_index(*layer, layers, SHORT_LAYERS)? + tap)
         }
+        ("mkp" | "mmv" | "msc", [Param::Constant(name)]) => MOUSE_KEYS
+            .iter()
+            .find(|(_, behavior, constant)| *behavior == label && constant == name)
+            .map(|(code, _, _)| *code)
+            .ok_or_else(|| format!("Dygma firmware has no mouse key for {name}")),
+        ("rgb_ug", [Param::Command { name, args }]) if args.is_empty() => LED_KEYS
+            .iter()
+            .find(|(_, command)| command == name)
+            .map(|(code, _)| *code)
+            .ok_or_else(|| {
+                "Dygma firmware has LED keys only for the next and previous effect, and toggling"
+                    .to_string()
+            }),
+        (label, []) if DYGMA_KEYS.iter().any(|(_, l)| *l == label) => Ok(DYGMA_KEYS
+            .iter()
+            .find(|(_, l)| *l == label)
+            .map(|(code, _)| *code)
+            .expect("checked above")),
         _ => {
             let name = kc_zmk::behaviors::built_in(label).map_or(label, |b| b.name);
             Err(format!("Dygma firmware has nothing for {name}"))
@@ -276,6 +316,28 @@ pub fn decode(code: u16, layers: &[LayerId]) -> Binding {
                 )
             })
         }
+        c if MOUSE_KEYS.iter().any(|(code, _, _)| *code == c) => MOUSE_KEYS
+            .iter()
+            .find(|(code, _, _)| *code == c)
+            .map(|(_, behavior, constant)| {
+                Binding::new(behavior, vec![Param::Constant((*constant).into())])
+            }),
+        c if LED_KEYS.iter().any(|(code, _)| *code == c) => LED_KEYS
+            .iter()
+            .find(|(code, _)| *code == c)
+            .map(|(_, command)| {
+                Binding::new(
+                    "rgb_ug",
+                    vec![Param::Command {
+                        name: (*command).into(),
+                        args: Vec::new(),
+                    }],
+                )
+            }),
+        c if DYGMA_KEYS.iter().any(|(code, _)| *code == c) => DYGMA_KEYS
+            .iter()
+            .find(|(code, _)| *code == c)
+            .map(|(_, label)| Binding::new(label, vec![])),
         _ => None,
     };
     // Reading a code and writing it back must give the same code, so a

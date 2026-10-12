@@ -53,4 +53,7 @@ pub enum Feature {
     /// `opposite_hand_hold`). ZMK does this with hold-trigger key positions
     /// instead.
     OppositeHandHold,
+    /// The keys of Dygma's firmware with no ZMK counterpart: battery
+    /// status, Bluetooth pairing, energy status and RF status.
+    DygmaKeys,
 }

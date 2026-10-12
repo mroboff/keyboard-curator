@@ -35,7 +35,10 @@ impl Simulated {
         let numbers = |count: usize, value: &str| vec![value; count].join(" ");
         let mut values = BTreeMap::new();
         values.insert("version".into(), "v2.2.1".into());
+        values.insert("hardware.version".into(), "Dygma Defy".into());
         values.insert("hardware.chip_id".into(), "0123456789abcdef".into());
+        values.insert("keymap.onlyCustom".into(), "1".into());
+        values.insert("settings.defaultLayer".into(), "0".into());
         values.insert(
             "keymap.custom".into(),
             numbers(profile.layers * profile.slots, "0"),
@@ -71,7 +74,12 @@ impl Write for Simulated {
             let line = String::from_utf8_lossy(&line).trim().to_string();
             self.received.push(line.clone());
             let (command, payload) = line.split_once(' ').unwrap_or((&line, ""));
-            if payload.is_empty() {
+            if command == "help" {
+                // The keyboard lists what it has, one command per line.
+                let listed: Vec<&str> = self.values.keys().map(String::as_str).collect();
+                self.outgoing
+                    .extend_from_slice(format!("{}\r\n.\r\n", listed.join("\r\n")).as_bytes());
+            } else if payload.is_empty() {
                 let value = self.values.get(command).cloned().unwrap_or_default();
                 self.outgoing
                     .extend_from_slice(format!("{value} \r\n.\r\n").as_bytes());
@@ -172,6 +180,32 @@ fn keys_translate_to_the_firmwares_codes_and_back() {
         ),
         // Volume up is consumer usage 0xE9.
         (kp("C_VOL_UP"), 0x4800 + 0xE9),
+        // Mouse movement, wheel and buttons.
+        (
+            Binding::new("mmv", vec![Param::Constant("MOVE_UP".into())]),
+            20481,
+        ),
+        (
+            Binding::new("msc", vec![Param::Constant("SCRL_RIGHT".into())]),
+            20504,
+        ),
+        (
+            Binding::new("mkp", vec![Param::Constant("MB5".into())]),
+            20560,
+        ),
+        // LED keys and Dygma's own keys.
+        (
+            Binding::new(
+                "rgb_ug",
+                vec![Param::Command {
+                    name: "RGB_EFF".into(),
+                    args: vec![],
+                }],
+            ),
+            17152,
+        ),
+        (Binding::new("dygma_battery", vec![]), 54108),
+        (Binding::new("dygma_rf", vec![]), 54112),
     ];
     for (binding, code) in &cases {
         assert_eq!(encode(binding, &l), Ok(*code), "{binding:?}");
@@ -182,8 +216,9 @@ fn keys_translate_to_the_firmwares_codes_and_back() {
 #[test]
 fn codes_without_a_binding_are_kept_as_they_are() {
     let l = layers(10);
-    // A superkey, a macro, a mouse key, an LED key and a wireless key.
-    for code in [53984u16, 53853, 20481, 17152, 54109, 20865, 23786] {
+    // A superkey, a macro, a mouse warp, a power key and a media key ZMK
+    // does not name.
+    for code in [53984u16, 53853, 20517, 20865, 23786] {
         let binding = decode(code, &l);
         assert!(matches!(binding, Binding::Raw { .. }), "{code}");
         assert_eq!(encode(&binding, &l), Ok(code));
@@ -356,6 +391,8 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         ("keymap.custom", profile.layers * profile.slots),
         ("palette", profile.palette * 4),
         ("colormap.map", profile.layers * profile.leds),
+        ("keymap.onlyCustom", 1),
+        ("settings.defaultLayer", 1),
     ];
     let mut writes = 0;
     for line in &keyboard.received {
@@ -379,7 +416,9 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         "wireless",
         "macros",
         "superkeys",
-        "settings",
+        "settings.version",
+        "settings.crc",
+        "settings.valid",
     ] {
         assert!(!keyboard
             .received
