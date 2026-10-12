@@ -1296,25 +1296,36 @@ impl Shell {
                                 display(keyboard.name.clone(), 26., cx)
                                     .when(!current, |name| name.text_color(muted)),
                             )
-                            .child(div().text_sm().text_color(muted).child(detail)),
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(muted)
+                                    .truncate()
+                                    .text_ellipsis()
+                                    .child(detail),
+                            ),
                     )
-                    .when(connected, |row| {
-                        row.child(div().size_2().rounded_full().bg(success))
-                    })
-                    .when(current, |row| {
-                        row.child(
-                            div()
-                                .size_9()
-                                .flex_shrink_0()
-                                .rounded_full()
-                                .bg(accent)
-                                .text_color(accent_text)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child("→"),
-                        )
-                    })
+                    // The dot and the arrow keep their room on every row,
+                    // so pointing at a board moves nothing else.
+                    .child(
+                        div()
+                            .size_2()
+                            .flex_shrink_0()
+                            .rounded_full()
+                            .when(connected, |dot| dot.bg(success)),
+                    )
+                    .child(
+                        div()
+                            .size_9()
+                            .flex_shrink_0()
+                            .rounded_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .when(current, |arrow| {
+                                arrow.bg(accent).text_color(accent_text).child("→")
+                            }),
+                    )
                     // Pointing at a board shows it off; clicking opens it.
                     .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                         if *hovered && this.shown != Some(id) {
