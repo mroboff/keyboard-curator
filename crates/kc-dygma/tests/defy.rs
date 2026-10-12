@@ -52,6 +52,9 @@ impl Simulated {
             "colormap.map".into(),
             numbers(profile.layers * profile.leds, "0"),
         );
+        // Bazecor's own example superkey: Ctrl+C, Ctrl+V, Ctrl+Shift+V,
+        // Ctrl+X, and nothing on the last action.
+        values.insert("superkeys.map".into(), "262 281 2329 283 1 0 0".into());
         Self {
             values,
             received: Vec::new(),
@@ -393,6 +396,7 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         ("colormap.map", profile.layers * profile.leds),
         ("keymap.onlyCustom", 1),
         ("settings.defaultLayer", 1),
+        ("superkeys.map", after.superkeys.len()),
     ];
     let mut writes = 0;
     for line in &keyboard.received {
@@ -415,7 +419,6 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         "hardware.flash",
         "wireless",
         "macros",
-        "superkeys",
         "settings.version",
         "settings.crc",
         "settings.valid",
@@ -497,4 +500,89 @@ fn a_silent_keyboard_is_reported_as_one() {
     let error = Focus::new(Silent).read_image().unwrap_err();
     assert!(matches!(error, FocusError::Timeout(_)));
     assert!(error.to_string().contains("Bazecor"));
+}
+
+#[test]
+fn superkeys_are_the_slots_of_a_key() {
+    use kc_model::setup::KeySetup;
+
+    let (board, profile) = defy();
+    let mut focus = Focus::new(Simulated::new(&profile));
+    let mut before = focus.read_image().unwrap();
+    // The first key uses Bazecor's example superkey.
+    before.keymap[profile.key_slots[0]] = 53980;
+    let project = before.to_project("Mine", &board, &profile).unwrap();
+    let base = project.layers[0].id;
+    let setup = KeySetup::of(&project, base, 0).unwrap();
+    let with = |key: &str, mods: &[Modifier]| {
+        let mut expr = KeyExpr::new(key);
+        for m in mods {
+            expr = expr.with(*m);
+        }
+        Binding::kp(expr)
+    };
+    assert_eq!(setup.tap, with("C", &[Modifier::LCtrl]));
+    assert_eq!(setup.hold, Some(with("V", &[Modifier::LCtrl])));
+    assert_eq!(
+        setup.tap_hold,
+        Some(with("V", &[Modifier::LShift, Modifier::LCtrl]))
+    );
+    assert_eq!(setup.double_tap, Some(with("X", &[Modifier::LCtrl])));
+    assert_eq!(setup.double_tap_hold, None);
+
+    // Applied unchanged, nothing is written.
+    let same = before.with_project(&project, &profile).unwrap();
+    assert_eq!(same, before);
+
+    // A new key setup takes a new entry; an identical one shares it.
+    let mut project = project;
+    let mut dance = KeySetup::plain(Binding::kp(KeyExpr::new("A")));
+    dance.double_tap = Some(Binding::kp(KeyExpr::new("ESC")));
+    dance.double_tap_hold = Some(Binding::layer("mo", project.layers[1].id));
+    project.apply_setup(base, 1, &dance).unwrap();
+    project.apply_setup(base, 2, &dance).unwrap();
+    let mut sticky = KeySetup::plain(Binding::kp(KeyExpr::new("LSHFT")));
+    sticky.sticky = true;
+    sticky.double_tap = Some(Binding::new("dygma_battery", vec![]));
+    project.apply_setup(base, 3, &sticky).unwrap();
+    assert!(check(&project, &profile).is_empty());
+    let after = before.with_project(&project, &profile).unwrap();
+    assert_eq!(after.keymap[profile.key_slots[1]], 53981);
+    assert_eq!(after.keymap[profile.key_slots[2]], 53981);
+    assert_eq!(after.keymap[profile.key_slots[3]], 53982);
+    assert_eq!(
+        after.superkeys,
+        [262, 281, 2329, 283, 1, 0, 4, 1, 1, 41, 17451, 0, 49154, 1, 1, 54108, 1, 0, 0]
+    );
+    let sent = focus.write_changes(&before, &after).unwrap();
+    assert_eq!(sent, ["superkeys.map", "keymap.custom"]);
+    // Read back, the keys come out as they were set up.
+    let again = focus
+        .read_image()
+        .unwrap()
+        .to_project("Again", &board, &profile)
+        .unwrap();
+    let back = KeySetup::of(&again, again.layers[0].id, 3).unwrap();
+    assert!(back.sticky);
+    assert_eq!(back.tap, Binding::kp(KeyExpr::new("LSHFT")));
+    assert_eq!(back.double_tap, Some(Binding::new("dygma_battery", vec![])));
+
+    // What a superkey cannot hold is reported at the key.
+    let mut custom = KeySetup::of(&project, base, 1).unwrap();
+    custom.feel.hold = kc_model::setup::Choice::Custom(kc_model::behavior::HoldTapSettings {
+        tapping_term_ms: 300,
+        ..Default::default()
+    });
+    project.apply_setup(base, 1, &custom).unwrap();
+    let mut shifted = KeySetup::plain(Binding::kp(KeyExpr::new("COMMA")));
+    shifted.shifted = Some(Binding::kp(KeyExpr::new("SEMI")));
+    project.apply_setup(base, 4, &shifted).unwrap();
+    let problems = check(&project, &profile);
+    let said = |text: &str| problems.iter().any(|p| p.message.contains(text));
+    assert!(said("one timing for every superkey"));
+    assert!(said("no shift override"));
+    assert!(matches!(
+        before.with_project(&project, &profile),
+        Err(FocusError::Unfit(_))
+    ));
 }

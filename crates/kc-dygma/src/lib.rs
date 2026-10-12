@@ -12,6 +12,7 @@
 //! a firmware that lacks a command is never sent it.
 
 pub mod codec;
+pub mod superkeys;
 
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -24,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 /// The commands this crate reads with. None takes an argument, so none can
 /// change anything.
-const READS: [&str; 9] = [
+const READS: [&str; 10] = [
     "help",
     "version",
     "hardware.version",
@@ -34,15 +35,17 @@ const READS: [&str; 9] = [
     "settings.defaultLayer",
     "palette",
     "colormap.map",
+    "superkeys.map",
 ];
 
 /// The only commands this crate writes with.
-pub const WRITES: [&str; 5] = [
+pub const WRITES: [&str; 6] = [
     "keymap.custom",
     "palette",
     "colormap.map",
     "keymap.onlyCustom",
     "settings.defaultLayer",
+    "superkeys.map",
 ];
 
 /// Commands every Focus firmware has, sent whether or not `help` lists
@@ -159,6 +162,17 @@ impl<T: Read + Write> Focus<T> {
         })
     }
 
+    /// Numbers from a command the keyboard may lack, which reads as empty.
+    fn read_numbers_if_any<N: std::str::FromStr>(
+        &mut self,
+        command: &str,
+    ) -> Result<Vec<N>, FocusError> {
+        if !self.has(command)? {
+            return Ok(Vec::new());
+        }
+        self.read_numbers(command)
+    }
+
     fn read_numbers<N: std::str::FromStr>(&mut self, command: &str) -> Result<Vec<N>, FocusError> {
         self.read_required(command)?
             .split_whitespace()
@@ -195,6 +209,7 @@ impl<T: Read + Write> Focus<T> {
             default_layer: scalar(self.read("settings.defaultLayer")?),
             palette: self.read_numbers("palette")?,
             colormap: self.read_numbers("colormap.map")?,
+            superkeys: self.read_numbers_if_any("superkeys.map")?,
         })
     }
 
@@ -222,6 +237,11 @@ impl<T: Read + Write> Focus<T> {
         if current.colormap != new.colormap {
             self.write("colormap.map", &new.colormap)?;
             sent.push("colormap.map");
+        }
+        // Superkeys before the keys that name them.
+        if current.superkeys != new.superkeys {
+            self.write("superkeys.map", &new.superkeys)?;
+            sent.push("superkeys.map");
         }
         if current.keymap != new.keymap {
             self.write("keymap.custom", &new.keymap)?;
@@ -267,6 +287,10 @@ pub struct Image {
     pub palette: Vec<u8>,
     /// One palette index per light, layer after layer.
     pub colormap: Vec<u8>,
+    /// The superkey map as the keyboard stores it; empty on firmware
+    /// without superkeys.
+    #[serde(default)]
+    pub superkeys: Vec<u16>,
 }
 
 fn channels(profile: &DygmaProfile) -> usize {
@@ -334,6 +358,7 @@ impl Image {
         }
         let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
         let size = channels(profile);
+        let table = superkeys::parse(&self.superkeys);
         for (index, id) in layers.iter().enumerate() {
             let mut lights = Vec::with_capacity(profile.key_slots.len());
             for (position, (slot, led)) in
@@ -343,6 +368,17 @@ impl Image {
                 project
                     .set_binding(*id, position, codec::decode(code, &layers))
                     .map_err(|e| FocusError::Unfit(e.to_string()))?;
+                // A superkey becomes the key's slots; one this app cannot
+                // place stays as the number.
+                let entry = usize::from(code.wrapping_sub(superkeys::FIRST));
+                if code >= superkeys::FIRST && entry < superkeys::SLOTS {
+                    if let Some(setup) = table
+                        .get(entry)
+                        .and_then(|a| superkeys::to_setup(a, &layers))
+                    {
+                        let _ = project.apply_setup(*id, position, &setup);
+                    }
+                }
                 let color = usize::from(self.colormap[index * profile.leds + led]);
                 let color = shown(&self.palette[color * size..(color + 1) * size]);
                 lights.push(if color == Rgb(0, 0, 0) {
@@ -383,17 +419,35 @@ impl Image {
         let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
         let size = channels(profile);
 
+        // Superkeys the keyboard has stay; a key setup reuses an identical
+        // one or takes a new entry.
+        let mut table = superkeys::parse(&self.superkeys);
         for index in 0..profile.layers {
             let layer = project.layers.get(index);
             for (position, slot) in profile.key_slots.iter().enumerate() {
                 // A layer the layout does not have lets the ones below
                 // show through.
                 let code = match layer.and_then(|l| l.bindings.get(position)) {
+                    Some(binding) if binding.user_behavior().is_some() => {
+                        let actions = superkeys::actions(project, binding, &layers)
+                            .map_err(FocusError::Unfit)?;
+                        let entry =
+                            superkeys::place(&mut table, actions).map_err(FocusError::Unfit)?;
+                        superkeys::FIRST + u16::try_from(entry).expect("few superkeys")
+                    }
                     Some(binding) => codec::encode(binding, &layers).map_err(FocusError::Unfit)?,
                     None => codec::TRANSPARENT,
                 };
                 image.keymap[index * profile.slots + slot] = code;
             }
+        }
+        if self.superkeys.is_empty() && !table.is_empty() {
+            return Err(FocusError::Unfit(
+                "this keyboard's firmware has no superkeys, which the layout needs".into(),
+            ));
+        }
+        if !self.superkeys.is_empty() {
+            image.superkeys = superkeys::serialize(&table);
         }
 
         // The colors the layout's keys want. A key that already shows its
@@ -484,9 +538,19 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
         );
     }
     let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
+    let mut table: Vec<superkeys::Actions> = Vec::new();
     for layer in &project.layers {
         for (position, binding) in layer.bindings.iter().enumerate() {
-            if let Err(reason) = codec::encode(binding, &layers) {
+            let result = if binding.user_behavior().is_some() {
+                superkeys::actions(project, binding, &layers).map(|actions| {
+                    if !table.contains(&actions) {
+                        table.push(actions);
+                    }
+                })
+            } else {
+                codec::encode(binding, &layers).map(|_| ())
+            };
+            if let Err(reason) = result {
                 error(
                     Location::Key {
                         layer: layer.id,
@@ -496,6 +560,17 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
                 );
             }
         }
+    }
+    if table.len() > superkeys::SLOTS || superkeys::bytes(&table) > superkeys::MAP_BYTES {
+        error(
+            Location::Project,
+            format!(
+                "the layout needs {} superkeys, and the keyboard holds at most {} in {} bytes",
+                table.len(),
+                superkeys::SLOTS,
+                superkeys::MAP_BYTES
+            ),
+        );
     }
     let mut colors: Vec<Rgb> = Vec::new();
     for lighting in &project.lighting {

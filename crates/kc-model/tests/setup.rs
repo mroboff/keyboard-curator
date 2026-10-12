@@ -228,6 +228,17 @@ fn second_taps_nest_a_multi_tap_around_the_hold() {
     );
     assert_eq!(p.behaviors.len(), 1, "the hold-taps are built in");
 
+    // Double tap, then hold: a hold-tap in the third position, with the
+    // third tap as its tap.
+    setup.double_tap_hold = Some(kp("LGUI"));
+    p.apply_setup(base, 0, &setup).unwrap();
+    let back = KeySetup::of(&p, base, 0).unwrap();
+    assert_eq!(back.double_tap_hold, Some(kp("LGUI")));
+    assert_eq!(back.more_taps, [kp("C")]);
+    assert_eq!(back.double_tap, Some(kp("B")));
+    setup.double_tap_hold = None;
+    p.apply_setup(base, 0, &setup).unwrap();
+
     // Tap-then-hold with nothing on the double tap.
     setup.double_tap = None;
     p.apply_setup(base, 0, &setup).unwrap();

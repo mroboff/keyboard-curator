@@ -117,6 +117,7 @@ impl Workspace {
         slots.extend(setup.hold.iter());
         slots.extend(setup.double_tap.iter());
         slots.extend(setup.tap_hold.iter());
+        slots.extend(setup.double_tap_hold.iter());
         slots.extend(setup.shifted.iter());
         slots.extend(setup.more_taps.iter());
         let ids: Vec<BehaviorId> = slots

@@ -33,6 +33,7 @@ pub(super) enum KeySlot {
     Hold,
     DoubleTap,
     TapHold,
+    DoubleTapHold,
     /// The third tap onward, counted from zero.
     MoreTap(usize),
     Shifted,
@@ -45,6 +46,7 @@ impl KeySlot {
             KeySlot::Hold => "Hold".into(),
             KeySlot::DoubleTap => "Double tap".into(),
             KeySlot::TapHold => "Tap, then hold".into(),
+            KeySlot::DoubleTapHold => "Double tap, then hold".into(),
             KeySlot::MoreTap(n) => format!("{} taps", n + 3),
             KeySlot::Shifted => "With ⇧ held".into(),
         }
@@ -58,7 +60,8 @@ impl KeySlot {
             KeySlot::DoubleTap => 2,
             KeySlot::TapHold => 3,
             KeySlot::Shifted => 4,
-            KeySlot::MoreTap(n) => 5 + n,
+            KeySlot::DoubleTapHold => 5,
+            KeySlot::MoreTap(n) => 6 + n,
         }
     }
 
@@ -72,6 +75,7 @@ impl KeySlot {
             KeySlot::Hold => setup.hold.as_ref(),
             KeySlot::DoubleTap => setup.double_tap.as_ref(),
             KeySlot::TapHold => setup.tap_hold.as_ref(),
+            KeySlot::DoubleTapHold => setup.double_tap_hold.as_ref(),
             KeySlot::MoreTap(n) => setup.more_taps.get(n),
             KeySlot::Shifted => setup.shifted.as_ref(),
         }
@@ -83,6 +87,7 @@ impl KeySlot {
             KeySlot::Hold => setup.hold = Some(binding),
             KeySlot::DoubleTap => setup.double_tap = Some(binding),
             KeySlot::TapHold => setup.tap_hold = Some(binding),
+            KeySlot::DoubleTapHold => setup.double_tap_hold = Some(binding),
             KeySlot::MoreTap(n) => {
                 while setup.more_taps.len() <= n {
                     setup.more_taps.push(Binding::none());
@@ -99,6 +104,7 @@ impl KeySlot {
             KeySlot::Hold => setup.hold = None,
             KeySlot::DoubleTap => setup.double_tap = None,
             KeySlot::TapHold => setup.tap_hold = None,
+            KeySlot::DoubleTapHold => setup.double_tap_hold = None,
             KeySlot::MoreTap(n) => {
                 if n < setup.more_taps.len() {
                     setup.more_taps.remove(n);
@@ -520,7 +526,12 @@ impl Workspace {
             ));
         }
         let mut shown: Vec<KeySlot> = Vec::new();
-        for slot in [KeySlot::Hold, KeySlot::DoubleTap, KeySlot::TapHold] {
+        for slot in [
+            KeySlot::Hold,
+            KeySlot::DoubleTap,
+            KeySlot::TapHold,
+            KeySlot::DoubleTapHold,
+        ] {
             if slot.get(setup).is_some() || pending == Some(slot) {
                 shown.push(slot);
             }
@@ -553,6 +564,9 @@ impl Workspace {
         }
         if !shown.contains(&KeySlot::TapHold) {
             additions.push(("Tap, then hold", KeySlot::TapHold));
+        }
+        if !shown.contains(&KeySlot::DoubleTapHold) {
+            additions.push(("Double tap, then hold", KeySlot::DoubleTapHold));
         }
         if setup.has_taps() {
             additions.push(("Another tap", KeySlot::MoreTap(setup.more_taps.len())));

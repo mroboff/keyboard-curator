@@ -92,6 +92,7 @@ struct Prior {
     taps: Option<BehaviorId>,
     hold: Option<BehaviorId>,
     tap_hold: Option<BehaviorId>,
+    double_tap_hold: Option<BehaviorId>,
     sticky: Option<BehaviorId>,
 }
 
@@ -106,6 +107,8 @@ pub struct KeySetup {
     pub double_tap: Option<Binding>,
     /// What holding the key after one tap does.
     pub tap_hold: Option<Binding>,
+    /// What holding the key after two taps does.
+    pub double_tap_hold: Option<Binding>,
     /// What a third tap and later taps do.
     pub more_taps: Vec<Binding>,
     /// What the key sends while the override modifiers (⇧ unless the feel
@@ -141,6 +144,7 @@ impl KeySetup {
             hold: None,
             double_tap: None,
             tap_hold: None,
+            double_tap_hold: None,
             more_taps: Vec::new(),
             shifted: None,
             sticky: false,
@@ -193,14 +197,32 @@ impl KeySetup {
                     None => setup.double_tap = Some(second.clone()),
                 }
             }
-            setup.more_taps = t.bindings.iter().skip(2).cloned().collect();
+            let mut rest = t.bindings.iter().skip(2);
+            if let Some(third) = rest.next() {
+                match hold_tap(project, third) {
+                    Some(side) => {
+                        if setup.tap_hold.is_some() {
+                            setup.feel.hold = same_feel(&setup.feel.hold, &side.choice)?;
+                        } else {
+                            setup.feel.hold = side.choice;
+                        }
+                        setup.double_tap_hold = Some(side.hold);
+                        if !is_none(&side.tap) {
+                            setup.more_taps.push(side.tap);
+                        }
+                        setup.prior.double_tap_hold = side.owned;
+                    }
+                    None => setup.more_taps.push(third.clone()),
+                }
+            }
+            setup.more_taps.extend(rest.cloned());
             setup.feel.taps = choice(def);
             setup.prior.taps = owned(def);
             current = first.clone();
         }
 
         if let Some(side) = hold_tap(project, &current) {
-            let feel = if setup.tap_hold.is_some() {
+            let feel = if setup.tap_hold.is_some() || setup.double_tap_hold.is_some() {
                 // Two hold-taps with different feels have no single slot.
                 // A built-in and a definition with default settings agree.
                 same_feel(&setup.feel.hold, &side.choice)?
@@ -236,6 +258,7 @@ impl KeySetup {
         self.hold.is_some()
             || self.double_tap.is_some()
             || self.tap_hold.is_some()
+            || self.double_tap_hold.is_some()
             || !self.more_taps.is_empty()
             || self.shifted.is_some()
             || self.sticky
@@ -243,12 +266,15 @@ impl KeySetup {
 
     /// Whether a second tap or later does something.
     pub fn has_taps(&self) -> bool {
-        self.double_tap.is_some() || self.tap_hold.is_some() || !self.more_taps.is_empty()
+        self.double_tap.is_some()
+            || self.tap_hold.is_some()
+            || self.double_tap_hold.is_some()
+            || !self.more_taps.is_empty()
     }
 
     /// Whether a hold, on the first or the second press, does something.
     pub fn has_hold(&self) -> bool {
-        self.hold.is_some() || self.tap_hold.is_some()
+        self.hold.is_some() || self.tap_hold.is_some() || self.double_tap_hold.is_some()
     }
 }
 
@@ -528,7 +554,21 @@ impl Project {
                 (None, None) => Binding::none(),
             };
             list.push(second);
-            list.extend(setup.more_taps.iter().cloned());
+            let mut rest = setup.more_taps.iter().cloned();
+            if let Some(hold) = &setup.double_tap_hold {
+                let tap = rest.next().unwrap_or_else(Binding::none);
+                let third = self
+                    .build_hold_tap(
+                        &here,
+                        hold,
+                        &tap,
+                        &setup.feel.hold,
+                        setup.prior.double_tap_hold,
+                    )?
+                    .1;
+                list.push(third);
+            }
+            list.extend(rest);
             let (id, built) =
                 self.build_tap_dance(&here, list, &setup.feel.taps, setup.prior.taps)?;
             track(id);
@@ -804,6 +844,7 @@ impl Project {
                     .hold
                     .as_ref()
                     .or(setup.tap_hold.as_ref())
+                    .or(setup.double_tap_hold.as_ref())
                     .ok_or(SetupError::NotSlots)?;
                 let (hold_ref, _) = side(hold)?;
                 let (tap_ref, _) = side(&setup.tap)?;
