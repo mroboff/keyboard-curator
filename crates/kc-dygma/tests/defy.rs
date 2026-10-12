@@ -618,9 +618,10 @@ fn macros_are_macros_on_the_key() {
     let BehaviorKind::Macro(m) = &def.kind else {
         panic!("a macro")
     };
+    // Usage 229 is the right Shift.
     assert_eq!(
         m.steps[0],
-        MacroStep::Press(vec![Binding::kp(KeyExpr::new("LSHFT"))])
+        MacroStep::Press(vec![Binding::kp(KeyExpr::new("RSHFT"))])
     );
     assert_eq!(
         m.steps[1],
@@ -628,7 +629,7 @@ fn macros_are_macros_on_the_key() {
     );
     assert_eq!(
         m.steps[2],
-        MacroStep::Release(vec![Binding::kp(KeyExpr::new("LSHFT"))])
+        MacroStep::Release(vec![Binding::kp(KeyExpr::new("RSHFT"))])
     );
     assert!(matches!(&m.steps[3], MacroStep::Tap(list) if list.len() == 4));
     let setup = KeySetup::of(&project, base, 2).unwrap();

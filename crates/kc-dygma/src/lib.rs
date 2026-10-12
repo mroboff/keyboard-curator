@@ -422,10 +422,13 @@ impl Image {
                 .keys = lights;
         }
         // A macro several keys share is a template; one key's is its own.
-        for id in macro_defs.values() {
+        // They were made as templates so that building the keys, which
+        // tidies as it goes, could not drop one before its key was set.
+        for (index, id) in &macro_defs {
             if project.top_owners(*id).len() > 1 {
-                let name = format!("Macro {}", id.0);
-                let _ = project.make_template(*id, name);
+                let _ = project.make_template(*id, format!("Macro {}", index + 1));
+            } else if let Ok(def) = project.behavior_mut(*id) {
+                def.scope = Scope::Key;
             }
         }
         project.tidy();
@@ -483,9 +486,6 @@ impl Image {
             ) else {
                 continue;
             };
-            if let Ok(def) = project.behavior_mut(id) {
-                def.scope = Scope::Key;
-            }
             defs.insert(index, id);
         }
         defs
