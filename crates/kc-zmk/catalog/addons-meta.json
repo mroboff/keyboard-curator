@@ -16,7 +16,7 @@
       "archived": false,
       "pushed": "2026-09-10",
       "revision": "b1548efd28d2cc64b9506654e6883695c258190f",
-      "stars": 421
+      "stars": 422
     },
     "zmk-leader-key": {
       "archived": false,
@@ -38,7 +38,7 @@
     },
     "zmk-unicode": {
       "archived": false,
-      "pushed": "2026-09-09",
+      "pushed": "2026-10-08",
       "revision": "3e8ca744e5c3b6f430b3713f3e45b806ce89be7b",
       "stars": 41
     }
@@ -47,7 +47,7 @@
     {
       "description": "vertical widgets for oled and niceview screens using zmk (for split and non-split keyboards)",
       "name": "mctechnology17/zmk-nice-oled",
-      "stars": 493,
+      "stars": 494,
       "url": "https://github.com/mctechnology17/zmk-nice-oled"
     },
     {
@@ -71,7 +71,7 @@
     {
       "description": "A PS/2 mouse & trackpoint driver module for keyboards running the zmk firmware",
       "name": "infused-kim/kb_zmk_ps2_mouse_trackpoint_driver",
-      "stars": 241,
+      "stars": 242,
       "url": "https://github.com/infused-kim/kb_zmk_ps2_mouse_trackpoint_driver"
     },
     {
@@ -159,6 +159,6 @@
       "url": "https://github.com/kot149/zmk-layout-shift"
     }
   ],
-  "checked": "2026-10-06",
+  "checked": "2026-10-12",
   "format": 1
 }
