@@ -1,4 +1,4 @@
-# keyboard-curator
+# Keyboard Curator
 
 A native, open-source keymap, feature and per-key lighting editor for programmable keyboards: ZMK first, with RMK and Dygma alongside.
 
