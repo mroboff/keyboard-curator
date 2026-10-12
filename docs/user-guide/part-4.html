@@ -197,6 +197,18 @@
     <tr><td class="ui">Restore a Backup…</td><td>Writes one of those backup files back to the keyboard it came from: everything in it that differs from what the keyboard holds now, except the lights and the wireless side, which are left as they are (Bazecor's restore leaves them too). The keyboard is saved again first. A backup from another keyboard is refused.</td></tr>
   </table>
   <p>If the keyboard already holds the layout, nothing is written. Keys that use something Dygma's firmware cannot express are flagged in the editor and have to be changed before the layout can be written.</p>
+  <p>What the app edits on a Defy: every key, superkeys as the slots of a key's setup, macros, the colors under the keys and the underglow, and the firmware's settings on the board's Settings tab (typing and superkey timing, mouse keys, lights, idle, battery, radio and the Bluetooth name). What stays with Bazecor: firmware updates, and pairing and forgetting Bluetooth hosts.</p>
+  <h3>Superkeys are key setups</h3>
+  <p>A Defy superkey is a key with five actions. The app shows one as the slots of the key's setup (Chapter 8), under its own names:</p>
+  <table class="wrap">
+    <tr><th>Bazecor</th><th>Here</th></tr>
+    <tr><td>Tap</td><td>The key itself</td></tr>
+    <tr><td>Hold</td><td><span class="ui">Hold</span></td></tr>
+    <tr><td>Tap &amp; Hold</td><td><span class="ui">Tap, then hold</span></td></tr>
+    <tr><td>2Tap</td><td><span class="ui">Double tap</span></td></tr>
+    <tr><td>2Tap &amp; Hold</td><td><span class="ui">Double tap, then hold</span></td></tr>
+  </table>
+  <p>Superkey timing is one setting for the whole keyboard, under Settings › Superkeys, so a key's <span class="ui">How it feels</span> stays at <span class="ui">Keyboard default</span>; a custom feel, a shift override or a third tap is flagged, since the firmware has no place for them. A superkey the keyboard already holds is reused when a key matches it exactly; otherwise a new one is added, up to the firmware's 128. Macros work the same way, and a pause inside a macro becomes a Bazecor delay.</p>
 
   <h2>The Keyboard tab: RMK for MoErgo and the Imprint fork</h2>
   <p>This firmware is not built. It comes ready-made from its project's release on GitHub, is flashed once, and is then configured on the running keyboard with Rynk, RMK's host protocol. The tab has everything for that, top to bottom.</p>
@@ -331,11 +343,12 @@
   <table class="wrap"><tr><th></th><th></th></tr>
     <tr><td>Models supported</td><td>Wireless and wired. The two share a layout and firmware behavior and differ only in how the Neuron connects.</td></tr>
     <tr><td>Connection</td><td>The Neuron is the USB device. Connect it, and close Dygma's Bazecor: only one program can talk to the keyboard at a time.</td></tr>
-    <tr><td>Flashing</td><td>None from this app. Firmware updates are done with Bazecor.</td></tr>
+    <tr><td>Flashing</td><td>None from this app. Firmware updates, and pairing and forgetting Bluetooth hosts, are done with Bazecor.</td></tr>
+    <tr><td>Edited here</td><td>Keys, superkeys as key setups (see the Keyboard tab section in Chapter 13 for Bazecor's names beside ours), macros, per-key colors and the underglow, and the firmware's settings. Right-hand modifiers are written as the left ones: the firmware has one flag per modifier.</td></tr>
     <tr><td>Starting layout</td><td><span class="ui">Read From Keyboard</span> on the Keyboard tab, which opens what the Defy holds. <span class="ui">New Layout</span> starts with one empty layer.</td></tr>
     <tr><td>Layers</td><td>Ten.</td></tr>
     <tr><td>Lighting</td><td>Per-key colors and the underglow, painted light by light, from a palette of sixteen the whole keyboard shares. No lock or battery lights. No brightness limit.</td></tr>
-    <tr><td>Kept as they are</td><td>Superkeys and macros already on the keyboard, and the lights no layout paints. The firmware has no combos or layer rules, so those modes are not offered.</td></tr>
+    <tr><td>Kept as they are</td><td>Superkeys and macros already on the keyboard that no key uses, and the lights no layout paints. The firmware has no combos, layer rules or per-key timing, so those are not offered.</td></tr>
     <tr><td>Backups</td><td>Every write first saves everything the keyboard lists, as one JSON file, the way Bazecor's backup does; <span class="ui">Restore a Backup…</span> on the Keyboard tab writes one back.</td></tr>
     <tr><td>Status</td><td>Reading is proven on a Defy; writing has so far only been tested against a simulated keyboard. A backup of the keyboard's configuration is saved before the first write.</td></tr></table>
 </section>

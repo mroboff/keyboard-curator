@@ -49,6 +49,16 @@ Repeat this block for each row of the table at the end.
 - [ ] Per-key lighting: colors show on both halves; the brightness cap holds (Go60 40, Glove80 80, Imprint 50); lock and battery lights change state.
 - [ ] Recovery: pull the USB cable during a flash, then flash again; the keyboard recovers. Flash the vendor's own firmware back and confirm the keyboard is as it was.
 
+**Dygma Defy only** (Bazecor closed throughout; reopen it only where it says)
+- [ ] Before anything: take a backup in Bazecor too, so the keyboard can be put back without this app.
+- [ ] Read From Keyboard: the layout matches what Bazecor shows, layer by layer, including a superkey (its five actions in the key's slots), a macro (its steps, with any delay as a pause), the colors under the keys and the underglow. The board's settings offered on reading match Bazecor's Preferences.
+- [ ] Edit a superkey: change one action, add a new superkey on another key, apply. In Bazecor, both read as expected and the keyboard behaves accordingly. The superkey table has grown by exactly one.
+- [ ] Edit a macro: change a step, add a pause, apply; the macro plays correctly on the keyboard, and Bazecor shows the delay.
+- [ ] Paint the underglow on one layer and apply; the ring lights as painted, in the drawn order (the LED check's repeating run goes around the strip without a break). Unpainted lights keep their color.
+- [ ] Change a setting (a typing timeout, then a light's brightness, then a wireless one on a wireless Defy) and apply; each takes effect and shows in Bazecor's Preferences. Settings left alone stay as they were.
+- [ ] Restore a Backup…: pick the backup taken before the first write; the keyboard returns to how it was, except lights and wireless settings, which stay. Bazecor agrees.
+- [ ] On a wired Defy: nothing wireless is read, shown or written.
+
 ## The matrix
 
 | Board | Firmware | How the layout gets there | Checked by | Date | Result |
@@ -63,7 +73,8 @@ Repeat this block for each row of the table at the end.
 | MoErgo Glove80 | MoErgo ZMK | Build & Flash | | | |
 | MoErgo Glove80 | ZMK with community per-key lighting | Build & Flash | | | |
 | MoErgo Glove80 | RMK for MoErgo (community) | Release firmware, then live over Rynk | | | |
-| Dygma Defy | Dygma's firmware | Live over USB | | | |
+| Dygma Defy wireless | Dygma's firmware | Live over USB | | | |
+| Dygma Defy wired | Dygma's firmware | Live over USB | | | |
 
 ## Launch
 

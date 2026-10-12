@@ -41,7 +41,7 @@ named in each board file under `crates/kc-boards/boards`.
 |---|---|---|
 | Cyboard Imprint | Cyboard-DigitalTailor/zmk-keyboards (physical layout, matrix, pins); the wired Imprint's QMK definition (LED order, unverified) | MIT (zmk-keyboards), GPL-2.0 (QMK; facts only, no code) |
 | MoErgo Go60 and Glove80 | moergo-sc/zmk (physical layouts, USB identifiers, bootloader volumes); the community per-key lighting branch (LED chains) | MIT |
-| Dygma Defy | Dygmalab/Bazecor (key layout, Focus protocol facts) | GPL-3.0; facts transcribed with attribution, no code copied |
+| Dygma Defy | Dygmalab/Bazecor (key and underglow layout, USB identifiers, key codes, the superkey and macro map formats, the settings commands and their ranges, the backup's command list) | GPL-3.0; facts transcribed with attribution, no code copied |
 
 ## Layouts
 

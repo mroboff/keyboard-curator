@@ -50,8 +50,9 @@ experimental = true
 capabilities = ["per-key-lighting", "underglow-lighting", "rgb-underglow", "macros"]
 notes = [
   "Configured live over USB: there is nothing to build. A layout is written to the keyboard when you apply it, and takes effect at once.",
-  "Close Dygma's Bazecor while using this app. Only one program can talk to the keyboard at a time. Firmware updates stay with Bazecor.",
-  "Writing to a keyboard has so far only been tested against a simulated one. A backup of the keyboard's configuration is saved before the first write.",
+  "Close Dygma's Bazecor while using this app. Only one program can talk to the keyboard at a time. Firmware updates, and pairing and forgetting Bluetooth hosts, stay with Bazecor.",
+  "Keys, superkeys as key setups, macros, per-key colors, the underglow and the firmware's settings are all edited here. Key codes, map formats and settings are facts from Bazecor's source; superkeys, macros and settings have not yet been written to a real keyboard.",
+  "A backup of everything the keyboard lists is saved before every write, and can be restored from the Keyboard tab.",
 ]
 
 [firmware.dygma]
