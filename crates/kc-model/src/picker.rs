@@ -25,7 +25,7 @@ pub enum PickerGroup {
     Connectivity,
     Lighting,
     System,
-    Custom,
+    Macros,
 }
 
 impl PickerGroup {
@@ -43,7 +43,7 @@ impl PickerGroup {
         PickerGroup::Connectivity,
         PickerGroup::Lighting,
         PickerGroup::System,
-        PickerGroup::Custom,
+        PickerGroup::Macros,
     ];
 
     pub fn title(self) -> &'static str {
@@ -61,7 +61,7 @@ impl PickerGroup {
             PickerGroup::Connectivity => "Bluetooth",
             PickerGroup::Lighting => "Lighting",
             PickerGroup::System => "System",
-            PickerGroup::Custom => "Custom",
+            PickerGroup::Macros => "Macros",
         }
     }
 }
@@ -294,17 +294,16 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
     for def in behaviors::BUILT_IN.iter().filter(|b| b.available(features)) {
         behavior_items(project, def, features, &mut items);
     }
-    // Templates, and the named definitions older layouts gave their keys.
-    // Key-owned definitions without a name are the key's own business.
+    // Macros saved as templates can go on any key. Feels are chosen under
+    // a key's setup, and a key's own definitions are its own business.
     for def in project
-        .behaviors
-        .iter()
-        .filter(|d| d.is_template() || !d.name.is_empty())
+        .behavior_templates()
+        .filter(|d| matches!(d.kind, BehaviorKind::Macro(_)))
     {
         let what = def.kind.name();
         items.push(
             PickerItem::new(
-                PickerGroup::Custom,
+                PickerGroup::Macros,
                 def.name.clone(),
                 format!("{what}: {}. {}", def.name, def.kind.summary()),
                 Binding::user(def.id, default_params(project, &def.kind)),
@@ -316,7 +315,7 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
     for (label, cells) in raw_behaviors(&project.raw.behaviors) {
         items.push(
             PickerItem::new(
-                PickerGroup::Custom,
+                PickerGroup::Macros,
                 label.clone(),
                 format!("{label}: a behavior written by hand under Advanced"),
                 Binding::Raw {

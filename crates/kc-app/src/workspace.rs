@@ -2,11 +2,11 @@
 //! picker and key inspector.
 
 mod advanced;
-mod behaviors;
 mod combos;
 mod lighting;
 mod pointing;
 mod setup;
+mod templates;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -66,7 +66,7 @@ fn tag_color(tag: Rgb) -> Hsla {
 enum Mode {
     Keyboard,
     Lighting,
-    Behaviors,
+    Templates,
     Combos,
     Pointing,
     /// Layer rules and custom devicetree.
@@ -81,7 +81,7 @@ impl Mode {
     const TABS: [(Mode, &'static str, &'static str); 8] = [
         (Mode::Keyboard, "mode-keyboard", "Keyboard"),
         (Mode::Lighting, "mode-lighting", "Lighting"),
-        (Mode::Behaviors, "mode-behaviors", "Behaviors"),
+        (Mode::Templates, "mode-templates", "Templates"),
         (Mode::Combos, "mode-combos", "Combos"),
         (Mode::Pointing, "mode-pointing", "Pointing"),
         (Mode::Advanced, "mode-advanced", "Advanced"),
@@ -106,9 +106,9 @@ impl Mode {
     }
 
     fn available(self, features: &[Feature]) -> bool {
-        // The behavior editors are for behaviors the user defines; a
-        // firmware with none of those kinds has nothing to edit there.
-        if self == Mode::Behaviors {
+        // Templates are feels and macros the user defines; a firmware with
+        // none of those kinds has nothing to keep there.
+        if self == Mode::Templates {
             return [
                 Feature::Macros,
                 Feature::TapDance,
@@ -200,8 +200,9 @@ pub struct Workspace {
     /// the library.
     config: FirmwareConfig,
     live: LiveStatus,
-    /// The binding inside a behavior or combo that the picker assigns to,
-    /// in the Behaviors and Combos modes.
+    /// The binding inside a macro or combo that the picker assigns to: in
+    /// the Templates and Combos modes, and in the Keyboard mode for the
+    /// selected key's macro.
     slot: Option<Slot>,
     /// The behavior and combo being edited.
     behavior: Option<BehaviorId>,
@@ -252,6 +253,8 @@ pub struct Workspace {
     right_mods: bool,
     /// The part of the selected key's feel being named as a template.
     naming: Option<kc_model::setup::Part>,
+    /// The key's macro being named as a template.
+    naming_macro: Option<BehaviorId>,
     template_name: Entity<InputState>,
     /// The Advanced part of the key setup panel is open.
     advanced_open: bool,
@@ -596,7 +599,7 @@ impl Workspace {
         let raw_behaviors = cx.new(|cx| TextareaState::new(window, cx));
         let raw_devicetree = cx.new(|cx| TextareaState::new(window, cx));
         advanced::subscribe(&raw_behaviors, &raw_devicetree, window, cx);
-        behaviors::subscribe(&behavior_name, &behavior_label, &macro_text, window, cx);
+        templates::subscribe(&behavior_name, &behavior_label, &macro_text, window, cx);
         combos::subscribe(&combo_name, window, cx);
         let color_picker = cx.new(|cx| ColorPickerState::new(window, cx));
         lighting::subscribe(&color_picker, cx);
@@ -643,6 +646,7 @@ impl Workspace {
             pending_slot: None,
             right_mods: false,
             naming: None,
+            naming_macro: None,
             template_name,
             advanced_open: false,
             search,
@@ -655,7 +659,7 @@ impl Workspace {
         // For checking a screen from the command line: KC_MODE=advanced.
         let start = match std::env::var("KC_MODE").as_deref() {
             Ok("lighting") => Some(Mode::Lighting),
-            Ok("behaviors") => Some(Mode::Behaviors),
+            Ok("templates") => Some(Mode::Templates),
             Ok("combos") => Some(Mode::Combos),
             Ok("pointing") => Some(Mode::Pointing),
             Ok("advanced") => Some(Mode::Advanced),
@@ -943,9 +947,12 @@ impl Workspace {
         self.project().binding(self.layer, self.primary()?)
     }
 
-    /// Whether the picker currently assigns to a slot rather than to keys.
+    /// Whether the picker currently assigns to a slot rather than to keys:
+    /// always in the Templates and Combos modes, and in the Keyboard mode
+    /// when a step of the selected key's macro is aimed at.
     fn targets_slot(&self) -> bool {
-        matches!(self.mode, Mode::Behaviors | Mode::Combos)
+        matches!(self.mode, Mode::Templates | Mode::Combos)
+            || (self.mode == Mode::Keyboard && self.key_macro_slot().is_some())
     }
 
     /// The binding the picker and the binding field act on.
@@ -1000,8 +1007,9 @@ impl Workspace {
         self.hint = None;
         // Open the editors on something, so they are not blank.
         match mode {
-            Mode::Behaviors if self.behavior.is_none() => {
-                self.behavior = self.project().behaviors.first().map(|b| b.id);
+            Mode::Templates if self.behavior.is_none() => {
+                let first = self.project().behavior_templates().next().map(|b| b.id);
+                self.behavior = first;
             }
             Mode::Combos if self.combo.is_none() => {
                 self.combo = self.project().combos.first().map(|c| c.id);
@@ -1914,18 +1922,12 @@ impl Workspace {
 
     /// The picker with a binding field beside it, for the modes where it
     /// assigns to a slot inside a behavior or combo.
-    /// Whether the behavior being edited has bindings of its own to fill.
+    /// Whether the template being edited has bindings of its own to fill:
+    /// only a macro has, since the other kinds are feels.
     fn behavior_has_slots(&self) -> bool {
         self.behavior
             .and_then(|id| self.project().behavior(id))
-            .is_some_and(|def| {
-                matches!(
-                    def.kind,
-                    kc_model::behavior::BehaviorKind::TapDance(_)
-                        | kc_model::behavior::BehaviorKind::ModMorph(_)
-                        | kc_model::behavior::BehaviorKind::Macro(_)
-                )
-            })
+            .is_some_and(|def| matches!(def.kind, kc_model::behavior::BehaviorKind::Macro(_)))
     }
 
     fn render_slot_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1949,7 +1951,7 @@ impl Workspace {
                     .child(section_title("SELECTED BINDING", cx))
                     .child(Input::new(&self.binding_input))
                     .child(div().text_xs().text_color(muted).child(
-                        "Click a binding above to select it. Choose from the list, or type any ZMK binding and press Return.",
+                        "Click a step above to choose what it does, then choose from the list.",
                     )),
             )
     }
@@ -2487,8 +2489,8 @@ impl Workspace {
                         // The key picker is only there for behaviors that
                         // have keys to choose: a hold-tap or a sticky key
                         // has none, and keeps the room.
-                        Mode::Behaviors => main
-                            .child(self.render_behaviors(cx))
+                        Mode::Templates => main
+                            .child(self.render_templates(cx))
                             .when(self.behavior_has_slots(), |main| {
                                 main.child(self.render_slot_picker(cx))
                             }),
@@ -2537,7 +2539,7 @@ mod tests {
     fn tabs_follow_what_the_firmware_can_do() {
         let without_lighting = [
             "Keyboard",
-            "Behaviors",
+            "Templates",
             "Combos",
             "Pointing",
             "Advanced",
@@ -2561,7 +2563,7 @@ mod tests {
         assert!(!Mode::Pointing.available(&[]));
         assert!(!Mode::Combos.available(&[]));
         assert!(!Mode::Advanced.available(&[]));
-        assert!(!Mode::Behaviors.available(&[]));
+        assert!(!Mode::Templates.available(&[]));
         assert!(!Mode::Files.available(&[]));
 
         // RMK builds from generated files, and has combos; behaviors

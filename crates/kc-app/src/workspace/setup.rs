@@ -12,8 +12,8 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use kc_model::behavior::{
-    BehaviorKind, Flavor, HoldTapSettings, ModMorphSettings, Settings, StickyKeySettings,
-    TapDanceSettings,
+    BehaviorKind, Flavor, HoldTapSettings, MacroSettings, ModMorphSettings, Settings,
+    StickyKeySettings, TapDanceSettings,
 };
 use kc_model::keycap::keycap;
 use kc_model::setup::{Choice, KeySetup, Part, SetupError};
@@ -111,6 +111,15 @@ impl KeySlot {
 /// What choosing from a menu does.
 type Pick = Rc<dyn Fn(&mut Workspace, &mut Window, &mut Context<Workspace>)>;
 
+/// Where a feel form's changes go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FeelTarget {
+    /// The selected keys' own settings for one part of their feel.
+    Keys(Part),
+    /// A template, and every key that follows it.
+    Template(BehaviorId),
+}
+
 /// Whether a binding is a whole key on its own, which replaces the key
 /// rather than filling its tap.
 fn whole_key(binding: &Binding) -> bool {
@@ -156,6 +165,7 @@ impl Workspace {
 
     fn aim_slot(&mut self, slot: Option<KeySlot>, cx: &mut Context<Self>) {
         self.key_slot = self.primary().zip(slot);
+        self.slot = None;
         cx.notify();
     }
 
@@ -241,10 +251,28 @@ impl Workspace {
     /// Saves the named part of the selected key's feel as a template and
     /// makes every selected key use it.
     pub(super) fn save_template(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let name = self.template_name.read(cx).value().trim().to_string();
+        if let Some(id) = self.naming_macro {
+            if name.is_empty() {
+                self.notice = Some("Give the template a name.".into());
+                cx.notify();
+                return;
+            }
+            if let Err(error) = self
+                .editor
+                .edit("Save Template", |p| p.make_template(id, name))
+            {
+                self.notice = Some(format!("{error}."));
+            }
+            self.naming_macro = None;
+            self.template_name
+                .update(cx, |input, cx| input.set_value("", window, cx));
+            self.after_change(window, cx);
+            return;
+        }
         let Some(part) = self.naming else {
             return;
         };
-        let name = self.template_name.read(cx).value().trim().to_string();
         let Some(position) = self.primary() else {
             return;
         };
@@ -346,6 +374,9 @@ impl Workspace {
         }
         if setup.sticky {
             panel = panel.child(self.render_sticky_feel(&setup, cx));
+        }
+        if let Some(section) = self.render_macro_section(cx) {
+            panel = panel.child(section);
         }
         if !setup.note.is_empty() {
             panel = panel.child(
@@ -529,6 +560,7 @@ impl Workspace {
             additions.push(("With ⇧ held", KeySlot::Shifted));
         }
         let workspace = cx.weak_entity();
+        let has_macro = self.key_macro().is_some();
         let add = Button::new("slot-add")
             .label("Add…")
             .dropdown_caret(true)
@@ -537,6 +569,12 @@ impl Workspace {
                     let (workspace, slot) = (workspace.clone(), *slot);
                     menu = menu.item(PopupMenuItem::new(*label).on_click(move |_, _, cx| {
                         let _ = workspace.update(cx, |this, cx| this.add_slot(slot, cx));
+                    }));
+                }
+                if !has_macro {
+                    let workspace = workspace.clone();
+                    menu = menu.item(PopupMenuItem::new("Macro").on_click(move |_, window, cx| {
+                        let _ = workspace.update(cx, |this, cx| this.make_key_macro(window, cx));
                     }));
                 }
                 menu
@@ -798,21 +836,67 @@ impl Workspace {
         }
     }
 
-    /// A setting that is on or off, changed on every selected key.
+    /// A setting that is on or off, changed where the feel lives.
     fn setup_toggle(
         &self,
         id: &'static str,
         label: &'static str,
         on: bool,
+        target: FeelTarget,
         cx: &mut Context<Self>,
-        flip: fn(&mut KeySetup),
+        flip: fn(&mut Settings),
     ) -> Div {
         let control = chip(id, if on { "On" } else { "Off" }, on, cx).on_click(cx.listener(
             move |this, _, window, cx| {
-                this.edit_setups("Change Feel", window, cx, flip);
+                this.edit_feel(target, "Change Feel", window, cx, flip);
             },
         ));
         field(label, "", control, cx)
+    }
+
+    /// Changes a feel where it lives: the selected keys' own settings, or
+    /// a template and every key that follows it.
+    pub(super) fn edit_feel(
+        &mut self,
+        target: FeelTarget,
+        label: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        change: impl Fn(&mut Settings),
+    ) {
+        match target {
+            FeelTarget::Keys(part) => self.edit_setups(label, window, cx, |setup| {
+                if let Some(mut settings) = custom_settings(setup, part) {
+                    change(&mut settings);
+                    set_custom(setup, part, settings);
+                }
+            }),
+            FeelTarget::Template(id) => self.change(label, window, cx, |p| {
+                let mut settings = p
+                    .behavior(id)
+                    .ok_or(ModelError::NoSuchBehavior(id))?
+                    .kind
+                    .settings();
+                change(&mut settings);
+                p.set_template_settings(id, &settings)
+            }),
+        }
+    }
+
+    /// The form for one kind of settings, wherever they live.
+    pub(super) fn render_settings(
+        &self,
+        target: FeelTarget,
+        settings: &Settings,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        match settings {
+            Settings::HoldTap(h) => self.render_hold_tap_settings(target, h, cx),
+            Settings::TapDance(t) => self.render_tap_dance_settings(target, t, cx),
+            Settings::ModMorph(m) => self.render_mod_morph_settings(target, m, cx),
+            Settings::StickyKey(s) => self.render_sticky_settings(target, s, cx),
+            Settings::Macro(m) => self.render_macro_settings(target, m, cx),
+        }
     }
 
     fn render_hold_feel(&self, setup: &KeySetup, cx: &mut Context<Self>) -> Div {
@@ -828,18 +912,29 @@ impl Workspace {
             },
             cx,
         );
-        let mut section = group("HOLD AND TAP", cx)
+        let section = group("HOLD AND TAP", cx)
             .child(field("How it feels", "", menu, cx))
             .child(self.template_row(Part::Hold, setup.feel.hold.template(), cx));
-        let Choice::Custom(h) = &setup.feel.hold else {
-            return section;
-        };
+        match &setup.feel.hold {
+            Choice::Custom(h) => {
+                section.child(self.render_hold_tap_settings(FeelTarget::Keys(Part::Hold), h, cx))
+            }
+            _ => section,
+        }
+    }
+
+    fn render_hold_tap_settings(
+        &self,
+        target: FeelTarget,
+        h: &HoldTapSettings,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let flavor_options = Flavor::ALL
             .into_iter()
             .map(|flavor| {
                 let pick: Pick = Rc::new(move |this, window, cx| {
-                    this.edit_setups("Change Feel", window, cx, |setup| {
-                        if let Choice::Custom(h) = &mut setup.feel.hold {
+                    this.edit_feel(target, "Change Feel", window, cx, move |s| {
+                        if let Settings::HoldTap(h) = s {
                             h.flavor = flavor;
                         }
                     });
@@ -848,24 +943,6 @@ impl Workspace {
             })
             .collect();
         let flavor = self.select("hold-flavor", h.flavor.name(), flavor_options, cx);
-        section = section
-            .child(field("Decide by", h.flavor.detail(), flavor, cx))
-            .child(self.stepper(
-                "hold-term",
-                "Counts as a hold after",
-                format!("{} ms", h.tapping_term_ms),
-                cx,
-                |this, d, window, cx| {
-                    this.edit_setups("Change Hold Time", window, cx, move |setup| {
-                        if let Choice::Custom(h) = &mut setup.feel.hold {
-                            h.tapping_term_ms = h
-                                .tapping_term_ms
-                                .saturating_add_signed(d as i32 * 10)
-                                .max(10);
-                        }
-                    });
-                },
-            ));
         let tuned = [
             h.quick_tap_ms.is_some(),
             h.require_prior_idle_ms.is_some(),
@@ -881,97 +958,124 @@ impl Workspace {
             0 => "All as they come".to_string(),
             n => format!("{n} changed"),
         };
+        let (quick, idle) = (h.quick_tap_ms, h.require_prior_idle_ms);
+        let (retro, undecided, other_hand, on_release) = (
+            h.retro_tap,
+            h.hold_while_undecided,
+            h.opposite_hand_hold,
+            h.hold_trigger_on_release,
+        );
         let positions = h.hold_trigger_key_positions.clone();
-        let triggers = positions.len();
-        section.child(
-            self.fold("hold-more", "MORE", summary, cx, move |column, cx| {
-                column
-                    .child(self.stepper(
-                        "hold-quick-tap",
-                        "Tap twice quickly to repeat",
-                        optional_ms(setup_hold(setup).and_then(|h| h.quick_tap_ms), "off"),
-                        cx,
-                        |this, d, window, cx| {
-                            this.edit_setups("Change Feel", window, cx, move |setup| {
-                                if let Choice::Custom(h) = &mut setup.feel.hold {
-                                    step_optional_ms(&mut h.quick_tap_ms, d, 25, 150);
+        div()
+            .flex()
+            .flex_col()
+            .child(field("Decide by", h.flavor.detail(), flavor, cx))
+            .child(self.stepper(
+                "hold-term",
+                "Counts as a hold after",
+                format!("{} ms", h.tapping_term_ms),
+                cx,
+                move |this, d, window, cx| {
+                    this.edit_feel(target, "Change Hold Time", window, cx, move |s| {
+                        if let Settings::HoldTap(h) = s {
+                            h.tapping_term_ms = h
+                                .tapping_term_ms
+                                .saturating_add_signed(d as i32 * 10)
+                                .max(10);
+                        }
+                    });
+                },
+            ))
+            .child(
+                self.fold("hold-more", "MORE", summary, cx, move |column, cx| {
+                    column
+                        .child(self.stepper(
+                            "hold-quick-tap",
+                            "Tap twice quickly to repeat",
+                            optional_ms(quick, "off"),
+                            cx,
+                            move |this, d, window, cx| {
+                                this.edit_feel(target, "Change Feel", window, cx, move |s| {
+                                    if let Settings::HoldTap(h) = s {
+                                        step_optional_ms(&mut h.quick_tap_ms, d, 25, 150);
+                                    }
+                                });
+                            },
+                        ))
+                        .child(self.stepper(
+                            "hold-prior-idle",
+                            "No hold right after typing",
+                            optional_ms(idle, "off"),
+                            cx,
+                            move |this, d, window, cx| {
+                                this.edit_feel(target, "Change Feel", window, cx, move |s| {
+                                    if let Settings::HoldTap(h) = s {
+                                        step_optional_ms(&mut h.require_prior_idle_ms, d, 25, 125);
+                                    }
+                                });
+                            },
+                        ))
+                        .child(self.setup_toggle(
+                            "hold-retro",
+                            "Tap if released with nothing else pressed",
+                            retro,
+                            target,
+                            cx,
+                            |s| {
+                                if let Settings::HoldTap(h) = s {
+                                    h.retro_tap = !h.retro_tap;
                                 }
-                            });
-                        },
-                    ))
-                    .child(self.stepper(
-                        "hold-prior-idle",
-                        "No hold right after typing",
-                        optional_ms(
-                            setup_hold(setup).and_then(|h| h.require_prior_idle_ms),
-                            "off",
-                        ),
-                        cx,
-                        |this, d, window, cx| {
-                            this.edit_setups("Change Feel", window, cx, move |setup| {
-                                if let Choice::Custom(h) = &mut setup.feel.hold {
-                                    step_optional_ms(&mut h.require_prior_idle_ms, d, 25, 125);
+                            },
+                        ))
+                        .child(self.setup_toggle(
+                            "hold-undecided",
+                            "Hold starts right away",
+                            undecided,
+                            target,
+                            cx,
+                            |s| {
+                                if let Settings::HoldTap(h) = s {
+                                    h.hold_while_undecided = !h.hold_while_undecided;
                                 }
-                            });
-                        },
-                    ))
-                    .child(self.setup_toggle(
-                        "hold-retro",
-                        "Tap if released with nothing else pressed",
-                        setup_hold(setup).is_some_and(|h| h.retro_tap),
-                        cx,
-                        |setup| {
-                            if let Choice::Custom(h) = &mut setup.feel.hold {
-                                h.retro_tap = !h.retro_tap;
-                            }
-                        },
-                    ))
-                    .child(self.setup_toggle(
-                        "hold-undecided",
-                        "Hold starts right away",
-                        setup_hold(setup).is_some_and(|h| h.hold_while_undecided),
-                        cx,
-                        |setup| {
-                            if let Choice::Custom(h) = &mut setup.feel.hold {
-                                h.hold_while_undecided = !h.hold_while_undecided;
-                            }
-                        },
-                    ))
-                    .child(self.setup_toggle(
-                        "hold-other-hand",
-                        "Hold only with keys on the other hand",
-                        setup_hold(setup).is_some_and(|h| h.opposite_hand_hold),
-                        cx,
-                        |setup| {
-                            if let Choice::Custom(h) = &mut setup.feel.hold {
-                                h.opposite_hand_hold = !h.opposite_hand_hold;
-                            }
-                        },
-                    ))
-                    .child(self.setup_toggle(
-                        "hold-on-release",
-                        "Decide when the other key is released",
-                        setup_hold(setup).is_some_and(|h| h.hold_trigger_on_release),
-                        cx,
-                        |setup| {
-                            if let Choice::Custom(h) = &mut setup.feel.hold {
-                                h.hold_trigger_on_release = !h.hold_trigger_on_release;
-                            }
-                        },
-                    ))
-                    .child(self.render_trigger_keys(positions, triggers, cx))
-            }),
-        )
+                            },
+                        ))
+                        .child(self.setup_toggle(
+                            "hold-other-hand",
+                            "Hold only with keys on the other hand",
+                            other_hand,
+                            target,
+                            cx,
+                            |s| {
+                                if let Settings::HoldTap(h) = s {
+                                    h.opposite_hand_hold = !h.opposite_hand_hold;
+                                }
+                            },
+                        ))
+                        .child(self.setup_toggle(
+                            "hold-on-release",
+                            "Decide when the other key is released",
+                            on_release,
+                            target,
+                            cx,
+                            |s| {
+                                if let Settings::HoldTap(h) = s {
+                                    h.hold_trigger_on_release = !h.hold_trigger_on_release;
+                                }
+                            },
+                        ))
+                        .child(self.render_trigger_keys(target, positions, cx))
+                }),
+            )
     }
 
     /// The keys that let the hold happen, chosen on a small keyboard.
     fn render_trigger_keys(
         &self,
+        target: FeelTarget,
         positions: Vec<usize>,
-        count: usize,
         cx: &mut Context<Self>,
     ) -> Div {
-        let summary = match count {
+        let summary = match positions.len() {
             0 => "Any key".to_string(),
             1 => "1 key".to_string(),
             n => format!("{n} keys"),
@@ -998,8 +1102,8 @@ impl Workspace {
             |id: &'static str, label: &'static str, right: Option<bool>, cx: &mut Context<Self>| {
                 chip(id, label, false, cx).on_click(cx.listener(move |this, _, window, cx| {
                     let positions = right.map_or_else(Vec::new, |right| this.hand_positions(right));
-                    this.edit_setups("Change Hold Keys", window, cx, move |setup| {
-                        if let Choice::Custom(h) = &mut setup.feel.hold {
+                    this.edit_feel(target, "Change Hold Keys", window, cx, move |s| {
+                        if let Settings::HoldTap(h) = s {
                             h.hold_trigger_key_positions = positions.clone();
                         }
                     });
@@ -1037,7 +1141,7 @@ impl Workspace {
                             .child(canvas::keyboard(frame, move |b| bounds.set(b)))
                             .on_mouse_down(
                                 MouseButton::Left,
-                                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                                     let hit = canvas::key_at(
                                         this.layout_keys(),
                                         &[],
@@ -1045,12 +1149,13 @@ impl Workspace {
                                         event.position,
                                     );
                                     let Some(key) = hit else { return };
-                                    this.edit_setups(
+                                    this.edit_feel(
+                                        target,
                                         "Change Hold Keys",
                                         window,
                                         cx,
-                                        move |setup| {
-                                            if let Choice::Custom(h) = &mut setup.feel.hold {
+                                        move |s| {
+                                            if let Settings::HoldTap(h) = s {
                                                 match h
                                                     .hold_trigger_key_positions
                                                     .iter()
@@ -1088,17 +1193,28 @@ impl Workspace {
         let section = group("MORE THAN ONE TAP", cx)
             .child(field("How it feels", "", menu, cx))
             .child(self.template_row(Part::Taps, setup.feel.taps.template(), cx));
-        let Choice::Custom(t) = &setup.feel.taps else {
-            return section;
-        };
-        section.child(self.stepper(
+        match &setup.feel.taps {
+            Choice::Custom(t) => {
+                section.child(self.render_tap_dance_settings(FeelTarget::Keys(Part::Taps), t, cx))
+            }
+            _ => section,
+        }
+    }
+
+    fn render_tap_dance_settings(
+        &self,
+        target: FeelTarget,
+        t: &TapDanceSettings,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div().flex().flex_col().child(self.stepper(
             "taps-term",
             "Time allowed between taps",
             format!("{} ms", t.tapping_term_ms),
             cx,
-            |this, d, window, cx| {
-                this.edit_setups("Change Tap Time", window, cx, move |setup| {
-                    if let Choice::Custom(t) = &mut setup.feel.taps {
+            move |this, d, window, cx| {
+                this.edit_feel(target, "Change Tap Time", window, cx, move |s| {
+                    if let Settings::TapDance(t) = s {
                         t.tapping_term_ms = t
                             .tapping_term_ms
                             .saturating_add_signed(d as i32 * 10)
@@ -1114,8 +1230,9 @@ impl Workspace {
         &self,
         id: &'static str,
         current: &[Modifier],
-        cx: &mut Context<Self>,
+        target: FeelTarget,
         keep: bool,
+        cx: &mut Context<Self>,
     ) -> Div {
         let chips = Modifier::ALL
             .into_iter()
@@ -1124,8 +1241,8 @@ impl Workspace {
                 let name = words::modifier_name(modifier);
                 chip((id, index), name, current.contains(&modifier), cx).on_click(cx.listener(
                     move |this, _, window, cx| {
-                        this.edit_setups("Change Modifiers", window, cx, move |setup| {
-                            if let Choice::Custom(m) = &mut setup.feel.shifted {
+                        this.edit_feel(target, "Change Modifiers", window, cx, move |s| {
+                            if let Settings::ModMorph(m) = s {
                                 let list = if keep { &mut m.keep_mods } else { &mut m.mods };
                                 match list.iter().position(|x| *x == modifier) {
                                     Some(at) => {
@@ -1157,18 +1274,33 @@ impl Workspace {
         let section = group("OVERRIDE", cx)
             .child(field("Which modifiers", "", menu, cx))
             .child(self.template_row(Part::Shifted, setup.feel.shifted.template(), cx));
-        let Choice::Custom(m) = &setup.feel.shifted else {
-            return section;
-        };
+        match &setup.feel.shifted {
+            Choice::Custom(m) => section.child(self.render_mod_morph_settings(
+                FeelTarget::Keys(Part::Shifted),
+                m,
+                cx,
+            )),
+            _ => section,
+        }
+    }
+
+    fn render_mod_morph_settings(
+        &self,
+        target: FeelTarget,
+        m: &ModMorphSettings,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let kept = match m.keep_mods.len() {
             0 => "None".to_string(),
             1 => "1 modifier".to_string(),
             n => format!("{n} modifiers"),
         };
-        section
+        div()
+            .flex()
+            .flex_col()
             .child(help("The override is sent while any of these is held.", cx).pt_2())
             .child(
-                self.modifier_set_chips("shifted-mods", &m.mods, cx, false)
+                self.modifier_set_chips("shifted-mods", &m.mods, target, false, cx)
                     .pt_2(),
             )
             .child(self.fold(
@@ -1178,7 +1310,7 @@ impl Workspace {
                 cx,
                 |column, cx| {
                     column.child(
-                        self.modifier_set_chips("shifted-keep", &m.keep_mods, cx, true)
+                        self.modifier_set_chips("shifted-keep", &m.keep_mods, target, true, cx)
                             .pt_3(),
                     )
                 },
@@ -1201,18 +1333,31 @@ impl Workspace {
         let section = group("STICKY", cx)
             .child(field("How it lets go", "", menu, cx))
             .child(self.template_row(Part::Sticky, setup.feel.sticky.template(), cx));
-        let Choice::Custom(s) = &setup.feel.sticky else {
-            return section;
-        };
-        section
+        match &setup.feel.sticky {
+            Choice::Custom(s) => {
+                section.child(self.render_sticky_settings(FeelTarget::Keys(Part::Sticky), s, cx))
+            }
+            _ => section,
+        }
+    }
+
+    fn render_sticky_settings(
+        &self,
+        target: FeelTarget,
+        s: &StickyKeySettings,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div()
+            .flex()
+            .flex_col()
             .child(self.stepper(
                 "sticky-release",
                 "Lets go after",
                 format!("{} ms", s.release_after_ms),
                 cx,
-                |this, d, window, cx| {
-                    this.edit_setups("Change Feel", window, cx, move |setup| {
-                        if let Choice::Custom(s) = &mut setup.feel.sticky {
+                move |this, d, window, cx| {
+                    this.edit_feel(target, "Change Feel", window, cx, move |s| {
+                        if let Settings::StickyKey(s) = s {
                             s.release_after_ms = s
                                 .release_after_ms
                                 .saturating_add_signed(d as i32 * 100)
@@ -1225,9 +1370,10 @@ impl Workspace {
                 "sticky-quick",
                 "Or as soon as the next key is pressed",
                 s.quick_release,
+                target,
                 cx,
-                |setup| {
-                    if let Choice::Custom(s) = &mut setup.feel.sticky {
+                |s| {
+                    if let Settings::StickyKey(s) = s {
                         s.quick_release = !s.quick_release;
                     }
                 },
@@ -1236,9 +1382,10 @@ impl Workspace {
                 "sticky-lazy",
                 "Press only when the next key is",
                 s.lazy,
+                target,
                 cx,
-                |setup| {
-                    if let Choice::Custom(s) = &mut setup.feel.sticky {
+                |s| {
+                    if let Settings::StickyKey(s) = s {
                         s.lazy = !s.lazy;
                     }
                 },
@@ -1247,13 +1394,191 @@ impl Workspace {
                 "sticky-ignore",
                 "Let modifiers through",
                 s.ignore_modifiers,
+                target,
                 cx,
-                |setup| {
-                    if let Choice::Custom(s) = &mut setup.feel.sticky {
+                |s| {
+                    if let Settings::StickyKey(s) = s {
                         s.ignore_modifiers = !s.ignore_modifiers;
                     }
                 },
             ))
+    }
+
+    /// A macro's timing, the only settings it has apart from its steps.
+    fn render_macro_settings(
+        &self,
+        target: FeelTarget,
+        m: &MacroSettings,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div()
+            .flex()
+            .flex_col()
+            .child(self.stepper(
+                "macro-wait",
+                "Wait between steps",
+                optional_ms(m.wait_ms, "default"),
+                cx,
+                move |this, d, window, cx| {
+                    this.edit_feel(target, "Change Macro Timing", window, cx, move |s| {
+                        if let Settings::Macro(m) = s {
+                            step_optional_ms(&mut m.wait_ms, d, 5, 15);
+                        }
+                    });
+                },
+            ))
+            .child(self.stepper(
+                "macro-tap",
+                "Hold each tap for",
+                optional_ms(m.tap_ms, "default"),
+                cx,
+                move |this, d, window, cx| {
+                    this.edit_feel(target, "Change Macro Timing", window, cx, move |s| {
+                        if let Settings::Macro(m) = s {
+                            step_optional_ms(&mut m.tap_ms, d, 5, 30);
+                        }
+                    });
+                },
+            ))
+    }
+
+    /// The macro reached from the key's slots, edited in place when it is
+    /// the key's own, or named when it is a template.
+    fn render_macro_section(&self, cx: &mut Context<Self>) -> Option<Div> {
+        let muted = cx.theme().muted_foreground;
+        let id = self.key_macro()?;
+        let def = self.project().behavior(id)?;
+        let BehaviorKind::Macro(m) = &def.kind else {
+            return None;
+        };
+        let (layer, position) = (self.layer, self.primary()?);
+        if def.is_template() {
+            let name = def.name.clone();
+            return Some(
+                group("MACRO", cx).child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_2()
+                        .py_2()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_xs()
+                                .text_color(muted)
+                                .child(format!("Runs the macro template “{name}”.")),
+                        )
+                        .child(chip("macro-open", "Open", false, cx).on_click(cx.listener(
+                            move |this, _, window, cx| {
+                                this.behavior = Some(id);
+                                this.set_mode(Mode::Templates, window, cx);
+                            },
+                        )))
+                        .child(
+                            chip("macro-detach", "Detach", false, cx).on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    let mut failed: Option<SetupError> = None;
+                                    let _ = this.editor.edit("Detach Macro", |p| {
+                                        p.detach_from_template(layer, position, id).map_err(|e| {
+                                            failed = Some(e);
+                                            ModelError::NoSuchSlot
+                                        })
+                                    });
+                                    if let Some(error) = failed {
+                                        this.notice = Some(format!("{error}."));
+                                    }
+                                    this.after_change(window, cx);
+                                },
+                            )),
+                        ),
+                ),
+            );
+        }
+        let naming = self.naming_macro == Some(id);
+        let mut row = div().flex().flex_wrap().items_center().gap_2().py_2();
+        if naming {
+            row = row
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(Input::new(&self.template_name)),
+                )
+                .child(
+                    chip("macro-template-save", "Save", false, cx).on_click(
+                        cx.listener(|this, _, window, cx| this.save_template(window, cx)),
+                    ),
+                )
+                .child(
+                    chip("macro-template-cancel", "Cancel", false, cx).on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.naming_macro = None;
+                            cx.notify();
+                        },
+                    )),
+                );
+        } else {
+            row = row.child(
+                chip("macro-save-template", "Save as template…", false, cx).on_click(cx.listener(
+                    move |this, _, window, cx| {
+                        this.naming_macro = Some(id);
+                        this.naming = None;
+                        this.template_name
+                            .read(cx)
+                            .focus_handle(cx)
+                            .focus(window, cx);
+                        cx.notify();
+                    },
+                )),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .child(group("MACRO", cx).child(row))
+                .child(self.render_macro_steps(id, m, cx)),
+        )
+    }
+
+    /// Makes the selected keys run a new macro of their own, built below.
+    fn make_key_macro(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (layer, targets) = (self.layer, self.selection.clone());
+        let mut failed: Option<SetupError> = None;
+        let result = self.editor.edit("Add Macro", |p| {
+            let label = p.free_label("macro");
+            let id = p.add_behavior(
+                label,
+                "",
+                BehaviorKind::Macro(kc_model::behavior::Macro {
+                    wait_ms: None,
+                    tap_ms: None,
+                    params: 0,
+                    steps: Vec::new(),
+                }),
+            )?;
+            p.behavior_mut(id)?.scope = kc_model::behavior::Scope::Key;
+            for position in &targets {
+                let mut setup = KeySetup::of(p, layer, *position)
+                    .unwrap_or_else(|| KeySetup::plain(Binding::none()));
+                setup.tap = Binding::user(id, vec![]);
+                if let Err(error) = p.apply_setup(layer, *position, &setup) {
+                    failed = Some(error);
+                    return Err(ModelError::NoSuchSlot);
+                }
+            }
+            Ok(())
+        });
+        match (failed, result) {
+            (Some(error), _) => self.notice = Some(format!("{error}.")),
+            (None, Err(error)) => self.notice = Some(format!("{error}.")),
+            _ => {}
+        }
+        self.key_slot = None;
+        self.pending_slot = None;
+        self.after_change(window, cx);
     }
 
     /// The key as keymap text, and the definition behind it, for people
@@ -1317,11 +1642,11 @@ impl Workspace {
                                 .child(format!("Definition: {}", def.display_name())),
                         )
                         .child(badge(def.kind.name(), cx.theme().foreground))
-                        .when(Mode::Behaviors.available(&self.features()), |row| {
+                        .when(Mode::Templates.available(&self.features()), |row| {
                             row.child(chip("edit-definition", "Open", false, cx).on_click(
                                 cx.listener(move |this, _, window, cx| {
                                     this.behavior = Some(id);
-                                    this.set_mode(Mode::Behaviors, window, cx);
+                                    this.set_mode(Mode::Templates, window, cx);
                                 }),
                             ))
                         }),
@@ -1331,10 +1656,25 @@ impl Workspace {
     }
 }
 
-fn setup_hold(setup: &KeySetup) -> Option<&HoldTapSettings> {
-    match &setup.feel.hold {
-        Choice::Custom(h) => Some(h),
-        _ => None,
+/// The selected key's own settings for one part, if it has its own.
+fn custom_settings(setup: &KeySetup, part: Part) -> Option<Settings> {
+    match part {
+        Part::Hold => match &setup.feel.hold {
+            Choice::Custom(h) => Some(Settings::HoldTap(h.clone())),
+            _ => None,
+        },
+        Part::Taps => match &setup.feel.taps {
+            Choice::Custom(t) => Some(Settings::TapDance(t.clone())),
+            _ => None,
+        },
+        Part::Shifted => match &setup.feel.shifted {
+            Choice::Custom(m) => Some(Settings::ModMorph(m.clone())),
+            _ => None,
+        },
+        Part::Sticky => match &setup.feel.sticky {
+            Choice::Custom(s) => Some(Settings::StickyKey(s.clone())),
+            _ => None,
+        },
     }
 }
 

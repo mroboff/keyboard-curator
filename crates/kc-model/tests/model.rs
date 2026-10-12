@@ -748,14 +748,13 @@ fn the_picker_offers_what_the_firmware_supports() {
     );
     assert_eq!(find("BT 4").unwrap().binding, command("bt", "BT_SEL", &[4]));
     assert_eq!(find("Left click").unwrap().group, PickerGroup::Mouse);
-    assert_eq!(find("Nav tap-dance").unwrap().group, PickerGroup::Custom);
-    // A behavior the user named says what kind it is; built-in keys do not
-    // need to.
-    assert_eq!(find("Nav tap-dance").unwrap().kind, Some("Multi-tap"));
-    assert!(find("Nav tap-dance").unwrap().matches("multi-tap tapped"));
+    // Macro templates are picked; feels are chosen under a key's setup.
+    assert_eq!(find("Type hello").unwrap().group, PickerGroup::Macros);
+    assert_eq!(find("Type hello").unwrap().kind, Some("Macro"));
+    assert!(find("Type hello").unwrap().matches("macro hello"));
+    assert!(find("Nav tap-dance").is_none() && find("Magic").is_none());
     assert_eq!(find("A").unwrap().kind, None);
     for def in &p.behaviors {
-        assert_eq!(find(&def.name).unwrap().kind, Some(def.kind.name()));
         assert!(!def.kind.summary().is_empty());
     }
     assert!(find("Transparent").is_some() && find("Bootloader").is_some());
@@ -769,11 +768,8 @@ fn the_picker_offers_what_the_firmware_supports() {
         command("rgb_ug", "RGB_COLOR_HSB", &[180, 50, 50])
     );
     assert_eq!(
-        find("Magic").unwrap().binding,
-        Binding::user(
-            p.behaviors[0].id,
-            vec![Param::Layer(p.layers[0].id), Param::Key(KeyExpr::new("A"))]
-        )
+        find("Type hello").unwrap().binding,
+        Binding::user(p.behaviors[2].id, vec![])
     );
 
     let imprint = board("cyboard-imprint");
