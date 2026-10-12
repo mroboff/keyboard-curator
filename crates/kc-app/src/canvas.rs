@@ -3,7 +3,7 @@
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
-use kc_boards::geometry::{self, Key, Point as LayoutPoint};
+use kc_boards::geometry::{self, Key, Point as LayoutPoint, Spot};
 use kc_model::keycap::{Keycap, KeycapKind};
 
 use crate::theme::CapStyle;
@@ -18,6 +18,8 @@ const RADIUS: f32 = 12.;
 const LIP: i32 = 9;
 /// How far below a sculpted cap its shadow falls, in layout units.
 const SHADOW: i32 = 5;
+/// The radius of an underglow light's dot, in layout units.
+const GLOW_RADIUS: f32 = 17.;
 
 /// Maps layout units into canvas bounds, preserving aspect ratio.
 #[derive(Debug, Clone, Copy)]
@@ -27,8 +29,20 @@ pub struct Viewport {
 }
 
 impl Viewport {
-    pub fn fit(keys: &[Key], devices: &[Device], bounds: Bounds<Pixels>) -> Option<Self> {
+    pub fn fit(
+        keys: &[Key],
+        devices: &[Device],
+        spots: &[Spot],
+        bounds: Bounds<Pixels>,
+    ) -> Option<Self> {
         let mut rect = geometry::bounds(keys)?;
+        for spot in spots {
+            let c = spot.center();
+            rect.min.x = rect.min.x.min(c.x - GLOW_RADIUS);
+            rect.min.y = rect.min.y.min(c.y - GLOW_RADIUS);
+            rect.max.x = rect.max.x.max(c.x + GLOW_RADIUS);
+            rect.max.y = rect.max.y.max(c.y + GLOW_RADIUS);
+        }
         for device in devices {
             let half = device.size / 2.;
             rect.min.x = rect.min.x.min(device.x - half);
@@ -94,8 +108,32 @@ pub fn key_at(
     bounds: Bounds<Pixels>,
     position: Point<Pixels>,
 ) -> Option<usize> {
-    let view = Viewport::fit(keys, devices, bounds)?;
+    let view = Viewport::fit(keys, devices, &[], bounds)?;
     geometry::key_at(keys, view.to_layout(position))
+}
+
+/// Something lit under a pointer position: a key, or an underglow light.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lit {
+    Key(usize),
+    Glow(usize),
+}
+
+/// The key or underglow light under a pointer position, on a canvas that
+/// draws the underglow too.
+pub fn lit_at(
+    keys: &[Key],
+    spots: &[Spot],
+    bounds: Bounds<Pixels>,
+    position: Point<Pixels>,
+) -> Option<Lit> {
+    let view = Viewport::fit(keys, &[], spots, bounds)?;
+    let p = view.to_layout(position);
+    if let Some(key) = geometry::key_at(keys, p) {
+        return Some(Lit::Key(key));
+    }
+    // A dot is small: a little around it counts too.
+    geometry::spot_at(spots, p, GLOW_RADIUS * 1.6).map(Lit::Glow)
 }
 
 /// The keys whose centers lie inside the rectangle spanned by two pointer
@@ -106,7 +144,7 @@ pub fn keys_in_band(
     bounds: Bounds<Pixels>,
     band: (Point<Pixels>, Point<Pixels>),
 ) -> Vec<usize> {
-    let Some(view) = Viewport::fit(keys, devices, bounds) else {
+    let Some(view) = Viewport::fit(keys, devices, &[], bounds) else {
         return Vec::new();
     };
     let (a, b) = (view.to_layout(band.0), view.to_layout(band.1));
@@ -199,6 +237,12 @@ pub struct Frame {
     pub links: Vec<(Vec<usize>, bool)>,
     /// The color each key is lit, for the lighting view. Empty elsewhere.
     pub colors: Vec<Option<Hsla>>,
+    /// The underglow lights, each where the layout draws it and in the
+    /// color it is lit, for the lighting view of a keyboard that paints
+    /// them. Empty elsewhere.
+    pub glow: Vec<(Spot, Option<Hsla>)>,
+    /// The underglow light under the pointer.
+    pub hovered_glow: Option<usize>,
     /// Keys drawn in slices, one per function, for the key tester: each
     /// slice's legend and color. A key with no slices is drawn from its
     /// keycap. Empty elsewhere.
@@ -305,11 +349,37 @@ fn paint_text(
 }
 
 fn paint(frame: &Frame, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-    let Some(view) = Viewport::fit(&frame.keys, &frame.devices, bounds) else {
+    let spots: Vec<Spot> = frame.glow.iter().map(|(spot, _)| *spot).collect();
+    let Some(view) = Viewport::fit(&frame.keys, &frame.devices, &spots, bounds) else {
         return;
     };
     let palette = frame.palette;
     let unit = px(view.scale * 100.);
+    // The underglow: a dot per light, under the keys, lit or dark.
+    for (index, (spot, color)) in frame.glow.iter().enumerate() {
+        let size = px(GLOW_RADIUS * 2. * view.scale);
+        let center = view.to_screen(spot.center());
+        let fill = color.unwrap_or(palette.key.opacity(0.25));
+        let hovered = frame.hovered_glow == Some(index);
+        let (width, border) = if hovered {
+            (px(2.), palette.accent)
+        } else {
+            (px(1.), palette.key_border)
+        };
+        let fill = if hovered {
+            fill.blend(palette.accent.opacity(0.18))
+        } else {
+            fill
+        };
+        window.paint_quad(quad(
+            Bounds::centered_at(center, gpui_kit::size(size, size)),
+            size / 2.,
+            fill,
+            width,
+            border,
+            Default::default(),
+        ));
+    }
     for device in &frame.devices {
         let size = px(device.size * view.scale);
         let center = view.to_screen(LayoutPoint {
@@ -592,9 +662,44 @@ pub fn keyboard(frame: Frame, on_bounds: impl Fn(Bounds<Pixels>) + 'static) -> i
 
 #[cfg(test)]
 mod tests {
-    use gpui_kit::{black, hsla, rgb, white, Hsla};
+    use gpui_kit::{black, hsla, point, px, rgb, size, white, Bounds, Hsla};
+    use kc_boards::geometry::{Key, Spot};
 
-    use super::text_on;
+    use super::{lit_at, text_on, Lit, Viewport};
+
+    #[test]
+    fn the_pointer_finds_keys_and_underglow_lights() {
+        let keys: Vec<Key> = vec![
+            [100, 100, 0, 0, 0, 0, 0].into(),
+            [100, 100, 100, 0, 0, 0, 0].into(),
+        ];
+        let spots = vec![Spot { x: 50, y: 160 }, Spot { x: 150, y: 160 }];
+        let bounds = Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(400.), px(300.)),
+        };
+        let view = Viewport::fit(&keys, &[], &spots, bounds).unwrap();
+        let at = |x: f32, y: f32| {
+            lit_at(
+                &keys,
+                &spots,
+                bounds,
+                view.to_screen(kc_boards::geometry::Point { x, y }),
+            )
+        };
+        assert_eq!(at(50., 50.), Some(Lit::Key(0)));
+        assert_eq!(at(150., 50.), Some(Lit::Key(1)));
+        assert_eq!(at(150., 160.), Some(Lit::Glow(1)));
+        // A little off a dot still counts; far off does not.
+        assert_eq!(at(60., 170.), Some(Lit::Glow(0)));
+        assert_eq!(at(100., 250.), None);
+        // The dots are inside the drawing, not clipped by it.
+        assert!(
+            view.to_screen(kc_boards::geometry::Point { x: 150., y: 177. })
+                .y
+                < bounds.size.height
+        );
+    }
 
     #[test]
     fn text_on_a_colored_key_is_whichever_of_black_and_white_reads() {

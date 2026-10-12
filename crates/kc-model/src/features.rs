@@ -288,6 +288,10 @@ pub struct LayerLighting {
     pub fade_delay: Option<u32>,
     /// One entry per key position.
     pub keys: Vec<KeyLight>,
+    /// One entry per underglow light of the layout, in the firmware's
+    /// order, or empty while none has been painted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub underglow: Vec<KeyLight>,
     /// Swatches offered when painting this layer.
     pub palette: Vec<Rgb>,
 }

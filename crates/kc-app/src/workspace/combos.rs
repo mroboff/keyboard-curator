@@ -239,6 +239,8 @@ impl Workspace {
             tint: None,
             colors: Vec::new(),
             bands: Vec::new(),
+            glow: Vec::new(),
+            hovered_glow: None,
             links: self
                 .project()
                 .combos

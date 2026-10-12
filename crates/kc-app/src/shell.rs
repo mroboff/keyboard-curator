@@ -1434,6 +1434,8 @@ impl Shell {
             links: Vec::new(),
             colors: Vec::new(),
             bands: Vec::new(),
+            glow: Vec::new(),
+            hovered_glow: None,
         };
 
         let connected = library.is_connected(keyboard);

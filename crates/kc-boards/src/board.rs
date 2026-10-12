@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::geometry::Key;
+use crate::geometry::{Key, Spot};
 
 /// A keyboard the app can edit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -55,6 +55,10 @@ pub struct PhysicalLayout {
     pub name: String,
     /// Keys in binding order.
     pub keys: Vec<Key>,
+    /// Where the underglow lights are drawn, in the firmware's order, for
+    /// keyboards whose underglow is painted light by light.
+    #[serde(default)]
+    pub underglow: Vec<Spot>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -430,6 +434,10 @@ pub struct DygmaProfile {
     pub key_slots: Vec<usize>,
     /// For each key of the default layout, the light under it.
     pub key_leds: Vec<usize>,
+    /// The light of the default layout's first underglow spot; the rest
+    /// follow in order. Without it, the underglow is left as it is.
+    #[serde(default)]
+    pub underglow_first: Option<usize>,
 }
 
 impl FirmwareProfile {
@@ -721,19 +729,29 @@ impl Board {
                 }
             }
             if profile.family == Family::Dygma {
-                let keys = self
+                let (keys, spots) = self
                     .layout(&self.default_layout)
-                    .map_or(0, |l| l.keys.len());
+                    .map_or((0, 0), |l| (l.keys.len(), l.underglow.len()));
                 let sound = profile.dygma.as_ref().is_some_and(|d| {
                     let distinct = |list: &[usize], limit: usize| {
                         list.len() == keys
                             && list.iter().all(|n| *n < limit)
                             && list.iter().collect::<HashSet<_>>().len() == keys
                     };
+                    // The underglow lights fit after the keys' and overlap
+                    // none of them.
+                    let underglow = d.underglow_first.is_none_or(|first| {
+                        first + spots <= d.leds
+                            && !d
+                                .key_leds
+                                .iter()
+                                .any(|led| (first..first + spots).contains(led))
+                    });
                     d.layers > 0
                         && d.palette > 0
                         && distinct(&d.key_slots, d.slots)
                         && distinct(&d.key_leds, d.leds)
+                        && underglow
                 });
                 if !sound {
                     return Err(BoardError::BadDygma(profile.id.clone()));

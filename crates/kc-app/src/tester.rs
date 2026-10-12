@@ -685,6 +685,8 @@ impl Render for KeyTester {
             links,
             colors: Vec::new(),
             bands,
+            glow: Vec::new(),
+            hovered_glow: None,
         };
         let bounds = self.bounds.clone();
 

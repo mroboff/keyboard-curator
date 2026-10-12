@@ -227,6 +227,8 @@ pub struct Workspace {
     /// Selected key positions; the last one is the key the inspector shows.
     selection: Vec<usize>,
     hovered: Option<usize>,
+    /// The underglow light under the pointer, in the Lighting mode.
+    hovered_glow: Option<usize>,
     drag: Option<KeyDrag>,
     /// The layer being dragged in the layer list, and the place in the
     /// list it would take if let go of now.
@@ -634,6 +636,7 @@ impl Workspace {
             color_picker,
             selection: Vec::new(),
             hovered: None,
+            hovered_glow: None,
             drag: None,
             layer_drop: None,
             unfolded: std::collections::HashSet::new(),
@@ -1664,6 +1667,8 @@ impl Workspace {
             links: Vec::new(),
             colors: Vec::new(),
             bands: Vec::new(),
+            glow: Vec::new(),
+            hovered_glow: None,
         };
         let bounds = self.canvas_bounds.clone();
 

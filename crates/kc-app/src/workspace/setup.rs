@@ -1116,6 +1116,8 @@ impl Workspace {
             links: Vec::new(),
             colors: Vec::new(),
             bands: Vec::new(),
+            glow: Vec::new(),
+            hovered_glow: None,
         };
         let bounds = self.mini_bounds.clone();
         let hands =

@@ -534,7 +534,7 @@ impl BoardPage {
                 backups.display()
             ),
             _ => format!(
-                "This changes “{}” at once: its keys and the colors under them on every layer. Superkeys, macros, underglow and settings are left as they are. What the keyboard holds now is saved first, in {}.",
+                "This changes “{}” at once: its keys and colors on every layer, the superkeys and macros they need, and the settings that differ from the board's. Nothing else is touched. What the keyboard holds now is saved first, in {}.",
                 saved.name,
                 backups.display()
             ),
@@ -1710,7 +1710,7 @@ impl BoardPage {
                 panel(
                     "Apply to the keyboard",
                     format!(
-                        "{current} Applying writes it to the keyboard at once, with no build. Only keys and the colors under them are written, and only if they differ; superkeys, macros, underglow and settings stay as they are. The keyboard's configuration is saved to disk first."
+                        "{current} Applying writes it to the keyboard at once, with no build. Only what differs is written: keys and colors, the superkeys and macros they need, and settings. The keyboard's configuration is saved to disk first."
                     ),
                 )
                 .when(!self.live_busy && saved.current.is_some(), |panel| {

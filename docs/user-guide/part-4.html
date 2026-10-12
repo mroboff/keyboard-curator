@@ -192,8 +192,8 @@
   <p>The Defy keeps its layout on the keyboard, and the app changes it over USB with Dygma's own protocol. There is nothing to build. Connect the keyboard by USB and close Dygma's Bazecor first: only one program can talk to the keyboard at a time. Firmware updates stay with Bazecor.</p>
   <table class="wrap">
     <tr><th>Button</th><th>What it does</th></tr>
-    <tr><td class="ui">Read From Keyboard</td><td>Opens what the keyboard holds now as a new, unsaved layout: every layer's keys and the colors under them. Nothing is written to the keyboard. Save it to keep it.</td></tr>
-    <tr><td class="ui">Apply To Keyboard…</td><td>Writes the board's current layout to the keyboard at once. Only keys and the colors under them are written, and only if they differ; superkeys, macros, mouse and media keys, the underglow and the keyboard's settings are left exactly as they are. The app asks first, saves what the keyboard holds to a <i>backups</i> folder inside its own folder in Library › Application Support, and reports how many changes it made.</td></tr>
+    <tr><td class="ui">Read From Keyboard</td><td>Opens what the keyboard holds now as a new, unsaved layout: every layer's keys, superkeys and macros, the colors under the keys and the underglow. The keyboard's settings are offered to the board. Nothing is written to the keyboard. Save it to keep it.</td></tr>
+    <tr><td class="ui">Apply To Keyboard…</td><td>Writes the board's current layout to the keyboard at once. Only what differs is written: keys and colors, the superkeys and macros the keys need, and the board's settings. Superkeys and macros already on the keyboard are never removed. The app asks first, saves what the keyboard holds to a <i>backups</i> folder inside its own folder in Library › Application Support, and reports how many changes it made.</td></tr>
   </table>
   <p>If the keyboard already holds the layout, nothing is written. Keys that use something Dygma's firmware cannot express are flagged in the editor and have to be changed before the layout can be written.</p>
 
@@ -333,8 +333,8 @@
     <tr><td>Flashing</td><td>None from this app. Firmware updates are done with Bazecor.</td></tr>
     <tr><td>Starting layout</td><td><span class="ui">Read From Keyboard</span> on the Keyboard tab, which opens what the Defy holds. <span class="ui">New Layout</span> starts with one empty layer.</td></tr>
     <tr><td>Layers</td><td>Ten.</td></tr>
-    <tr><td>Lighting</td><td>Per-key colors from a palette of sixteen, which the underglow shares. No lock or battery lights. No brightness limit.</td></tr>
-    <tr><td>Kept as they are</td><td>Superkeys, macros, mouse and media keys and the underglow colors stay exactly as they are on the keyboard; they cannot be edited here yet. The firmware has no combos or layer rules, so those modes are not offered.</td></tr>
+    <tr><td>Lighting</td><td>Per-key colors and the underglow, painted light by light, from a palette of sixteen the whole keyboard shares. No lock or battery lights. No brightness limit.</td></tr>
+    <tr><td>Kept as they are</td><td>Superkeys and macros already on the keyboard, and the lights no layout paints. The firmware has no combos or layer rules, so those modes are not offered.</td></tr>
     <tr><td>Status</td><td>Reading is proven on a Defy; writing has so far only been tested against a simulated keyboard. A backup of the keyboard's configuration is saved before the first write.</td></tr></table>
 </section>
 

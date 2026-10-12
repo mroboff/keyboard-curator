@@ -540,6 +540,7 @@ impl Project {
                     layer,
                     fade_delay: None,
                     keys: vec![KeyLight::Inherit; self.key_count],
+                    underglow: Vec::new(),
                     palette: Vec::new(),
                 });
                 self.lighting.len() - 1

@@ -446,6 +446,19 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
                 ),
             );
         }
+        let spots = board
+            .layout(&project.layout)
+            .map_or(0, |l| l.underglow.len());
+        if !lighting.underglow.is_empty() && lighting.underglow.len() != spots {
+            c.error(
+                &location,
+                format!(
+                    "lighting has {} underglow lights, but the layout has {}",
+                    lighting.underglow.len(),
+                    spots
+                ),
+            );
+        }
     }
 
     for key in kc_zmk::settings::BRIGHTNESS_SETTINGS {

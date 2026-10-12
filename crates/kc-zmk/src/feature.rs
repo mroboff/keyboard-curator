@@ -16,6 +16,9 @@ pub enum Feature {
     RgbStatus,
     /// Per-key, per-layer colors through `zmk,underglow-layer`.
     PerKeyLighting,
+    /// A color painted on each underglow light, per layer, beside the
+    /// per-key colors: the layout says where the lights are.
+    UnderglowLighting,
     /// Single-channel backlight (`&bl`).
     Backlight,
     /// Switchable external power rail (`&ext_power`).

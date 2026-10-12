@@ -505,6 +505,9 @@ fn check_firmware(board: &Board, firmware: &str) -> Result<(), KeyboardError> {
 pub struct Hidden {
     /// Per-key colors, when the firmware has no per-key lighting.
     pub lighting: bool,
+    /// Underglow colors, when the firmware's underglow is not painted
+    /// light by light.
+    pub underglow: bool,
     /// Pointing-device configuration, when the firmware has no pointing.
     pub pointing: bool,
     /// Combos, when the firmware has none.
@@ -526,6 +529,7 @@ impl Hidden {
         // Each part with whether its name is plural.
         let parts: Vec<(&str, bool)> = [
             (self.lighting, "per-key colors", true),
+            (self.underglow, "underglow colors", true),
             (self.pointing, "pointing configuration", false),
             (self.combos, "combos", true),
             (self.layer_rules, "layer rules", true),
@@ -559,6 +563,11 @@ pub fn hidden(project: &Project, features: &[Feature]) -> Hidden {
                 .lighting
                 .iter()
                 .any(|l| l.keys.iter().any(|k| *k != KeyLight::Inherit)),
+        underglow: lacks(Feature::UnderglowLighting)
+            && project
+                .lighting
+                .iter()
+                .any(|l| l.underglow.iter().any(|k| *k != KeyLight::Inherit)),
         pointing: lacks(Feature::Pointing) && !project.pointing.is_empty(),
         combos: lacks(Feature::Combos) && !project.combos.is_empty(),
         layer_rules: lacks(Feature::LayerRules) && !project.conditional_layers.is_empty(),

@@ -333,6 +333,14 @@ fn a_layout_read_from_the_keyboard_writes_nothing_when_applied_unchanged() {
         .unwrap();
     assert_eq!(lighting.keys[0], KeyLight::Color(Rgb(255, 196, 0)));
     assert_eq!(lighting.keys[1], KeyLight::Off);
+    // The underglow comes along, one light per spot the layout draws.
+    let spots = board.layout(&board.default_layout).unwrap().underglow.len();
+    assert_eq!(spots, 106);
+    assert_eq!(lighting.underglow.len(), spots);
+    assert!(lighting
+        .underglow
+        .iter()
+        .all(|l| *l == KeyLight::Color(Rgb(255, 255, 255))));
     assert!(check(&project, &profile).is_empty());
 
     // Unchanged, it is the same image, and nothing is sent.
@@ -366,13 +374,27 @@ fn applying_a_layout_writes_only_what_changed_and_spares_the_rest() {
     // One color the palette has, and one it does not.
     project.lighting_mut(base).unwrap().keys[0] = KeyLight::Color(Rgb(255, 196, 0));
     project.lighting_mut(base).unwrap().keys[1] = KeyLight::Color(Rgb(10, 200, 30));
+    // The first underglow light painted amber, the last turned off; the
+    // rest as read.
+    let lighting = project.lighting_mut(base).unwrap();
+    lighting.underglow[0] = KeyLight::Color(Rgb(255, 196, 0));
+    lighting.underglow[105] = KeyLight::Off;
 
     let after = before.with_project(&project, &profile).unwrap();
     assert_eq!(after.keymap[profile.key_slots[0]], 4);
     assert_eq!(after.keymap[profile.key_slots[1]], 17451);
-    // The slot that is not a key, and the underglow, are untouched.
+    // The slot that is not a key is untouched; so are the underglow lights
+    // left as they were, and the two no layout draws.
     assert_eq!(after.keymap[7], 1234);
-    assert!(after.colormap[70..profile.leds].iter().all(|c| *c == 2));
+    assert_eq!(after.colormap[70], 1);
+    assert!(after.colormap[71..175].iter().all(|c| *c == 2));
+    assert_eq!(after.colormap[175], 0);
+    assert!(after.colormap[176..178].iter().all(|c| *c == 2));
+    // A layer whose underglow was never painted leaves the keyboard's.
+    let mut unpainted = project.clone();
+    unpainted.lighting_mut(base).unwrap().underglow.clear();
+    let kept = before.with_project(&unpainted, &profile).unwrap();
+    assert!(kept.colormap[70..profile.leds].iter().all(|c| *c == 2));
     // The existing amber entry is reused; the new green takes a free
     // entry, with the part all channels share moved to white.
     assert_eq!(after.colormap[profile.key_leds[0]], 1);

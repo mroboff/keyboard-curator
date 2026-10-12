@@ -3,13 +3,16 @@
 use gpui_kit::component::color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
+use kc_boards::geometry::Spot;
 use kc_model::features::{KeyLight, LockKind, Rgb};
 use kc_model::keycap::{keycap, Keycap, KeycapKind};
-use kc_model::lighting::{by_key_type, display_color, effective, led_check};
+use kc_model::lighting::{
+    by_key_type, display_color, effective, effective_underglow, led_check, led_check_underglow,
+};
 use kc_zmk::Feature;
 
 use super::{chip, heading, help, section_title, Workspace};
-use crate::canvas::{self, Frame, Palette};
+use crate::canvas::{self, Frame, Lit, Palette};
 
 /// What painting a key gives it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +69,17 @@ impl Workspace {
         self.features().contains(&Feature::PerKeyLighting)
     }
 
+    /// Where the underglow lights are drawn, when the firmware paints them
+    /// light by light; empty otherwise, and the colors stay in the layout.
+    fn underglow_spots(&self) -> &[Spot] {
+        if !self.features().contains(&Feature::UnderglowLighting) {
+            return &[];
+        }
+        self.board
+            .layout(&self.project().layout)
+            .map_or(&[], |l| l.underglow.as_slice())
+    }
+
     /// Whether the firmware shows per-key colors from power-up.
     fn starts_lit(&self) -> bool {
         self.board
@@ -105,22 +119,60 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Replaces the whole layer's lighting.
+    /// Paints an underglow light; the layer's list of them is made the
+    /// layout's length first, the rest inheriting.
+    fn paint_glow(&mut self, index: usize, cx: &mut Context<Self>) {
+        let (layer, light) = (self.layer, self.brush_light());
+        let count = self.underglow_spots().len();
+        let _ = self.editor.edit("Paint Lighting", |p| {
+            let underglow = &mut p.lighting_mut(layer)?.underglow;
+            underglow.resize(count, KeyLight::Inherit);
+            if let Some(glow) = underglow.get_mut(index) {
+                *glow = light;
+            }
+            Ok(())
+        });
+        cx.notify();
+    }
+
+    fn paint_lit(&mut self, lit: Lit, cx: &mut Context<Self>) {
+        match lit {
+            Lit::Key(key) => self.paint_key(key, cx),
+            Lit::Glow(index) => self.paint_glow(index, cx),
+        }
+    }
+
+    /// Replaces the whole layer's lighting: the keys, and the underglow
+    /// where the keyboard paints it (empty leaves every light inheriting).
     fn set_layer_lights(
         &mut self,
         label: &str,
         lights: Vec<KeyLight>,
+        underglow: Vec<KeyLight>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let layer = self.layer;
+        let spots = self.underglow_spots().len();
         self.change(label, window, cx, |p| {
             let lighting = p.lighting_mut(layer)?;
             if lights.len() == lighting.keys.len() {
                 lighting.keys = lights;
             }
+            if underglow.is_empty() || underglow.len() == spots {
+                lighting.underglow = underglow;
+            }
             Ok(())
         });
+    }
+
+    /// The layer's underglow lights as they are, for tools that leave
+    /// them alone.
+    fn current_underglow(&self) -> Vec<KeyLight> {
+        self.project()
+            .lighting(self.layer)
+            .map(|l| l.underglow.clone())
+            .unwrap_or_default()
     }
 
     /// The two LED check patterns for this layout: one color per row of
@@ -192,16 +244,19 @@ impl Workspace {
                     cx,
                 )
                 .on_click(cx.listener(move |this, _, window, cx| {
-                    let lights = this.project().lighting(id).map(|l| l.keys.clone());
-                    if let Some(lights) = lights {
-                        this.set_layer_lights("Copy Lighting", lights, window, cx);
+                    let lights = this
+                        .project()
+                        .lighting(id)
+                        .map(|l| (l.keys.clone(), l.underglow.clone()));
+                    if let Some((lights, underglow)) = lights {
+                        this.set_layer_lights("Copy Lighting", lights, underglow, window, cx);
                     }
                 }))
             })
             .collect::<Vec<_>>();
 
         div()
-            .h_56()
+            .flex_none()
             .flex()
             .flex_col()
             .gap_2()
@@ -253,19 +308,21 @@ impl Workspace {
                     .child(section_title("WHOLE LAYER", cx))
                     .child(chip("lights-fill", "Fill", false, cx).on_click(cx.listener(
                         move |this, _, window, cx| {
-                            let lights = vec![this.brush_light(); keys];
-                            this.set_layer_lights("Fill Lighting", lights, window, cx);
+                            let light = this.brush_light();
+                            let glow = vec![light; this.underglow_spots().len()];
+                            this.set_layer_lights("Fill Lighting", vec![light; keys], glow, window, cx);
                         },
                     )))
                     .child(chip("lights-clear", "Clear", false, cx).on_click(cx.listener(
                         move |this, _, window, cx| {
-                            this.set_layer_lights("Clear Lighting", vec![KeyLight::Inherit; keys], window, cx);
+                            this.set_layer_lights("Clear Lighting", vec![KeyLight::Inherit; keys], Vec::new(), window, cx);
                         },
                     )))
                     .child(chip("lights-by-type", "Color by what keys do", false, cx).on_click(
                         cx.listener(|this, _, window, cx| {
                             let lights = by_key_type(this.project(), this.layer);
-                            this.set_layer_lights("Color by Key Type", lights, window, cx);
+                            let glow = this.current_underglow();
+                            this.set_layer_lights("Color by Key Type", lights, glow, window, cx);
                         }),
                     ))
                     .children(others),
@@ -280,25 +337,32 @@ impl Workspace {
                     .child(chip("lights-check-rows", "One color per row", false, cx).on_click(
                         cx.listener(|this, _, window, cx| {
                             let (rows, _) = this.led_check_patterns();
-                            this.set_layer_lights("LED Check by Row", rows, window, cx);
+                            let glow = led_check_underglow(this.underglow_spots().len());
+                            this.set_layer_lights("LED Check by Row", rows, glow, window, cx);
                         }),
                     ))
                     .child(chip("lights-check-columns", "One color per column", false, cx).on_click(
                         cx.listener(|this, _, window, cx| {
                             let (_, columns) = this.led_check_patterns();
-                            this.set_layer_lights("LED Check by Column", columns, window, cx);
+                            let glow = led_check_underglow(this.underglow_spots().len());
+                            this.set_layer_lights("LED Check by Column", columns, glow, window, cx);
                         }),
                     ))
-                    .child(div().text_xs().text_color(muted).child(if self.leds_verified() {
-                        "For checking that each LED sits under the key the app thinks it does."
-                    } else {
-                        "This board's LED order has not been confirmed on hardware. Put these on the keyboard: a key lit in the wrong color is a key whose LED is mapped wrongly."
+                    .child(div().text_xs().text_color(muted).child(match (self.leds_verified(), self.underglow_spots().is_empty()) {
+                        (true, true) => "For checking that each LED sits under the key the app thinks it does.",
+                        (true, false) => "For checking that each LED sits under the key the app thinks it does, and that the underglow runs in the order drawn: its colors repeat along the strip.",
+                        (false, _) => "This board's LED order has not been confirmed on hardware. Put these on the keyboard: a key lit in the wrong color is a key whose LED is mapped wrongly.",
                     })),
             )
             .child(help(format!(
-                "Click or drag across keys to paint. Lock lights show the chosen color while the lock is on; battery lights turn red below the level. Colors are shown at full strength; the keyboard limits brightness to {}%.{}",
+                "Click or drag across keys{} to paint. Lock lights show the chosen color while the lock is on; battery lights turn red below the level. Colors are shown at full strength; the keyboard limits brightness to {}%.{}",
+                if self.underglow_spots().is_empty() {
+                    ""
+                } else {
+                    " and the underglow lights around them"
+                },
                 self.board.brightness_cap,
-                if self.starts_lit() {
+                if self.starts_lit() || self.config.delivery(&self.board) != kc_firmware::Delivery::Build {
                     ""
                 } else {
                     " After flashing, press the key that changes the lighting effect until these colors appear; the keyboard remembers."
@@ -341,6 +405,17 @@ impl Workspace {
                 display_color(light).map(|c| to_hsla(c).opacity(if inherited { 0.4 } else { 1. }))
             })
             .collect();
+        let glow = self
+            .underglow_spots()
+            .iter()
+            .enumerate()
+            .map(|(index, spot)| {
+                let (light, inherited) = effective_underglow(self.project(), self.layer, index);
+                let color = display_color(light)
+                    .map(|c| to_hsla(c).opacity(if inherited { 0.4 } else { 1. }));
+                (*spot, color)
+            })
+            .collect();
         let frame = Frame {
             keycaps: (0..keys.len())
                 .map(|p| keycap(self.project(), self.layer, p).unwrap_or(blank.clone()))
@@ -356,10 +431,17 @@ impl Workspace {
             links: Vec::new(),
             colors,
             bands: Vec::new(),
+            glow,
+            hovered_glow: self.hovered_glow,
         };
         let bounds = self.canvas_bounds.clone();
-        let key_under = |this: &Self, position: Point<Pixels>| {
-            canvas::key_at(this.layout_keys(), &[], this.canvas_bounds.get(), position)
+        let lit_under = |this: &Self, position: Point<Pixels>| {
+            canvas::lit_at(
+                this.layout_keys(),
+                this.underglow_spots(),
+                this.canvas_bounds.get(),
+                position,
+            )
         };
 
         div()
@@ -378,19 +460,25 @@ impl Workspace {
                             // One undo step for the whole stroke.
                             this.editor.begin_group("Paint Lighting");
                             this.painting = true;
-                            if let Some(key) = key_under(this, event.position) {
-                                this.paint_key(key, cx);
+                            if let Some(lit) = lit_under(this, event.position) {
+                                this.paint_lit(lit, cx);
                             }
                         }),
                     )
                     .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
-                        let hovered = key_under(this, event.position);
-                        if hovered != this.hovered {
+                        let lit = lit_under(this, event.position);
+                        let (hovered, hovered_glow) = match lit {
+                            Some(Lit::Key(key)) => (Some(key), None),
+                            Some(Lit::Glow(index)) => (None, Some(index)),
+                            None => (None, None),
+                        };
+                        if hovered != this.hovered || hovered_glow != this.hovered_glow {
                             this.hovered = hovered;
+                            this.hovered_glow = hovered_glow;
                             cx.notify();
                         }
-                        if let (true, Some(key)) = (this.painting, hovered) {
-                            this.paint_key(key, cx);
+                        if let (true, Some(lit)) = (this.painting, lit) {
+                            this.paint_lit(lit, cx);
                         }
                     }))
                     .on_mouse_up(

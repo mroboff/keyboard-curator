@@ -4,7 +4,7 @@
 use kc_zmk::keycodes::{keycodes, Category};
 
 use crate::edit;
-use crate::features::{KeyLight, Rgb};
+use crate::features::{KeyLight, LayerLighting, Rgb};
 use crate::ids::LayerId;
 use crate::keycap::{keycap_for, KeycapKind};
 use crate::project::Project;
@@ -13,13 +13,26 @@ use crate::project::Project;
 /// the nearest layer below with a light of its own. The flag says whether
 /// the light came from a lower layer.
 pub fn effective(project: &Project, layer: LayerId, position: usize) -> (KeyLight, bool) {
+    effective_in(project, layer, |l| l.keys.get(position))
+}
+
+/// The same for an underglow light, by its place in the layout's list.
+pub fn effective_underglow(project: &Project, layer: LayerId, index: usize) -> (KeyLight, bool) {
+    effective_in(project, layer, |l| l.underglow.get(index))
+}
+
+fn effective_in(
+    project: &Project,
+    layer: LayerId,
+    pick: impl Fn(&LayerLighting) -> Option<&KeyLight>,
+) -> (KeyLight, bool) {
     let Some(index) = project.layer_index(layer) else {
         return (KeyLight::Inherit, false);
     };
     for (depth, below) in project.layers[..=index].iter().rev().enumerate() {
         let light = project
             .lighting(below.id)
-            .and_then(|l| l.keys.get(position))
+            .and_then(&pick)
             .copied()
             .unwrap_or_default();
         if light != KeyLight::Inherit {
@@ -106,4 +119,13 @@ pub fn led_check(keys: &[kc_boards::geometry::Key]) -> (Vec<KeyLight>, Vec<KeyLi
         columns.push(KeyLight::Color(CHECK_COLORS[column % CHECK_COLORS.len()]));
     }
     (rows, columns)
+}
+
+/// A pattern for checking the order of `count` underglow lights: the
+/// check colors in turn, so that the strip reads as a repeating rainbow
+/// and a light out of place breaks the run.
+pub fn led_check_underglow(count: usize) -> Vec<KeyLight> {
+    (0..count)
+        .map(|index| KeyLight::Color(CHECK_COLORS[index % CHECK_COLORS.len()]))
+        .collect()
 }

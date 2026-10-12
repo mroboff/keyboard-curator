@@ -27,6 +27,50 @@ impl Rect {
     }
 }
 
+/// A light with no key over it, such as an underglow LED: the center of
+/// where it is drawn, in layout units. Serialized as `[x, y]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "[i32; 2]", into = "[i32; 2]")]
+pub struct Spot {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl From<[i32; 2]> for Spot {
+    fn from([x, y]: [i32; 2]) -> Self {
+        Self { x, y }
+    }
+}
+
+impl From<Spot> for [i32; 2] {
+    fn from(s: Spot) -> Self {
+        [s.x, s.y]
+    }
+}
+
+impl Spot {
+    pub fn center(&self) -> Point {
+        Point {
+            x: self.x as f32,
+            y: self.y as f32,
+        }
+    }
+}
+
+/// The spot nearest `p` within `radius`, if any.
+pub fn spot_at(spots: &[Spot], p: Point, radius: f32) -> Option<usize> {
+    let distance = |s: &Spot| {
+        let c = s.center();
+        (c.x - p.x).powi(2) + (c.y - p.y).powi(2)
+    };
+    spots
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| distance(s) <= radius * radius)
+        .min_by(|(_, a), (_, b)| distance(a).total_cmp(&distance(b)))
+        .map(|(index, _)| index)
+}
+
 /// One key of a physical layout, as ZMK's `key_physical_attrs` describes it.
 ///
 /// The key is a `w` by `h` rectangle with its top-left corner at (`x`, `y`),

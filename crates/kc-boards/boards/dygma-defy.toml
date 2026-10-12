@@ -47,11 +47,10 @@ family = "dygma"
 experimental = true
 # The RGB capability is for the LED keys (next and previous effect,
 # toggle), which the firmware has; other lighting commands are not offered.
-capabilities = ["per-key-lighting", "rgb-underglow", "macros"]
+capabilities = ["per-key-lighting", "underglow-lighting", "rgb-underglow", "macros"]
 notes = [
   "Configured live over USB: there is nothing to build. A layout is written to the keyboard when you apply it, and takes effect at once.",
   "Close Dygma's Bazecor while using this app. Only one program can talk to the keyboard at a time. Firmware updates stay with Bazecor.",
-  "The underglow colors are kept exactly as they are on the keyboard, but cannot be edited here yet.",
   "Writing to a keyboard has so far only been tested against a simulated one. A backup of the keyboard's configuration is saved before the first write.",
 ]
 
@@ -73,6 +72,9 @@ key_slots = [
   48, 49, 50, 51, 52, 53, 58, 59, 60, 61, 62, 63, 64, 65,
   66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
 ]
+# The layout's underglow spots are lights 70 to 175, in order. The two
+# lights after them are not drawn by Bazecor and are left as they are.
+underglow_first = 70
 # For each key of the layout, in order: the number of the light under it.
 key_leds = [
   0, 1, 2, 3, 4, 5, 6, 41, 40, 39, 38, 37, 36, 35,
@@ -156,4 +158,32 @@ keys = [
   [100, 100,  982, 426, 0, 0, 0],
   [100, 100, 1087, 424, 0, 0, 0],
   [112, 100, 1192, 424, 0, 0, 0],
+]
+# The underglow: 106 lights around the two halves, 53 each, in the order
+# the firmware numbers them (lights 70 to 175). Each is the center of the
+# strip Bazecor draws for it (src/api/hardware-dygma-defy-wireless/
+# components/Keymap.jsx), brought into the units above: the keys' pitch
+# there is 65 for 100 here, with the first key at (105, 111) there and
+# (0, 61) here. Each half's strip starts at the bottom inner corner, beside
+# the thumb keys, runs up the inner edge, across the top, down the outer
+# edge and back along the bottom, so the two halves mirror each other.
+underglow = [
+  [  550,  1041], [  584,   996], [  616,   934], [  633,   873], [  648,   811], [  663,   754],
+  [  706,   712], [  749,   668], [  771,   610], [  762,   551], [  745,   494], [  727,   431],
+  [  720,   368], [  719,   303], [  719,   239], [  719,   175], [  719,   111], [  704,    55],
+  [  650,    47], [  598,     3], [  539,     8], [  476,     5], [  419,   -37], [  359,   -28],
+  [  294,   -28], [  243,    -5], [  178,     8], [  126,    38], [   61,    44], [   -4,    44],
+  [  -27,    81], [  -31,   145], [  -31,   209], [  -31,   273], [  -39,   341], [  -52,   397],
+  [  -48,   459], [  -47,   524], [  -64,   588], [  -59,   652], [  -56,   716], [  -51,   779],
+  [  -46,   842], [  -41,   906], [  -36,   970], [  -18,  1029], [   37,  1079], [  111,  1079],
+  [  184,  1079], [  257,  1079], [  331,  1079], [  404,  1079], [  475,  1080], [ 1071,  1054],
+  [ 1038,   996], [ 1022,   934], [ 1007,   873], [  990,   811], [  960,   754], [  913,   712],
+  [  869,   668], [  851,   610], [  860,   551], [  876,   494], [  893,   431], [  902,   368],
+  [  902,   304], [  902,   240], [  902,   176], [  902,   111], [  919,    56], [  962,    54],
+  [ 1022,     3], [ 1080,    12], [ 1138,    11], [ 1200,   -27], [ 1259,   -25], [ 1323,   -39],
+  [ 1377,     6], [ 1439,     2], [ 1493,    44], [ 1557,    46], [ 1622,    32], [ 1655,    81],
+  [ 1651,   143], [ 1651,   209], [ 1652,   273], [ 1672,   337], [ 1672,   397], [ 1708,   459],
+  [ 1712,   524], [ 1687,   588], [ 1682,   652], [ 1676,   716], [ 1671,   779], [ 1667,   842],
+  [ 1662,   906], [ 1657,   970], [ 1638,  1030], [ 1572,  1079], [ 1502,  1079], [ 1428,  1079],
+  [ 1355,  1079], [ 1282,  1079], [ 1209,  1079], [ 1135,  1079],
 ]

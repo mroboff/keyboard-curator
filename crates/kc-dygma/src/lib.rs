@@ -502,10 +502,27 @@ impl Image {
                     KeyLight::Color(color)
                 });
             }
-            project
+            // The underglow lights the layout draws, after the keys'.
+            let mut underglow = Vec::new();
+            if let Some(first) = profile.underglow_first {
+                let spots = board
+                    .layout(&board.default_layout)
+                    .map_or(0, |l| l.underglow.len());
+                for led in first..(first + spots).min(profile.leds) {
+                    let color = usize::from(self.colormap[index * profile.leds + led]);
+                    let color = shown(&self.palette[color * size..(color + 1) * size]);
+                    underglow.push(if color == Rgb(0, 0, 0) {
+                        KeyLight::Off
+                    } else {
+                        KeyLight::Color(color)
+                    });
+                }
+            }
+            let lighting = project
                 .lighting_mut(*id)
-                .map_err(|e| FocusError::Unfit(e.to_string()))?
-                .keys = lights;
+                .map_err(|e| FocusError::Unfit(e.to_string()))?;
+            lighting.keys = lights;
+            lighting.underglow = underglow;
         }
         // A macro several keys share is a template; one key's is its own.
         // They were made as templates so that building the keys, which
@@ -578,9 +595,10 @@ impl Image {
     }
 
     /// The image the keyboard should hold for `project`, starting from
-    /// what it holds now. Slots and lights that are not keys (the unused
-    /// corners of the grid, the underglow) are left as they are, and so
-    /// are the palette colors they use.
+    /// what it holds now. Slots and lights the layout says nothing about
+    /// (the unused corners of the grid, the underglow where none has been
+    /// painted) are left as they are, and so are the palette colors they
+    /// use.
     pub fn with_project(
         &self,
         project: &Project,
@@ -661,10 +679,17 @@ impl Image {
             let Some(lighting) = project.lighting.iter().find(|l| l.layer == layer.id) else {
                 continue;
             };
-            for (light, led) in lighting.keys.iter().zip(key_leds) {
+            // The lights under the keys, then the underglow where the
+            // layout has painted it.
+            let keys = lighting.keys.iter().zip(key_leds.iter().copied());
+            let underglow = profile
+                .underglow_first
+                .into_iter()
+                .flat_map(|first| lighting.underglow.iter().zip(first..profile.leds));
+            for (light, led) in keys.chain(underglow) {
                 let color = match light {
                     KeyLight::Color(color) => *color,
-                    // Dygma has no see-through color: an unlit key is off.
+                    // Dygma has no see-through color: an unlit light is off.
                     _ => Rgb(0, 0, 0),
                 };
                 let at = index * profile.leds + led;
@@ -675,7 +700,7 @@ impl Image {
             }
         }
         // Palette entries still in use by every light that is not changing:
-        // the underglow, and keys keeping their color.
+        // the underglow left alone, and lights keeping their color.
         let mut held = vec![false; profile.palette];
         for (at, slot) in self.colormap.iter().enumerate() {
             if !ours[at] {
@@ -783,7 +808,7 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
     }
     let mut colors: Vec<Rgb> = Vec::new();
     for lighting in &project.lighting {
-        for light in &lighting.keys {
+        for light in lighting.keys.iter().chain(&lighting.underglow) {
             match light {
                 KeyLight::Color(color) if !colors.contains(color) => colors.push(*color),
                 KeyLight::Lock { .. } | KeyLight::Battery { .. } => {
