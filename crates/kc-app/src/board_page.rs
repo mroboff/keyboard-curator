@@ -1185,7 +1185,9 @@ impl BoardPage {
             .gap_3()
             .child(heading("Firmware", cx))
             .child(help(
-                "The firmware this board runs, or will be built with. It decides which settings the board has and what the layout editor offers. Layouts are not changed by it: what a firmware lacks is kept out of sight, and settings a firmware lacks are kept the same way.", cx));
+                "Choose the firmware this board runs. The firmware controls the board's settings, capabilities, and layout options.", cx))
+            .child(help(
+                "Note that saved layouts can be applied across different firmwares. Settings for capabilities not compatible with the chosen firmware are hidden and won't apply. If a saved layout has settings for incompatible capabilities, they will remain in place but hidden until a compatible firmware is chosen.", cx));
         for family in self.board.families() {
             page = page.child(
                 div()
@@ -2087,7 +2089,7 @@ impl Render for BoardPage {
                     .child(div().flex_1())
                     .child(link)
                     .child(
-                        chip("remove", "Remove…", false, cx)
+                        chip("remove", "Delete Board…", false, cx)
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(BoardEvent::Remove))),
                     ),
             )

@@ -180,6 +180,8 @@ pub enum WorkspaceEvent {
     Apply,
     /// Leave the editor for the board's page.
     Close,
+    /// Write the layout to its file.
+    Save,
 }
 
 impl EventEmitter<WorkspaceEvent> for Workspace {}
@@ -1384,7 +1386,7 @@ impl Workspace {
             .board
             .profile(&self.config.profile)
             .map_or_else(String::new, |p| p.name.clone());
-        let mark = if self.is_dirty() { " — Edited" } else { "" };
+        let dirty = self.is_dirty();
         div()
             .flex()
             .items_center()
@@ -1410,7 +1412,16 @@ impl Workspace {
             )
             .child(div().text_sm().text_color(muted).child("›"))
             .child(div().px_1().child(display(self.layout_name(), 17., cx)))
-            .child(div().text_xs().text_color(muted).child(mark))
+            // The save button is the sign of unsaved changes: filled while
+            // there are any, quiet once the file is current.
+            .child(
+                chip("save", if dirty { "Save" } else { "Saved" }, dirty, cx)
+                    .when(!dirty, |saved| saved.text_color(muted))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.commit_inputs(cx);
+                        cx.emit(WorkspaceEvent::Save);
+                    })),
+            )
             .child(div().flex_1())
             .child(div().text_xs().text_color(muted).child(format!(
                 "{} {} · {firmware}",

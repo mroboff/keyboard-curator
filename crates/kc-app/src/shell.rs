@@ -287,9 +287,9 @@ impl Shell {
         };
         let answer = window.prompt(
             PromptLevel::Warning,
-            &format!("Remove “{}” from My Boards?", keyboard.name),
+            &format!("Delete the board “{}”?", keyboard.name),
             Some("Its firmware settings are forgotten. Its layout files stay where they are, and the keyboard itself is not changed."),
-            &["Cancel", "Remove"],
+            &["Cancel", "Delete Board"],
             cx,
         );
         cx.spawn(async move |this, cx| {
@@ -419,6 +419,7 @@ impl Shell {
                 WorkspaceEvent::Apply => this.apply(workspace.clone(), window, cx),
                 // Asks first if the layout has unsaved changes.
                 WorkspaceEvent::Close => this.close(&CloseProject, window, cx),
+                WorkspaceEvent::Save => this.save(&Save, window, cx),
             },
         )
         .detach();
@@ -1708,17 +1709,20 @@ impl Shell {
                 .flex()
                 .flex_col()
                 .gap_3()
+                .when(empty, |column| {
+                    column.child(display("Welcome to Keyboard Curator", 30., cx))
+                })
                 .child(display(
                     if empty {
                         "Add your first board"
                     } else {
                         "Choose a board"
                     },
-                    30.,
+                    if empty { 20. } else { 30. },
                     cx,
                 ))
                 .child(div().max_w_96().text_sm().text_color(muted).child(
-                    "A board is one of your keyboards: its firmware and that firmware's settings. Open one to set up its firmware, build and flash it, and create the layouts used with it. A board does not need to be connected, or even one you own.",
+                    "A board is a profile for a keyboard. It manages the firmware and its settings, and houses the layouts you create for it. You can create and edit boards and their layouts without having the actual keyboard connected to your computer.",
                 ))
                 .into_any_element(),
         };

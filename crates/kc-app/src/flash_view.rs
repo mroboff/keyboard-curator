@@ -286,12 +286,13 @@ impl Render for FlashView {
             .collect::<Vec<_>>();
 
         let finished = current.is_none();
+        // Set like the panels above it on the page: at the left edge, the
+        // same width, with no inset of its own.
         div()
             .w_full()
             .flex()
             .flex_col()
-            .items_center()
-            .px_6()
+            .items_start()
             .pb_6()
             .gap_4()
             .child(
