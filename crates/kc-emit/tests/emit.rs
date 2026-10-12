@@ -566,3 +566,48 @@ fn add_ons_reach_the_manifest_the_keymap_and_the_picker() {
     ));
     assert!(!west.contains("zmkfirmware/zmk\n"));
 }
+
+#[test]
+fn reading_and_writing_every_key_as_slots_leaves_the_keymap_unchanged() {
+    use kc_model::setup::KeySetup;
+
+    for board in kc_boards::built_in().unwrap() {
+        let Some(profile) = board
+            .firmware
+            .iter()
+            .find(|f| f.family == kc_boards::board::Family::Zmk)
+        else {
+            continue;
+        };
+        let config = FirmwareConfig::new(profile.id.clone());
+        for template in Project::templates(&board) {
+            let before = Project::from_template_id(template.id, "Slots", &board).unwrap();
+            let mut after = before.clone();
+            let mut keys = 0;
+            for layer in &before.layers {
+                for position in 0..before.key_count {
+                    if let Some(setup) = KeySetup::of(&after, layer.id, position) {
+                        after.apply_setup(layer.id, position, &setup).unwrap();
+                        keys += 1;
+                    }
+                }
+            }
+            assert!(keys > 0, "{}: nothing read as slots", template.name);
+            let keymap = |p: &Project| {
+                let files = generate(p, &board, &config).unwrap();
+                files
+                    .into_iter()
+                    .find(|f| f.path.ends_with(".keymap"))
+                    .unwrap()
+                    .contents
+            };
+            assert_eq!(
+                keymap(&before),
+                keymap(&after),
+                "{} on the {}",
+                template.name,
+                board.name
+            );
+        }
+    }
+}

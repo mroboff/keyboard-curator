@@ -287,7 +287,7 @@ impl Workspace {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .child(display(def.name.clone(), 16., cx))
+                            .child(display(def.display_name(), 16., cx))
                             .child(
                                 div()
                                     .text_xs()

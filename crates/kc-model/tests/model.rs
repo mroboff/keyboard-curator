@@ -518,7 +518,7 @@ fn project_files_round_trip_and_diff_cleanly() {
 
     let text = file::to_json(&p);
     assert_eq!(file::from_json(&text).unwrap(), p);
-    assert!(text.starts_with("{\n  \"format\": 2,\n  \"name\": \"Rich\","));
+    assert!(text.starts_with("{\n  \"format\": 3,\n  \"name\": \"Rich\","));
     // A description is written only where there is one; a layer without
     // one reads back empty from files written before there were any.
     assert_eq!(text.matches("\"description\"").count(), 1);
@@ -561,12 +561,12 @@ fn project_files_save_and_load_from_disk() {
 #[test]
 fn unreadable_project_files_explain_themselves() {
     let (p, _) = rich_project();
-    let newer = file::to_json(&p).replacen("\"format\": 2", "\"format\": 99", 1);
+    let newer = file::to_json(&p).replacen("\"format\": 3", "\"format\": 99", 1);
     assert!(matches!(
         file::from_json(&newer),
         Err(file::FileError::Newer {
             found: 99,
-            supported: 2
+            supported: 3
         })
     ));
     assert!(matches!(
@@ -754,8 +754,8 @@ fn the_picker_offers_what_the_firmware_supports() {
     assert_eq!(find("Nav tap-dance").unwrap().group, PickerGroup::Custom);
     // A behavior the user named says what kind it is; built-in keys do not
     // need to.
-    assert_eq!(find("Nav tap-dance").unwrap().kind, Some("Tap-dance"));
-    assert!(find("Nav tap-dance").unwrap().matches("tap-dance tapped"));
+    assert_eq!(find("Nav tap-dance").unwrap().kind, Some("Multi-tap"));
+    assert!(find("Nav tap-dance").unwrap().matches("multi-tap tapped"));
     assert_eq!(find("A").unwrap().kind, None);
     for def in &p.behaviors {
         assert_eq!(find(&def.name).unwrap().kind, Some(def.kind.name()));

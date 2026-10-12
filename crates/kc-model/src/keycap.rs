@@ -1,12 +1,12 @@
 //! What to print on a keycap for a binding.
 
 use kc_zmk::keycodes::keycodes;
-use kc_zmk::Modifier;
 
 use crate::behavior::BehaviorKind;
 use crate::binding::{BehaviorRef, Binding, KeyExpr, Param};
 use crate::ids::LayerId;
 use crate::project::Project;
+use crate::setup::side_binding;
 
 /// How a keycap should be styled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,13 +44,35 @@ impl Keycap {
     }
 }
 
-fn modifier_symbol(modifier: Modifier) -> &'static str {
-    match modifier {
-        Modifier::LCtrl | Modifier::RCtrl => "⌃",
-        Modifier::LShift | Modifier::RShift => "⇧",
-        Modifier::LAlt | Modifier::RAlt => "⌥",
-        Modifier::LGui | Modifier::RGui => "⌘",
+use crate::words::modifier_symbol;
+
+/// A small mark on a keycap for what the slots add beyond tap and hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mark {
+    /// A second tap does something.
+    MultiTap,
+    /// A different key with modifiers held.
+    Shifted,
+    /// Stays active for the next key.
+    Sticky,
+}
+
+/// The marks for a binding: what a keycap's legend and hold cannot show.
+pub fn marks(project: &Project, binding: &Binding) -> Vec<Mark> {
+    let Some(setup) = crate::setup::KeySetup::read(project, binding) else {
+        return Vec::new();
+    };
+    let mut marks = Vec::new();
+    if setup.has_taps() {
+        marks.push(Mark::MultiTap);
     }
+    if setup.shifted.is_some() {
+        marks.push(Mark::Shifted);
+    }
+    if setup.sticky {
+        marks.push(Mark::Sticky);
+    }
+    marks
 }
 
 /// A key expression as keycap text, such as `⌃⇧K`.
@@ -139,23 +161,40 @@ pub fn keycap_for(project: &Project, binding: &Binding) -> Keycap {
                 return Keycap::new("?", KeycapKind::Raw);
             };
             match &def.kind {
-                BehaviorKind::HoldTap(_) => Keycap {
-                    legend: params
-                        .get(1)
-                        .map(|p| param_legend(project, p))
-                        .unwrap_or_default(),
-                    hold: params.first().map(|p| param_legend(project, p)),
-                    kind: KeycapKind::Key,
+                BehaviorKind::HoldTap(h) => {
+                    let tap = keycap_for(project, &side_binding(project, &h.tap, params.get(1)));
+                    let hold = side_binding(project, &h.hold, params.first());
+                    let hold = match keycap_for(project, &hold) {
+                        Keycap {
+                            legend,
+                            hold: Some(what),
+                            ..
+                        } if what == "hold" => legend,
+                        other => other.legend,
+                    };
+                    Keycap {
+                        legend: tap.legend,
+                        hold: Some(hold),
+                        kind: tap.kind,
+                    }
+                }
+                BehaviorKind::StickyKey(s) => {
+                    let inner =
+                        keycap_for(project, &side_binding(project, &s.behavior, params.first()));
+                    Keycap {
+                        legend: inner.legend,
+                        hold: Some("sticky".to_string()),
+                        kind: inner.kind,
+                    }
+                }
+                // A multi-tap or shift override shows what a plain tap does;
+                // `marks` says the rest.
+                BehaviorKind::TapDance(t) => match t.bindings.first() {
+                    Some(first) => keycap_for(project, first),
+                    None => Keycap::new("", KeycapKind::None),
                 },
-                BehaviorKind::StickyKey(_) => Keycap {
-                    legend: params
-                        .first()
-                        .map(|p| param_legend(project, p))
-                        .unwrap_or_default(),
-                    hold: Some("sticky".to_string()),
-                    kind: KeycapKind::Key,
-                },
-                _ => Keycap::new(def.name.clone(), KeycapKind::System),
+                BehaviorKind::ModMorph(m) => keycap_for(project, &m.normal),
+                BehaviorKind::Macro(_) => Keycap::new(def.display_name(), KeycapKind::System),
             }
         }
     }

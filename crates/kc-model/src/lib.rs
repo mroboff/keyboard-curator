@@ -20,9 +20,11 @@ pub mod keycap;
 pub mod lighting;
 pub mod picker;
 pub mod project;
+pub mod setup;
 pub mod tester;
 pub mod text;
 pub mod validate;
+pub mod words;
 
 pub use binding::{BehaviorRef, Binding, KeyExpr, Param};
 pub use editor::Editor;

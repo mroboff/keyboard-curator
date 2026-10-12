@@ -328,6 +328,7 @@ fn main() -> Result<()> {
         lighting.palette = palette.into_iter().map(|(r, g, b)| Rgb(r, g, b)).collect();
     }
 
+    p.assign_scopes();
     let errors: Vec<_> = validate(&p, imprint, &kc_model::FirmwareConfig::stock(imprint))
         .into_iter()
         .filter(|problem| problem.severity == Severity::Error)

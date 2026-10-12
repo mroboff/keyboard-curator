@@ -377,7 +377,8 @@ fn main() -> Result<(), Error> {
         .iter()
         .find(|b| b.id == board_id)
         .ok_or_else(|| format!("unknown board `{board_id}`"))?;
-    let project = build(board, &std::fs::read_to_string(vendor)?)?;
+    let mut project = build(board, &std::fs::read_to_string(vendor)?)?;
+    project.assign_scopes();
     file::save(&project, out.as_ref())?;
     println!(
         "{}: {} layers, {} behaviors",

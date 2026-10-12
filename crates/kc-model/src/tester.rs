@@ -532,7 +532,9 @@ fn user_facets(project: &Project, id: BehaviorId, params: &[Param], depth: u8) -
         .into_iter()
         .map(|f| f.with_role("sticky"))
         .collect(),
-        BehaviorKind::Macro(m) => macro_facets(project, &def.name, &m.steps, params, depth),
+        BehaviorKind::Macro(m) => {
+            macro_facets(project, &def.display_name(), &m.steps, params, depth)
+        }
     }
 }
 

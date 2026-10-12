@@ -778,6 +778,9 @@ pub fn import_keymap(
             report.raw_bindings
         ));
     }
+    // Definitions the file named become templates or belong to their key
+    // by how they are used.
+    project.assign_scopes();
     Ok((project, report))
 }
 

@@ -1,5 +1,5 @@
 {
-  "format": 2,
+  "format": 3,
   "name": "TailorKey for the Imprint",
   "board": "cyboard-imprint",
   "layout": "physical_layout_imprint_function_row_full_bottom_row",
@@ -1405,6 +1405,7 @@
       "id": 20,
       "label": "select_next_word",
       "name": "Select next word",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -1424,6 +1425,7 @@
       "id": 21,
       "label": "select_to_line_end",
       "name": "Select to line end",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -1441,6 +1443,7 @@
       "id": 22,
       "label": "cursor_wiggle",
       "name": "Cursor wiggle",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -1499,6 +1502,7 @@
       "id": 25,
       "label": "two_dots",
       "name": "Two dots",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,

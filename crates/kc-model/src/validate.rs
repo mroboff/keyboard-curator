@@ -316,11 +316,15 @@ pub fn validate(project: &Project, board: &Board, config: &FirmwareConfig) -> Ve
     }
 
     for (location, binding) in project.bindings() {
+        let location = match location {
+            Location::Behavior(id) => project.problem_location(id),
+            other => other,
+        };
         c.binding(&location, binding);
     }
 
     for def in &project.behaviors {
-        let location = Location::Behavior(def.id);
+        let location = project.problem_location(def.id);
         for behavior in def.kind.behavior_refs() {
             c.behavior_ref(&location, behavior);
         }

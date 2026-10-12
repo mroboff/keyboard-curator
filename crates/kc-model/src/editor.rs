@@ -63,6 +63,7 @@ impl Editor {
                 return Err(error);
             }
         };
+        self.project.tidy();
         if self.project == before {
             return Ok(value);
         }

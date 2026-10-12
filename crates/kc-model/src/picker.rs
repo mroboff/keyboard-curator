@@ -292,7 +292,13 @@ pub fn picker_items(project: &Project, features: &[Feature]) -> Vec<PickerItem> 
     for def in behaviors::BUILT_IN.iter().filter(|b| b.available(features)) {
         behavior_items(project, def, features, &mut items);
     }
-    for def in &project.behaviors {
+    // Templates, and the named definitions older layouts gave their keys.
+    // Key-owned definitions without a name are the key's own business.
+    for def in project
+        .behaviors
+        .iter()
+        .filter(|d| d.is_template() || !d.name.is_empty())
+    {
         let what = def.kind.name();
         items.push(
             PickerItem::new(

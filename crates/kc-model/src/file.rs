@@ -134,6 +134,9 @@ fn migrate(mut value: Value, from: u64) -> Result<(Value, Carried), FileError> {
             let carried = split_off_firmware(&mut value);
             Ok((value, carried))
         }
+        // Format 3 added scopes to behavior definitions; a format 2 file
+        // reads as is and gets them from how its definitions are used.
+        2 => Ok((value, Carried::default())),
         v if v == u64::from(FORMAT) => Ok((value, Carried::default())),
         v => Err(FileError::Invalid(format!("unknown format {v}"))),
     }
@@ -159,7 +162,11 @@ pub fn from_json_carrying(text: &str) -> Result<(Project, Carried), FileError> {
     }
     let (mut value, carried) = migrate(value, found)?;
     value["format"] = FORMAT.into();
-    let project = serde_json::from_value(value).map_err(|e| FileError::Invalid(e.to_string()))?;
+    let mut project: Project =
+        serde_json::from_value(value).map_err(|e| FileError::Invalid(e.to_string()))?;
+    if found < 3 {
+        project.assign_scopes();
+    }
     Ok((project, carried))
 }
 

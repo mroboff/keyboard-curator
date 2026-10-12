@@ -805,6 +805,12 @@ fn build(
     let mut sticky_quick_release = None;
     for def in &project.behaviors {
         let location = Location::Behavior(def.id);
+        // A key-owned definition has no name of its own; its label serves.
+        let name = if def.name.is_empty() {
+            def.label.clone()
+        } else {
+            def.name.clone()
+        };
         match &def.kind {
             BehaviorKind::HoldTap(h) => {
                 let config = profile_config(&mut t, &location, h, matrix);
@@ -814,25 +820,24 @@ fn build(
                 // Stands for one of the firmware's own keys; see the note
                 // at the keys that use it.
             }
-            BehaviorKind::TapDance(td) => match morse_config(&mut t, &location, &def.name, td, &cx)
-            {
+            BehaviorKind::TapDance(td) => match morse_config(&mut t, &location, &name, td, &cx) {
                 Ok(morse) => morses.push(morse),
                 Err(reason) => {
                     t.error(location, reason);
                     morses.push(MorseConfig::default());
                 }
             },
-            BehaviorKind::Macro(m) => match macro_config(&mut t, &location, &def.name, m, &cx) {
+            BehaviorKind::Macro(m) => match macro_config(&mut t, &location, &name, m, &cx) {
                 Ok(macro_config) => macros.push(macro_config),
                 Err(reason) => {
                     t.error(location, reason);
                     macros.push(MacroConfig {
-                        name: def.name.clone(),
+                        name: name.clone(),
                         operations: Vec::new(),
                     });
                 }
             },
-            BehaviorKind::ModMorph(m) => match fork_config(&def.name, m, &cx) {
+            BehaviorKind::ModMorph(m) => match fork_config(&name, m, &cx) {
                 Ok(fork) => forks.push(fork),
                 Err(reason) => t.error(location, reason),
             },

@@ -31,8 +31,9 @@ pub fn import_rmk(
             ))
         })?;
     let led_to_key = |led: u16| profile.key_of_led(board, led);
-    let imported = kc_rmk::runtime::import(&config, board, profile, name, &led_to_key)
+    let mut imported = kc_rmk::runtime::import(&config, board, profile, name, &led_to_key)
         .map_err(ImportError::NotRmk)?;
+    imported.project.assign_scopes();
     let report = Report {
         layers: imported.project.layers.len(),
         behaviors: imported.project.behaviors.len(),

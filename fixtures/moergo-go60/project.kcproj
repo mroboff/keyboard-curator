@@ -1,5 +1,5 @@
 {
-  "format": 2,
+  "format": 3,
   "name": "Go60 fixture",
   "board": "moergo-go60",
   "layout": "physical_layout0",

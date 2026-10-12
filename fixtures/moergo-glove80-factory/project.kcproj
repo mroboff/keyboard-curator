@@ -1,5 +1,5 @@
 {
-  "format": 2,
+  "format": 3,
   "name": "Glove80 factory layout",
   "board": "moergo-glove80",
   "layout": "physical_layout0",
@@ -360,6 +360,7 @@
       "id": 5,
       "label": "rgb_ug_status_macro",
       "name": "Show status lights",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -392,6 +393,7 @@
       "id": 7,
       "label": "layer_td",
       "name": "Lower layer",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,
@@ -403,6 +405,7 @@
       "id": 8,
       "label": "bt_0",
       "name": "Bluetooth 1",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -423,6 +426,7 @@
       "id": 9,
       "label": "bt_1",
       "name": "Bluetooth 2",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -443,6 +447,7 @@
       "id": 10,
       "label": "bt_2",
       "name": "Bluetooth 3",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -463,6 +468,7 @@
       "id": 11,
       "label": "bt_3",
       "name": "Bluetooth 4",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,

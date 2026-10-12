@@ -1,5 +1,5 @@
 {
-  "format": 2,
+  "format": 3,
   "name": "Go60 lighting fixture",
   "board": "moergo-go60",
   "layout": "physical_layout0",
@@ -347,6 +347,7 @@
       "id": 6,
       "label": "rgb_ug_status_macro",
       "name": "Show status lights",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -379,6 +380,7 @@
       "id": 8,
       "label": "keypad_td",
       "name": "Keypad layer",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,
@@ -390,6 +392,7 @@
       "id": 9,
       "label": "symbol_nav_td",
       "name": "Symbol and Nav layer",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,
@@ -401,6 +404,7 @@
       "id": 10,
       "label": "bt_select_0",
       "name": "Select Bluetooth 1",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -421,6 +425,7 @@
       "id": 11,
       "label": "bt_0",
       "name": "Bluetooth 1",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,
@@ -435,6 +440,7 @@
       "id": 12,
       "label": "bt_select_1",
       "name": "Select Bluetooth 2",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -455,6 +461,7 @@
       "id": 13,
       "label": "bt_1",
       "name": "Bluetooth 2",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,
@@ -469,6 +476,7 @@
       "id": 14,
       "label": "bt_select_2",
       "name": "Select Bluetooth 3",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -489,6 +497,7 @@
       "id": 15,
       "label": "bt_2",
       "name": "Bluetooth 3",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,
@@ -503,6 +512,7 @@
       "id": 16,
       "label": "bt_select_3",
       "name": "Select Bluetooth 4",
+      "scope": "key",
       "kind": {
         "macro": {
           "wait_ms": null,
@@ -523,6 +533,7 @@
       "id": 17,
       "label": "bt_3",
       "name": "Bluetooth 4",
+      "scope": "key",
       "kind": {
         "tap_dance": {
           "tapping_term_ms": 200,

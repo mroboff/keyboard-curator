@@ -2024,7 +2024,7 @@ impl Workspace {
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(div().flex_1().min_w_0().text_sm().child(def.name.clone()))
+                        .child(div().flex_1().min_w_0().text_sm().child(def.display_name()))
                         .child(badge(def.kind.name(), cx.theme().foreground)),
                 )
                 .child(div().text_xs().text_color(muted).child(def.kind.summary()))

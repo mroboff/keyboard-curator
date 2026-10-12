@@ -1,5 +1,5 @@
 {
-  "format": 2,
+  "format": 3,
   "name": "Imprint fixture",
   "board": "cyboard-imprint",
   "layout": "physical_layout_imprint_function_row_full_bottom_row",

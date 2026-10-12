@@ -4,7 +4,7 @@
 use kc_boards::Board;
 use serde::{Deserialize, Serialize};
 
-use crate::behavior::{BehaviorDef, BehaviorKind};
+use crate::behavior::{BehaviorDef, BehaviorKind, Scope, Settings};
 use crate::binding::{BehaviorRef, Binding, KeyExpr};
 use crate::features::{
     Combo, ConditionalLayer, InputProcessor, KeyLight, LayerLighting, PointingConfig, RawBlocks,
@@ -13,7 +13,7 @@ use crate::features::{
 use crate::ids::{BehaviorId, ComboId, LayerId};
 
 /// The project file format version this build writes.
-pub const FORMAT: u32 = 2;
+pub const FORMAT: u32 = 3;
 
 /// ZMK's limit on layers, counting those reserved for ZMK Studio.
 pub const MAX_LAYERS: usize = 32;
@@ -595,9 +595,16 @@ impl Project {
             label,
             name: name.into(),
             description: String::new(),
+            scope: Scope::Template,
+            follows: None,
             kind,
         });
         Ok(id)
+    }
+
+    /// Whether `label` is valid and unused.
+    pub fn label_is_free(&self, label: &str) -> bool {
+        self.check_label(label, None).is_ok()
     }
 
     pub fn rename_behavior_label(
@@ -638,6 +645,283 @@ impl Project {
             return Err(ModelError::BehaviorInUse(references));
         }
         self.behaviors.retain(|b| b.id != id);
+        Ok(())
+    }
+
+    /// Points every reference to `from` at `to` instead.
+    fn replace_behavior_ref(&mut self, from: BehaviorId, to: BehaviorId) {
+        let wanted = BehaviorRef::User { user: from };
+        let replacement = BehaviorRef::User { user: to };
+        self.for_each_binding_mut(|_, binding| {
+            if let Binding::Behavior { behavior, .. } = binding {
+                if *behavior == wanted {
+                    *behavior = replacement.clone();
+                }
+            }
+        });
+        for def in &mut self.behaviors {
+            for behavior in def.kind.behavior_refs_mut() {
+                if *behavior == wanted {
+                    *behavior = replacement.clone();
+                }
+            }
+        }
+    }
+
+    /// The keys and combos a definition is reached from, looking through
+    /// the definitions that nest it. Empty for an unused one.
+    pub fn top_owners(&self, id: BehaviorId) -> Vec<Location> {
+        let mut owners = Vec::new();
+        let mut seen = Vec::new();
+        self.collect_owners(id, &mut owners, &mut seen);
+        owners.dedup();
+        owners
+    }
+
+    fn collect_owners(
+        &self,
+        id: BehaviorId,
+        owners: &mut Vec<Location>,
+        seen: &mut Vec<BehaviorId>,
+    ) {
+        if seen.contains(&id) {
+            return;
+        }
+        seen.push(id);
+        for location in self.behavior_references(id) {
+            match location {
+                Location::Behavior(parent) => self.collect_owners(parent, owners, seen),
+                other => {
+                    if !owners.contains(&other) {
+                        owners.push(other);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Where a problem inside a definition is reported: at the key that
+    /// owns a key-owned definition, otherwise at the definition.
+    pub fn problem_location(&self, id: BehaviorId) -> Location {
+        let owned = self.behavior(id).is_some_and(|d| d.scope == Scope::Key);
+        owned
+            .then(|| self.top_owners(id).into_iter().next())
+            .flatten()
+            .unwrap_or(Location::Behavior(id))
+    }
+
+    /// Keeps key-owned definitions tidy: identical ones are merged, unused
+    /// ones dropped. Templates are left alone. Run after every edit.
+    pub fn tidy(&mut self) {
+        loop {
+            let mut changed = false;
+            // Merge identical key-owned definitions, earliest kept.
+            let mut merge: Option<(BehaviorId, BehaviorId)> = None;
+            'search: for (i, a) in self.behaviors.iter().enumerate() {
+                if a.scope != Scope::Key {
+                    continue;
+                }
+                for b in &self.behaviors[i + 1..] {
+                    if b.scope == Scope::Key && b.follows == a.follows && b.kind == a.kind {
+                        merge = Some((a.id, b.id));
+                        break 'search;
+                    }
+                }
+            }
+            if let Some((keep, drop)) = merge {
+                let dropped_name = self.behavior(drop).map(|d| d.name.clone());
+                self.replace_behavior_ref(drop, keep);
+                self.behaviors.retain(|d| d.id != drop);
+                if let (Some(name), Ok(kept)) = (dropped_name, self.behavior_mut(keep)) {
+                    if kept.name.is_empty() {
+                        kept.name = name;
+                    }
+                }
+                changed = true;
+            }
+            // Drop key-owned definitions nothing uses.
+            let unused: Vec<BehaviorId> = self
+                .behaviors
+                .iter()
+                .filter(|d| d.scope == Scope::Key && self.behavior_references(d.id).is_empty())
+                .map(|d| d.id)
+                .collect();
+            if !unused.is_empty() {
+                self.behaviors.retain(|d| !unused.contains(&d.id));
+                changed = true;
+            }
+            if !changed {
+                return;
+            }
+        }
+    }
+
+    /// Decides which definitions are templates and which belong to a key,
+    /// for layouts saved before definitions had a scope and for imports:
+    /// one that takes parameters stays a template; one that takes none
+    /// belongs to its key when used from one place, and is a template
+    /// when shared or unused. Keys sharing a multi-tap or shift override
+    /// each get their own copy that follows the template.
+    pub fn assign_scopes(&mut self) {
+        let ids: Vec<BehaviorId> = self.behaviors.iter().map(|d| d.id).collect();
+        for id in ids {
+            let Some(def) = self.behavior(id) else {
+                continue;
+            };
+            let references = self.behavior_references(id);
+            let scope = if def.kind.param_count() > 0 || references.len() != 1 {
+                Scope::Template
+            } else {
+                Scope::Key
+            };
+            let shared_content = scope == Scope::Template
+                && references.len() > 1
+                && matches!(
+                    def.kind,
+                    BehaviorKind::TapDance(_) | BehaviorKind::ModMorph(_)
+                );
+            self.behavior_mut(id).expect("listed above").scope = scope;
+            if shared_content {
+                for location in references {
+                    let source = self.behavior(id).expect("listed above").clone();
+                    let label = self.free_label(match source.kind {
+                        BehaviorKind::TapDance(_) => "td",
+                        _ => "mm",
+                    });
+                    let copy = self
+                        .add_behavior(label, source.name.clone(), source.kind.clone())
+                        .expect("a free label is valid");
+                    let def = self.behavior_mut(copy).expect("just added");
+                    def.scope = Scope::Key;
+                    def.follows = Some(id);
+                    self.repoint(&location, id, copy);
+                }
+            }
+        }
+        self.tidy();
+    }
+
+    /// Points the references at `location` to `from` at `to` instead.
+    fn repoint(&mut self, location: &Location, from: BehaviorId, to: BehaviorId) {
+        let wanted = BehaviorRef::User { user: from };
+        let replacement = BehaviorRef::User { user: to };
+        let swap = |binding: &mut Binding| {
+            if let Binding::Behavior { behavior, .. } = binding {
+                if *behavior == wanted {
+                    *behavior = replacement.clone();
+                }
+            }
+        };
+        match location {
+            Location::Key { layer, position } => {
+                if let Some(binding) = self
+                    .layer_mut(*layer)
+                    .ok()
+                    .and_then(|l| l.bindings.get_mut(*position))
+                {
+                    swap(binding);
+                }
+            }
+            Location::Combo(id) => {
+                if let Ok(combo) = self.combo_mut(*id) {
+                    swap(&mut combo.binding);
+                }
+            }
+            Location::Behavior(id) => {
+                if let Ok(def) = self.behavior_mut(*id) {
+                    for binding in def.kind.bindings_mut() {
+                        swap(binding);
+                    }
+                    for behavior in def.kind.behavior_refs_mut() {
+                        if *behavior == wanted {
+                            *behavior = replacement.clone();
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Templates
+
+    /// The definitions the user named for reuse, in order.
+    pub fn behavior_templates(&self) -> impl Iterator<Item = &BehaviorDef> {
+        self.behaviors.iter().filter(|d| d.is_template())
+    }
+
+    /// The keys and combos that use a template, directly or through a
+    /// definition that follows it.
+    pub fn template_uses(&self, id: BehaviorId) -> Vec<Location> {
+        let mut uses = self.top_owners(id);
+        let followers: Vec<BehaviorId> = self
+            .behaviors
+            .iter()
+            .filter(|d| d.follows == Some(id))
+            .map(|d| d.id)
+            .collect();
+        for follower in followers {
+            for location in self.top_owners(follower) {
+                if !uses.contains(&location) {
+                    uses.push(location);
+                }
+            }
+        }
+        uses
+    }
+
+    /// Changes a template's settings, and with them every definition that
+    /// follows it.
+    pub fn set_template_settings(
+        &mut self,
+        id: BehaviorId,
+        settings: &Settings,
+    ) -> Result<(), ModelError> {
+        let def = self.behavior_mut(id)?;
+        def.kind.set_settings(settings);
+        for follower in self.behaviors.iter_mut().filter(|d| d.follows == Some(id)) {
+            follower.kind.set_settings(settings);
+        }
+        self.tidy();
+        Ok(())
+    }
+
+    pub fn rename_template(
+        &mut self,
+        id: BehaviorId,
+        name: impl Into<String>,
+    ) -> Result<(), ModelError> {
+        self.behavior_mut(id)?.name = name.into();
+        Ok(())
+    }
+
+    /// A copy of a template under a new name, used by nothing yet.
+    pub fn duplicate_template(
+        &mut self,
+        id: BehaviorId,
+        name: impl Into<String>,
+    ) -> Result<BehaviorId, ModelError> {
+        let source = self
+            .behavior(id)
+            .ok_or(ModelError::NoSuchBehavior(id))?
+            .clone();
+        let name = name.into();
+        let label = self.label_for(&name);
+        let copy = self.add_behavior(label, name, source.kind)?;
+        self.behavior_mut(copy)?.description = source.description;
+        Ok(copy)
+    }
+
+    /// Deletes a template. Keys that used it keep their settings as their
+    /// own: the definition stays for them, hidden, and goes when they do.
+    pub fn delete_template(&mut self, id: BehaviorId) -> Result<(), ModelError> {
+        let def = self.behavior_mut(id)?;
+        def.scope = Scope::Key;
+        def.name = String::new();
+        for follower in self.behaviors.iter_mut().filter(|d| d.follows == Some(id)) {
+            follower.follows = None;
+        }
+        self.tidy();
         Ok(())
     }
 

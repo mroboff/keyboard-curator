@@ -431,7 +431,7 @@ fn a_layout_file_from_before_the_split_hands_its_settings_back() {
     assert_eq!(again, project);
     assert!(nothing.is_empty());
     assert!(!current.contains("firmware") && !current.contains("settings"));
-    assert!(current.contains("\"format\": 2"));
+    assert!(current.contains("\"format\": 3"));
 }
 
 #[test]
