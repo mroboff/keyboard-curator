@@ -1595,18 +1595,36 @@ impl BoardPage {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(div().flex_1().text_sm().child(repo))
+                    // A long path gives way, losing its start, so the
+                    // folder's name and the buttons always show.
                     .child(
-                        Button::new("choose-repo")
-                            .label("Choose Folder…")
-                            .on_click(cx.listener(|this, _, window, cx| this.choose_repo(window, cx))),
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_sm()
+                            .truncate()
+                            .text_ellipsis_start()
+                            .child(repo),
+                    )
+                    .child(
+                        div().flex_shrink_0().child(
+                            Button::new("choose-repo")
+                                .label("Choose Folder…")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.choose_repo(window, cx)
+                                })),
+                        ),
                     )
                     .when(!working, |row| {
                         row.child(
-                            Button::new("build-firmware")
-                                .primary()
-                                .label("Build Firmware")
-                                .on_click(cx.listener(|this, _, _, cx| this.build_firmware(cx))),
+                            div().flex_shrink_0().child(
+                                Button::new("build-firmware")
+                                    .primary()
+                                    .label("Build Firmware")
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.build_firmware(cx)),
+                                    ),
+                            ),
                         )
                     }),
             );
