@@ -1754,9 +1754,13 @@ impl Workspace {
                     )
                     .into_any_element()
             } else {
+                // Three lines at most; a longer description scrolls, so
+                // the keyboard keeps its room.
                 div()
                     .id("layer-description")
                     .max_w(px(720.))
+                    .max_h(px(64.))
+                    .overflow_y_scrollbar()
                     .text_sm()
                     .line_height(relative(1.45))
                     .text_color(muted)
