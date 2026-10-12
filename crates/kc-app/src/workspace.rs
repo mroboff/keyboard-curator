@@ -2214,9 +2214,11 @@ impl Workspace {
 
     /// One place for what the app has to say: the description of the
     /// picker entry under the pointer, a notice such as "Copied 3 key(s)"
-    /// or what the firmware hides, or a word on what to do next. The row
-    /// keeps its height when empty, so nothing jumps as the pointer moves.
-    fn render_message(&self, cx: &mut Context<Self>) -> Div {
+    /// or what the firmware hides, or a word on what to do next. The
+    /// panel is always two lines tall, so nothing moves as the pointer
+    /// does; what does not fit ends in an ellipsis and shows whole in a
+    /// tooltip.
+    fn render_message(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let look = crate::theme::look(cx);
         let (colors, radius) = (look.colors, look.control_radius);
         let muted = cx.theme().muted_foreground;
@@ -2237,12 +2239,19 @@ impl Workspace {
         } else {
             muted
         };
+        // Two lines of small text with the padding: fixed, whatever is in it.
+        let whole = text.clone();
+        // Roughly what two lines hold at a laptop's width; past that the
+        // tooltip has the rest.
+        let long = text.chars().count() > 120;
         div()
+            .id("message")
             .mx_5()
             .my_2()
             .px_4()
             .py_2()
-            .min_h(px(38.))
+            .h(px(56.))
+            .flex_shrink_0()
             .flex()
             .items_center()
             .gap_3()
@@ -2250,6 +2259,7 @@ impl Workspace {
             .bg(colors.plinth)
             .border_1()
             .border_color(colors.plinth_border)
+            .overflow_hidden()
             .when(!text.is_empty(), |panel| {
                 panel.child(div().size_2().flex_shrink_0().rounded_full().bg(dot))
             })
@@ -2260,8 +2270,14 @@ impl Workspace {
                     .text_sm()
                     .line_height(relative(1.4))
                     .whitespace_normal()
+                    .line_clamp(2)
                     .child(text),
             )
+            .when(long, |panel| {
+                panel.tooltip(move |window, cx| {
+                    gpui_kit::component::tooltip::Tooltip::new(whole.clone()).build(window, cx)
+                })
+            })
     }
 
     /// Shows the key a problem is about, when it is about one.
@@ -2509,16 +2525,21 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .child(self.render_mode_bar(cx))
-                    .child(self.render_message(cx))
+                    .when(self.mode != Mode::Keyboard, |main| {
+                        main.child(self.render_message(cx))
+                    })
                     .map(|main| match self.mode {
-                        Mode::Keyboard => main.child(self.render_canvas(cx)).child(
-                            div()
-                                .h_72()
-                                .flex()
-                                .border_t_1()
-                                .border_color(border)
-                                .child(self.render_picker(cx)),
-                        ),
+                        Mode::Keyboard => main
+                            .child(self.render_canvas(cx))
+                            .child(self.render_message(cx))
+                            .child(
+                                div()
+                                    .h_72()
+                                    .flex()
+                                    .border_t_1()
+                                    .border_color(border)
+                                    .child(self.render_picker(cx)),
+                            ),
                         Mode::Lighting => main.child(self.render_lighting(cx)),
                         // The key picker is only there for behaviors that
                         // have keys to choose: a hold-tap or a sticky key
