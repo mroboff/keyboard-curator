@@ -202,6 +202,10 @@ fn resolve_hands(project: &Project, keys: &[geometry::Key]) -> Project {
     resolved
 }
 
+/// ZMK's wait between macro steps unless a macro or the build says
+/// otherwise (`CONFIG_ZMK_MACRO_DEFAULT_WAIT_MS`).
+const ZMK_MACRO_WAIT_MS: u32 = 15;
+
 fn behavior(w: &mut Writer, def: &BehaviorDef) {
     let cells = def.kind.param_count();
     for line in node_comment(w.project, def) {
@@ -294,25 +298,37 @@ fn behavior(w: &mut Writer, def: &BehaviorDef) {
             if let Some(ms) = m.tap_ms {
                 w.line(3, &format!("tap-ms = <{ms}>;"));
             }
-            let steps: Vec<String> = m
-                .steps
-                .iter()
-                .map(|step| {
-                    let group = |control: &str, bindings: &[Binding]| {
-                        let list: Vec<String> = bindings.iter().map(|b| w.binding(b)).collect();
-                        format!("<{control} {}>", list.join(" "))
-                    };
-                    match step {
-                        MacroStep::Tap(b) => group("&macro_tap", b),
-                        MacroStep::Press(b) => group("&macro_press", b),
-                        MacroStep::Release(b) => group("&macro_release", b),
-                        MacroStep::PauseForRelease => "<&macro_pause_for_release>".to_string(),
-                        MacroStep::WaitTime(ms) => format!("<&macro_wait_time {ms}>"),
-                        MacroStep::TapTime(ms) => format!("<&macro_tap_time {ms}>"),
-                        MacroStep::Param { from, to } => format!("<&macro_param_{from}to{to}>"),
+            // ZMK has no one-off pause: one is written as a change of wait
+            // time around a tap of nothing, with the wait put back after.
+            let mut wait = m.wait_ms.unwrap_or(ZMK_MACRO_WAIT_MS);
+            let mut steps: Vec<String> = Vec::new();
+            for step in &m.steps {
+                let group = |control: &str, bindings: &[Binding]| {
+                    let list: Vec<String> = bindings.iter().map(|b| w.binding(b)).collect();
+                    format!("<{control} {}>", list.join(" "))
+                };
+                match step {
+                    MacroStep::Tap(b) => steps.push(group("&macro_tap", b)),
+                    MacroStep::Press(b) => steps.push(group("&macro_press", b)),
+                    MacroStep::Release(b) => steps.push(group("&macro_release", b)),
+                    MacroStep::PauseForRelease => {
+                        steps.push("<&macro_pause_for_release>".to_string());
                     }
-                })
-                .collect();
+                    MacroStep::Pause(ms) => {
+                        steps.push(format!("<&macro_wait_time {ms}>"));
+                        steps.push("<&macro_tap &none>".to_string());
+                        steps.push(format!("<&macro_wait_time {wait}>"));
+                    }
+                    MacroStep::WaitTime(ms) => {
+                        wait = *ms;
+                        steps.push(format!("<&macro_wait_time {ms}>"));
+                    }
+                    MacroStep::TapTime(ms) => steps.push(format!("<&macro_tap_time {ms}>")),
+                    MacroStep::Param { from, to } => {
+                        steps.push(format!("<&macro_param_{from}to{to}>"));
+                    }
+                }
+            }
             w.line(3, "bindings");
             for (index, step) in steps.iter().enumerate() {
                 let lead = if index == 0 { "= " } else { ", " };

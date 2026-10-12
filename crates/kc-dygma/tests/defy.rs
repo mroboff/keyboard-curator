@@ -55,6 +55,13 @@ impl Simulated {
         // Bazecor's own example superkey: Ctrl+C, Ctrl+V, Ctrl+Shift+V,
         // Ctrl+X, and nothing on the last action.
         values.insert("superkeys.map".into(), "262 281 2329 283 1 0 0".into());
+        // Bazecor's virtual Defy's macro: Shift down, H, Shift up, e, y…
+        values.insert(
+            "macros.map".into(),
+            "6 229 8 11 7 229 8 8 8 28 8 54 8 44 6 229 8 7 7 229 8 28 8 10 8 16 8 4 8 23 8 8 0 0"
+                .into(),
+        );
+        values.insert("macros.memory".into(), "2048".into());
         Self {
             values,
             received: Vec::new(),
@@ -397,6 +404,7 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         ("keymap.onlyCustom", 1),
         ("settings.defaultLayer", 1),
         ("superkeys.map", after.superkeys.len()),
+        ("macros.map", after.macros.len()),
     ];
     let mut writes = 0;
     for line in &keyboard.received {
@@ -418,7 +426,7 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         "upgrade",
         "hardware.flash",
         "wireless",
-        "macros",
+        "macros.trigger",
         "settings.version",
         "settings.crc",
         "settings.valid",
@@ -585,4 +593,100 @@ fn superkeys_are_the_slots_of_a_key() {
         before.with_project(&project, &profile),
         Err(FocusError::Unfit(_))
     ));
+}
+
+#[test]
+fn macros_are_macros_on_the_key() {
+    use kc_model::behavior::{BehaviorKind, MacroStep};
+    use kc_model::setup::KeySetup;
+
+    let (board, profile) = defy();
+    let mut focus = Focus::new(Simulated::new(&profile));
+    let mut before = focus.read_image().unwrap();
+    // Two keys run the keyboard's macro; a superkey holds it on a double tap.
+    before.keymap[profile.key_slots[0]] = 53852;
+    before.keymap[profile.key_slots[1]] = 53852;
+    before.superkeys = vec![4, 1, 1, 53852, 1, 0, 0];
+    before.keymap[profile.key_slots[2]] = 53980;
+    let project = before.to_project("Mine", &board, &profile).unwrap();
+    let base = project.layers[0].id;
+    // Shared by two keys, the macro is a template; its steps read back.
+    let id = project.binding(base, 0).unwrap().user_behavior().unwrap();
+    assert_eq!(project.binding(base, 1).unwrap().user_behavior(), Some(id));
+    let def = project.behavior(id).unwrap();
+    assert!(def.is_template());
+    let BehaviorKind::Macro(m) = &def.kind else {
+        panic!("a macro")
+    };
+    assert_eq!(
+        m.steps[0],
+        MacroStep::Press(vec![Binding::kp(KeyExpr::new("LSHFT"))])
+    );
+    assert_eq!(
+        m.steps[1],
+        MacroStep::Tap(vec![Binding::kp(KeyExpr::new("H"))])
+    );
+    assert_eq!(
+        m.steps[2],
+        MacroStep::Release(vec![Binding::kp(KeyExpr::new("LSHFT"))])
+    );
+    assert!(matches!(&m.steps[3], MacroStep::Tap(list) if list.len() == 4));
+    let setup = KeySetup::of(&project, base, 2).unwrap();
+    assert_eq!(setup.double_tap, Some(Binding::user(id, vec![])));
+
+    // Applied unchanged, nothing is written.
+    assert_eq!(before.with_project(&project, &profile).unwrap(), before);
+
+    // A new macro on a key, with a pause, takes the next entry.
+    let mut project = project;
+    let label = project.free_label("macro");
+    let own = project
+        .add_behavior(
+            label,
+            "",
+            BehaviorKind::Macro(kc_model::behavior::Macro {
+                wait_ms: None,
+                tap_ms: None,
+                params: 0,
+                steps: vec![
+                    MacroStep::Tap(vec![
+                        Binding::kp(KeyExpr::new("H")),
+                        Binding::kp(KeyExpr::new("C_VOL_UP")),
+                    ]),
+                    MacroStep::Pause(500),
+                    MacroStep::Tap(vec![Binding::kp(KeyExpr::new("I"))]),
+                ],
+            }),
+        )
+        .unwrap();
+    project.behavior_mut(own).unwrap().scope = kc_model::behavior::Scope::Key;
+    project
+        .set_binding(base, 3, Binding::user(own, vec![]))
+        .unwrap();
+    assert!(check(&project, &profile).is_empty());
+    assert!(expressible(&Binding::user(own, vec![]), &project));
+    let after = before.with_project(&project, &profile).unwrap();
+    assert_eq!(after.keymap[profile.key_slots[3]], 53853);
+    let tail = &after.macros[after.macros.len() - 12..];
+    assert_eq!(tail, [8, 11, 5, 0x48, 0xE9, 2, 1, 0xF4, 8, 12, 0, 0]);
+    let sent = focus.write_changes(&before, &after).unwrap();
+    assert_eq!(sent, ["macros.map", "keymap.custom"]);
+    let again = focus
+        .read_image()
+        .unwrap()
+        .to_project("Again", &board, &profile)
+        .unwrap();
+    let back = again.binding(base, 3).unwrap().user_behavior().unwrap();
+    let BehaviorKind::Macro(m) = &again.behavior(back).unwrap().kind else {
+        panic!("a macro")
+    };
+    assert_eq!(m.steps[1], MacroStep::Pause(500));
+
+    // What a Dygma macro cannot hold is reported at the key.
+    if let BehaviorKind::Macro(m) = &mut project.behavior_mut(own).unwrap().kind {
+        m.steps.push(MacroStep::PauseForRelease);
+    }
+    let problems = check(&project, &profile);
+    assert!(problems.iter().any(|p| p.message.contains("released")));
+    assert!(!expressible(&Binding::user(own, vec![]), &project));
 }

@@ -393,6 +393,7 @@ impl Workspace {
                     MacroStep::Press(b) => ("Press".into(), Some(b.len())),
                     MacroStep::Release(b) => ("Release".into(), Some(b.len())),
                     MacroStep::PauseForRelease => ("Wait until the key is released".into(), None),
+                    MacroStep::Pause(ms) => (format!("Pause for {ms} ms"), None),
                     MacroStep::WaitTime(ms) => {
                         (format!("From here, wait {ms} ms between steps"), None)
                     }
@@ -415,7 +416,10 @@ impl Workspace {
                         )
                     })
                     .collect::<Vec<_>>();
-                let timed = matches!(kind, MacroStep::WaitTime(_) | MacroStep::TapTime(_));
+                let timed = matches!(
+                    kind,
+                    MacroStep::WaitTime(_) | MacroStep::TapTime(_) | MacroStep::Pause(_)
+                );
                 let act = |chip_id: &'static str,
                            label: &'static str,
                            cx: &mut Context<Self>,
@@ -459,8 +463,11 @@ impl Workspace {
                     })
                     .when(timed, |row| {
                         row.child(act("macro-time-less", "−", cx, |steps, at| {
-                            if let Some(MacroStep::WaitTime(ms) | MacroStep::TapTime(ms)) =
-                                steps.get_mut(at)
+                            if let Some(
+                                MacroStep::WaitTime(ms)
+                                | MacroStep::TapTime(ms)
+                                | MacroStep::Pause(ms),
+                            ) = steps.get_mut(at)
                             {
                                 *ms = ms.saturating_sub(10);
                             }
@@ -470,8 +477,11 @@ impl Workspace {
                             "+",
                             cx,
                             |steps, at| {
-                                if let Some(MacroStep::WaitTime(ms) | MacroStep::TapTime(ms)) =
-                                    steps.get_mut(at)
+                                if let Some(
+                                    MacroStep::WaitTime(ms)
+                                    | MacroStep::TapTime(ms)
+                                    | MacroStep::Pause(ms),
+                                ) = steps.get_mut(at)
                                 {
                                     *ms += 10;
                                 }
@@ -562,13 +572,16 @@ impl Workspace {
                         .child(add("macro-add-release", "Release", cx, || {
                             MacroStep::Release(vec![Binding::none()])
                         }))
+                        .child(add("macro-add-pause", "Pause", cx, || {
+                            MacroStep::Pause(100)
+                        }))
                         .child(add("macro-add-wait", "Change wait time", cx, || {
                             MacroStep::WaitTime(50)
                         }))
                         .child(add("macro-add-tap-time", "Change tap time", cx, || {
                             MacroStep::TapTime(30)
                         }))
-                        .child(add("macro-add-pause", "Wait for key release", cx, || {
+                        .child(add("macro-add-release-wait", "Wait for key release", cx, || {
                             MacroStep::PauseForRelease
                         }))
                         .pt_2(),

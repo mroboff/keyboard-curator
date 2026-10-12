@@ -503,6 +503,8 @@ pub enum MacroStep {
     Release(Vec<Binding>),
     /// Wait here until the macro's key is released.
     PauseForRelease,
+    /// Wait here for this many milliseconds, once.
+    Pause(u32),
     /// Change the wait between the steps that follow.
     WaitTime(u32),
     /// Change how long the taps that follow are held.

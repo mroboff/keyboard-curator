@@ -76,12 +76,19 @@ pub fn bytes(entries: &[Actions]) -> usize {
 }
 
 /// The key setup a superkey's actions describe, with `layers` the
-/// layout's layers in order. `None` when an action is a code this app
-/// cannot place in a slot.
-pub fn to_setup(actions: &Actions, layers: &[LayerId]) -> Option<KeySetup> {
+/// layout's layers in order and `macro_binding` the binding for a macro
+/// code. `None` when an action is a code this app cannot place in a slot.
+pub fn to_setup(
+    actions: &Actions,
+    layers: &[LayerId],
+    macro_binding: &dyn Fn(u16) -> Option<Binding>,
+) -> Option<KeySetup> {
     let action = |code: u16| -> Option<Option<Binding>> {
         if code == EMPTY {
             return Some(None);
+        }
+        if let Some(binding) = macro_binding(code) {
+            return Some(Some(binding));
         }
         let binding = codec::decode(code, layers);
         // A code with no binding has no place in a slot.
@@ -122,11 +129,13 @@ fn sticky_inner(binding: &Binding) -> Option<Binding> {
 }
 
 /// The five actions for a key that is more than one code, or why the
-/// firmware cannot hold it.
+/// firmware cannot hold it. `macros` has the code of every macro placed
+/// in the keyboard's table.
 pub fn actions(
     project: &Project,
     binding: &Binding,
     layers: &[LayerId],
+    macros: &crate::macros::Codes,
 ) -> Result<Actions, String> {
     let setup = KeySetup::read(project, binding)
         .ok_or_else(|| "this key is written in a way Dygma firmware cannot hold".to_string())?;
@@ -154,7 +163,7 @@ pub fn actions(
     let code = |slot: &Option<Binding>| -> Result<u16, String> {
         match slot {
             None => Ok(EMPTY),
-            Some(binding) => codec::encode(binding, layers),
+            Some(binding) => crate::encode_any(binding, layers, macros),
         }
     };
     let tap = if setup.sticky {
@@ -175,7 +184,7 @@ pub fn actions(
         };
         codec::encode(&sticky, layers)?
     } else {
-        codec::encode(&setup.tap, layers)?
+        crate::encode_any(&setup.tap, layers, macros)?
     };
     Ok([
         tap,

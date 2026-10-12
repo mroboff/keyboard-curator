@@ -2651,7 +2651,7 @@ mod tests {
         // Dygma's firmware is configured live: keys and colors, no files.
         assert_eq!(
             tabs("dygma-defy", "dygma-defy"),
-            ["Keyboard", "Lighting", "Apply"]
+            ["Keyboard", "Lighting", "Templates", "Apply"]
         );
         assert!(Mode::Keyboard.available(&[]));
         assert!(Mode::Apply.available(&[]));

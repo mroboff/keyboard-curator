@@ -429,6 +429,12 @@ fn macro_config(
             MacroStep::Tap(b) => (b, |keycode| MacroOperationConfig::Tap { keycode }),
             MacroStep::Press(b) => (b, |keycode| MacroOperationConfig::Down { keycode }),
             MacroStep::Release(b) => (b, |keycode| MacroOperationConfig::Up { keycode }),
+            MacroStep::Pause(ms) => {
+                operations.push(MacroOperationConfig::Delay {
+                    ms: u16::try_from(*ms).unwrap_or(u16::MAX),
+                });
+                continue;
+            }
             MacroStep::WaitTime(ms) => {
                 t.warning(
                     location.clone(),

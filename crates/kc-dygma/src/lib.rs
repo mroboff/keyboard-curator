@@ -12,6 +12,7 @@
 //! a firmware that lacks a command is never sent it.
 
 pub mod codec;
+pub mod macros;
 pub mod superkeys;
 
 use std::io::{Read, Write};
@@ -19,13 +20,14 @@ use std::time::Duration;
 
 use kc_boards::board::DygmaProfile;
 use kc_boards::Board;
+use kc_model::behavior::{BehaviorKind, Macro, MacroStep, Scope};
 use kc_model::features::{KeyLight, Rgb};
-use kc_model::{Device, LayerId, Location, Problem, Project, Severity};
+use kc_model::{BehaviorId, Binding, Device, LayerId, Location, Problem, Project, Severity};
 use serde::{Deserialize, Serialize};
 
 /// The commands this crate reads with. None takes an argument, so none can
 /// change anything.
-const READS: [&str; 10] = [
+const READS: [&str; 12] = [
     "help",
     "version",
     "hardware.version",
@@ -36,16 +38,19 @@ const READS: [&str; 10] = [
     "palette",
     "colormap.map",
     "superkeys.map",
+    "macros.map",
+    "macros.memory",
 ];
 
 /// The only commands this crate writes with.
-pub const WRITES: [&str; 6] = [
+pub const WRITES: [&str; 7] = [
     "keymap.custom",
     "palette",
     "colormap.map",
     "keymap.onlyCustom",
     "settings.defaultLayer",
     "superkeys.map",
+    "macros.map",
 ];
 
 /// Commands every Focus firmware has, sent whether or not `help` lists
@@ -198,7 +203,9 @@ impl<T: Read + Write> Focus<T> {
 
     /// Reads everything this app works with from the keyboard.
     pub fn read_image(&mut self) -> Result<Image, FocusError> {
-        let scalar = |text: Option<String>| text.and_then(|t| t.trim().parse().ok());
+        fn scalar<N: std::str::FromStr>(text: Option<String>) -> Option<N> {
+            text.and_then(|t| t.trim().parse().ok())
+        }
         Ok(Image {
             version: self.read_required("version")?,
             hardware: self.read("hardware.version")?.unwrap_or_default(),
@@ -210,6 +217,8 @@ impl<T: Read + Write> Focus<T> {
             palette: self.read_numbers("palette")?,
             colormap: self.read_numbers("colormap.map")?,
             superkeys: self.read_numbers_if_any("superkeys.map")?,
+            macros: self.read_numbers_if_any("macros.map")?,
+            macro_memory: scalar(self.read("macros.memory")?),
         })
     }
 
@@ -238,7 +247,12 @@ impl<T: Read + Write> Focus<T> {
             self.write("colormap.map", &new.colormap)?;
             sent.push("colormap.map");
         }
-        // Superkeys before the keys that name them.
+        // Macros before the superkeys that may name them, and both before
+        // the keys that name either.
+        if current.macros != new.macros {
+            self.write("macros.map", &new.macros)?;
+            sent.push("macros.map");
+        }
         if current.superkeys != new.superkeys {
             self.write("superkeys.map", &new.superkeys)?;
             sent.push("superkeys.map");
@@ -291,6 +305,13 @@ pub struct Image {
     /// without superkeys.
     #[serde(default)]
     pub superkeys: Vec<u16>,
+    /// The macro map as the keyboard stores it; empty on firmware
+    /// without macros.
+    #[serde(default)]
+    pub macros: Vec<u16>,
+    /// The room for macros, in bytes, when the keyboard says.
+    #[serde(default)]
+    pub macro_memory: Option<u32>,
 }
 
 fn channels(profile: &DygmaProfile) -> usize {
@@ -359,6 +380,11 @@ impl Image {
         let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
         let size = channels(profile);
         let table = superkeys::parse(&self.superkeys);
+        let macro_defs = self.macro_definitions(&mut project, &layers, &table);
+        let macro_binding = |code: u16| -> Option<Binding> {
+            let id = macro_defs.get(&macros::index(code)?)?;
+            Some(Binding::user(*id, vec![]))
+        };
         for (index, id) in layers.iter().enumerate() {
             let mut lights = Vec::with_capacity(profile.key_slots.len());
             for (position, (slot, led)) in
@@ -368,13 +394,16 @@ impl Image {
                 project
                     .set_binding(*id, position, codec::decode(code, &layers))
                     .map_err(|e| FocusError::Unfit(e.to_string()))?;
-                // A superkey becomes the key's slots; one this app cannot
-                // place stays as the number.
+                // A macro becomes the key's own; a superkey becomes the
+                // key's slots. One this app cannot place stays as the number.
+                if let Some(binding) = macro_binding(code) {
+                    let _ = project.set_binding(*id, position, binding);
+                }
                 let entry = usize::from(code.wrapping_sub(superkeys::FIRST));
                 if code >= superkeys::FIRST && entry < superkeys::SLOTS {
                     if let Some(setup) = table
                         .get(entry)
-                        .and_then(|a| superkeys::to_setup(a, &layers))
+                        .and_then(|a| superkeys::to_setup(a, &layers, &macro_binding))
                     {
                         let _ = project.apply_setup(*id, position, &setup);
                     }
@@ -392,7 +421,74 @@ impl Image {
                 .map_err(|e| FocusError::Unfit(e.to_string()))?
                 .keys = lights;
         }
+        // A macro several keys share is a template; one key's is its own.
+        for id in macro_defs.values() {
+            if project.top_owners(*id).len() > 1 {
+                let name = format!("Macro {}", id.0);
+                let _ = project.make_template(*id, name);
+            }
+        }
+        project.tidy();
         Ok(project)
+    }
+
+    /// A macro definition for every macro the keymap names, on a key or
+    /// inside a superkey, by its entry in the map. Macros this app cannot
+    /// read get none and stay as numbers.
+    fn macro_definitions(
+        &self,
+        project: &mut Project,
+        layers: &[LayerId],
+        superkeys: &[superkeys::Actions],
+    ) -> std::collections::HashMap<usize, BehaviorId> {
+        let entries = macros::parse(&self.macros);
+        let mut wanted: Vec<usize> = Vec::new();
+        let mut note = |code: u16| {
+            if let Some(index) = macros::index(code) {
+                if !wanted.contains(&index) {
+                    wanted.push(index);
+                }
+            }
+        };
+        for code in &self.keymap {
+            note(*code);
+            if let Some(entry) = code
+                .checked_sub(superkeys::FIRST)
+                .and_then(|i| superkeys.get(usize::from(i)))
+            {
+                for action in entry {
+                    note(*action);
+                }
+            }
+        }
+        wanted.sort_unstable();
+        let mut defs = std::collections::HashMap::new();
+        for index in wanted {
+            let Some(macros::Entry::Known(actions)) = entries.get(index) else {
+                continue;
+            };
+            let Some(steps) = macros::to_steps(actions, layers) else {
+                continue;
+            };
+            let label = project.free_label("macro");
+            let Ok(id) = project.add_behavior(
+                label,
+                "",
+                BehaviorKind::Macro(Macro {
+                    wait_ms: None,
+                    tap_ms: None,
+                    params: 0,
+                    steps,
+                }),
+            ) else {
+                continue;
+            };
+            if let Ok(def) = project.behavior_mut(id) {
+                def.scope = Scope::Key;
+            }
+            defs.insert(index, id);
+        }
+        defs
     }
 
     /// The image the keyboard should hold for `project`, starting from
@@ -419,8 +515,14 @@ impl Image {
         let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
         let size = channels(profile);
 
-        // Superkeys the keyboard has stay; a key setup reuses an identical
-        // one or takes a new entry.
+        // Macros and superkeys the keyboard has stay; a macro or a key
+        // setup reuses an identical entry or takes a new one.
+        let memory = self
+            .macro_memory
+            .map_or(macros::DEFAULT_MEMORY, |m| m as usize);
+        let mut macro_table = macros::parse(&self.macros);
+        let codes = place_macros(project, &layers, &mut macro_table, memory)
+            .map_err(|(_, reason)| FocusError::Unfit(reason))?;
         let mut table = superkeys::parse(&self.superkeys);
         for index in 0..profile.layers {
             let layer = project.layers.get(index);
@@ -428,8 +530,11 @@ impl Image {
                 // A layer the layout does not have lets the ones below
                 // show through.
                 let code = match layer.and_then(|l| l.bindings.get(position)) {
+                    Some(binding) if is_macro(project, binding) => {
+                        encode_any(binding, &layers, &codes).map_err(FocusError::Unfit)?
+                    }
                     Some(binding) if binding.user_behavior().is_some() => {
-                        let actions = superkeys::actions(project, binding, &layers)
+                        let actions = superkeys::actions(project, binding, &layers, &codes)
                             .map_err(FocusError::Unfit)?;
                         let entry =
                             superkeys::place(&mut table, actions).map_err(FocusError::Unfit)?;
@@ -448,6 +553,14 @@ impl Image {
         }
         if !self.superkeys.is_empty() {
             image.superkeys = superkeys::serialize(&table);
+        }
+        if self.macros.is_empty() && !macro_table.is_empty() {
+            return Err(FocusError::Unfit(
+                "this keyboard's firmware has no macros, which the layout needs".into(),
+            ));
+        }
+        if !self.macros.is_empty() {
+            image.macros = macros::serialize(&macro_table);
         }
 
         // The colors the layout's keys want. A key that already shows its
@@ -538,11 +651,21 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
         );
     }
     let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
+    let mut macro_table: Vec<macros::Entry> = Vec::new();
+    let codes = match place_macros(project, &layers, &mut macro_table, macros::DEFAULT_MEMORY) {
+        Ok(codes) => codes,
+        Err((location, reason)) => {
+            error(location, reason);
+            macros::Codes::new()
+        }
+    };
     let mut table: Vec<superkeys::Actions> = Vec::new();
     for layer in &project.layers {
         for (position, binding) in layer.bindings.iter().enumerate() {
-            let result = if binding.user_behavior().is_some() {
-                superkeys::actions(project, binding, &layers).map(|actions| {
+            let result = if is_macro(project, binding) {
+                encode_any(binding, &layers, &codes).map(|_| ())
+            } else if binding.user_behavior().is_some() {
+                superkeys::actions(project, binding, &layers, &codes).map(|actions| {
                     if !table.contains(&actions) {
                         table.push(actions);
                     }
@@ -628,7 +751,96 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
 /// what works.
 pub fn expressible(binding: &kc_model::Binding, project: &Project) -> bool {
     let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
+    if is_macro(project, binding) {
+        return macro_steps(project, binding)
+            .is_some_and(|steps| macros::from_steps(steps, &layers).is_ok());
+    }
     codec::encode(binding, &layers).is_ok()
+}
+
+/// Whether a binding runs one of the layout's macros.
+fn is_macro(project: &Project, binding: &Binding) -> bool {
+    macro_steps(project, binding).is_some()
+}
+
+fn macro_steps<'a>(project: &'a Project, binding: &Binding) -> Option<&'a [MacroStep]> {
+    let def = project.behavior(binding.user_behavior()?)?;
+    match &def.kind {
+        BehaviorKind::Macro(m) => Some(&m.steps),
+        _ => None,
+    }
+}
+
+/// The code for a binding: a macro's entry, or the key code.
+pub(crate) fn encode_any(
+    binding: &Binding,
+    layers: &[LayerId],
+    codes: &macros::Codes,
+) -> Result<u16, String> {
+    match binding.user_behavior() {
+        Some(id) => codes
+            .get(&id)
+            .copied()
+            .ok_or_else(|| "this key needs a macro the keyboard cannot hold".to_string()),
+        None => codec::encode(binding, layers),
+    }
+}
+
+/// Places every macro a key reaches, on the key or in one of its slots,
+/// in the table, and returns each macro's code. An error names the key
+/// whose macro could not be placed.
+fn place_macros(
+    project: &Project,
+    layers: &[LayerId],
+    table: &mut Vec<macros::Entry>,
+    memory: usize,
+) -> Result<macros::Codes, (Location, String)> {
+    let mut codes = macros::Codes::new();
+    for layer in &project.layers {
+        for (position, binding) in layer.bindings.iter().enumerate() {
+            let location = Location::Key {
+                layer: layer.id,
+                position,
+            };
+            let mut reached: Vec<BehaviorId> = Vec::new();
+            if is_macro(project, binding) {
+                reached.extend(binding.user_behavior());
+            } else if binding.user_behavior().is_some() {
+                if let Some(setup) = kc_model::setup::KeySetup::read(project, binding) {
+                    let slots = [
+                        Some(&setup.tap),
+                        setup.hold.as_ref(),
+                        setup.tap_hold.as_ref(),
+                        setup.double_tap.as_ref(),
+                        setup.double_tap_hold.as_ref(),
+                    ];
+                    for slot in slots.into_iter().flatten() {
+                        if is_macro(project, slot) {
+                            reached.extend(slot.user_behavior());
+                        }
+                    }
+                }
+            }
+            for id in reached {
+                if codes.contains_key(&id) {
+                    continue;
+                }
+                let def = project.behavior(id).expect("a macro the key reaches");
+                let BehaviorKind::Macro(m) = &def.kind else {
+                    continue;
+                };
+                if m.params > 0 {
+                    return Err((location, "Dygma macros take no values from the key".into()));
+                }
+                let actions =
+                    macros::from_steps(&m.steps, layers).map_err(|e| (location.clone(), e))?;
+                let index =
+                    macros::place(table, actions, memory).map_err(|e| (location.clone(), e))?;
+                codes.insert(id, macros::code(index));
+            }
+        }
+    }
+    Ok(codes)
 }
 
 /// The serial port of a connected keyboard of `board`: the one linked as

@@ -312,7 +312,7 @@ pub fn macro_does_nothing(macro_def: &kc_model::behavior::Macro, cx: &Context) -
         MacroStep::Tap(b) | MacroStep::Press(b) | MacroStep::Release(b) => {
             b.iter().all(|binding| via(binding, cx) == Ok(0))
         }
-        MacroStep::WaitTime(_) | MacroStep::TapTime(_) => true,
+        MacroStep::WaitTime(_) | MacroStep::TapTime(_) | MacroStep::Pause(_) => true,
         MacroStep::PauseForRelease | MacroStep::Param { .. } => false,
     })
 }
