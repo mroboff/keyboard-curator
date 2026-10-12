@@ -1,6 +1,7 @@
 //! The Combos mode: keys pressed together that do something else.
 
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -256,7 +257,7 @@ impl Workspace {
                     .id("combo-panel")
                     .w_80()
                     .h_full()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .border_r_1()
                     .border_color(border)
                     .p_3()

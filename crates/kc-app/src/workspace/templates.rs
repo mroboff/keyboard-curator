@@ -7,6 +7,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -729,7 +730,7 @@ impl Workspace {
                     .id("template-list")
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .px_2()
                     .pb_2()
                     .flex()
@@ -821,7 +822,7 @@ impl Workspace {
             .flex_1()
             .min_w_0()
             .h_full()
-            .overflow_y_scroll()
+            .overflow_y_scrollbar()
             .px_8()
             .py_6();
         let column = div().w_full().max_w(px(760.)).flex().flex_col();

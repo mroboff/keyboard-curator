@@ -8,6 +8,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -1625,7 +1626,7 @@ impl BoardPage {
                         div()
                             .id("build-failure")
                             .max_h_48()
-                            .overflow_y_scroll()
+                            .overflow_y_scrollbar()
                             .text_xs()
                             .text_color(danger)
                             .children(lines),
@@ -2037,7 +2038,7 @@ impl Render for BoardPage {
                 .id("board-page")
                 .flex_1()
                 .min_h_0()
-                .overflow_y_scroll()
+                .overflow_y_scrollbar()
                 .px_10()
                 .py_8()
                 .child(div().w_full().max_w(px(820.)).child(content))

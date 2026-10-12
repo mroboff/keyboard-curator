@@ -3,6 +3,7 @@
 //! the board.
 
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -268,7 +269,7 @@ impl Workspace {
             .id("advanced")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
+            .overflow_y_scrollbar()
             .p_6()
             .flex()
             .flex_col()

@@ -8,6 +8,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -321,7 +322,7 @@ impl Workspace {
             .p_3()
             .border_l_1()
             .border_color(border)
-            .overflow_y_scroll();
+            .overflow_y_scrollbar();
         let (Some(position), Some(binding)) = (self.primary(), self.selected_binding()) else {
             return panel.child(section_title("NO KEY SELECTED", cx)).child(
                 div()

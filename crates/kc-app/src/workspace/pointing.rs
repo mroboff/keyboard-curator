@@ -1,6 +1,7 @@
 //! The Pointing mode: what each trackball, touchpad and set of mouse keys
 //! does, and what it does differently while particular layers are on.
 
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -536,7 +537,7 @@ impl Workspace {
             .id("pointing")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
+            .overflow_y_scrollbar()
             .p_6()
             .flex()
             .flex_col()

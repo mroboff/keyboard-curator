@@ -15,6 +15,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::color_picker::ColorPickerState;
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -1560,7 +1561,7 @@ impl Workspace {
                 div()
                     .id("layer-list")
                     .flex_1()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .px_2()
                     .flex()
                     .flex_col()
@@ -1906,7 +1907,7 @@ impl Workspace {
                     .id("picker-grid")
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .child(div().flex().flex_wrap().gap_1().children(cells)),
             )
     }
@@ -2386,7 +2387,7 @@ impl Workspace {
                     .id("file-contents")
                     .flex_1()
                     .min_h_0()
-                    .overflow_scroll()
+                    .overflow_scrollbar()
                     .p_2()
                     .rounded_md()
                     .bg(hover.opacity(0.4))
@@ -2560,7 +2561,7 @@ impl Workspace {
                                 .id("apply")
                                 .flex_1()
                                 .min_h_0()
-                                .overflow_y_scroll()
+                                .overflow_y_scrollbar()
                                 .child(self.render_apply(cx))
                                 .when(self.features().contains(&Feature::Studio), |page| {
                                     page.child(self.render_live(cx))

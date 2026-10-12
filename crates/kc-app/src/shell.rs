@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -1367,7 +1368,7 @@ impl Shell {
                     .id("keyboard-list")
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .border_t_1()
                     .border_color(text)
                     .flex()
@@ -1697,7 +1698,7 @@ impl Shell {
                 .flex_1()
                 .min_w_0()
                 .h_full()
-                .overflow_y_scroll()
+                .overflow_y_scrollbar()
                 .child(div().max_w(px(520.)).child(self.render_form(form, cx)))
                 .into_any_element(),
             (None, Some(exhibit)) => exhibit.into_any_element(),
