@@ -1,136 +1,123 @@
 <section class="chapter" id="c8">
-  <header><div class="num">Chapter 8</div><h1>Behaviors</h1>
-  <p>Keys with more than one job: hold-taps, tap-dances, mod-morphs, sticky keys and macros.</p></header>
+  <header><div class="num">Chapter 8</div><h1>Keys with more than one job</h1>
+  <p>Hold for one thing and tap for another, double taps, shifted alternatives, sticky keys, macros, and the templates that keep their feel in one place.</p></header>
 
-  <p>In ZMK, everything a key can do is called a <b>behavior</b>. "Send a key" is a behavior; so is "switch layer". Those are built in, and you have been using them through the picker. Behaviors mode is where you build <b>your own</b>, with your own timing and your own combinations.</p>
+  <p>Everything in this chapter happens on the key. Select a key in Keyboard mode, and the panel on the right, the <b>key setup</b>, describes it in slots: what a tap does, what a hold does, what a second tap does, and so on. Fill a slot by clicking it and then choosing from the picker, exactly as you choose a plain key. Nothing is typed, and nothing has to be set up somewhere else first.</p>
 
-  <h2>How Behaviors mode works</h2>
-  <ol class="steps">
-    <li>Click <span class="ui">Behaviors</span> in the mode bar.</li>
-    <li>On the left, under <span class="ui">New</span>, click the kind you want. It appears in the list and its settings open on the right.</li>
-    <li>Give it a name you will recognize, and adjust its settings.</li>
-    <li>Go back to <span class="ui">Keyboard</span> mode, select a key, and assign the behavior from the picker's <span class="ui">Custom</span> tab.</li>
-  </ol>
-  <p>One behavior can be assigned to as many keys as you like. Change the behavior and every key that uses it changes with it.</p>
-  <p>Behaviors you define are built into ZMK firmware, and written to the keyboard on RMK for MoErgo and the Imprint's RMK fork, with their timing. Plain RMK on the Imprint and Dygma firmware cannot take them yet, so those boards have no Behaviors mode, and keys that use a behavior are flagged until the firmware changes.</p>
-  <p>Each behavior has two names. <span class="ui">Name</span> is for you. <span class="ui">Label in the keymap</span> is the short identifier written into the firmware files, such as <code>hml</code>; the app picks one for you and you rarely need to touch it.</p>
-  <p>A behavior from an imported layout can also have a <span class="ui">Description</span>, taken from the note written above it in the file. It is shown under the names and written back into the firmware files as a comment.</p>
-  <p>Where a behavior needs you to say what it does (what a tap sends, what three taps do), you see a small box showing a binding. Click the box to select it, then choose from the list beneath it, or type any ZMK binding and press <kbd>Return</kbd>.</p>
-  <p>To delete a behavior, select it and click <span class="ui">Delete</span>. The app refuses while any key still uses it, and tells you how many do; reassign those keys first.</p>
-
+  <h2>The slots</h2>
   <table class="wrap">
-    <tr><th>Kind</th><th>In one sentence</th><th>Typical use</th></tr>
-    <tr><td class="ui">Hold-tap</td><td>One thing when tapped, another when held.</td><td>Home-row mods; a thumb key that is Space and a layer.</td></tr>
-    <tr><td class="ui">Tap-dance</td><td>Different things for one tap, two taps, three taps.</td><td>Tap for Shift, double-tap for Caps Word.</td></tr>
-    <tr><td class="ui">Mod-morph</td><td>One thing normally, another while a modifier is held.</td><td>Shift+Backspace sends Delete.</td></tr>
-    <tr><td class="ui">Sticky key</td><td>A modifier that waits for the next key.</td><td>Tap Shift, then a letter, for a capital.</td></tr>
-    <tr><td class="ui">Macro</td><td>Plays a sequence of keys.</td><td>Type an email address; a multi-key shortcut.</td></tr>
+    <tr><th>Slot</th><th>What it is</th><th>Typical use</th></tr>
+    <tr><td class="ui">Tap</td><td>What a press does. Every key has this one.</td><td>The letter under your finger.</td></tr>
+    <tr><td class="ui">Hold</td><td>What holding the key does instead of tapping it: a modifier, several modifiers, a layer, or anything else.</td><td>Home-row mods; a thumb key that is Space and a layer.</td></tr>
+    <tr><td class="ui">Double tap</td><td>What a second tap, soon after the first, does.</td><td>Tap for Shift, double-tap for Caps Word.</td></tr>
+    <tr><td class="ui">Tap, then hold</td><td>What holding the key after one tap does.</td><td>A layer key that, tapped and then held, holds a modifier instead.</td></tr>
+    <tr><td class="ui">More taps</td><td>A third tap, a fourth tap.</td><td>Cycling through a few things on one key.</td></tr>
+    <tr><td class="ui">With ⇧ held</td><td>A different key while Shift (or the modifiers you choose) is held.</td><td>Comma that is a semicolon when shifted; Shift+Backspace sends Delete.</td></tr>
+    <tr><td class="ui">Sticky</td><td>The tap stays active for the next key.</td><td>Tap Shift, then a letter, for a capital.</td></tr>
+    <tr><td class="ui">Macro</td><td>The key types a sequence.</td><td>An email address; a multi-key shortcut.</td></tr>
   </table>
+  <p>A plain key shows only its tap. <span class="ui">Add…</span> offers the other slots; an added slot shows <i>Choose below…</i> until you pick something for it. The <span class="ui">×</span> beside a slot takes it away again. Keycaps on the drawing show a hold under the tap, and small marks in the corner for a double tap (<b>×2</b>), an override (<b>⇧</b>) and a sticky key.</p>
 
-  <h2>Hold-tap</h2>
-  <p>A hold-tap is the most useful behavior and the one that needs most care, because the keyboard has to guess: when you press the key, did you mean a tap or a hold? Guess wrong one way and you get stray letters; the other way and you get accidental shortcuts. The settings exist to make the guess match the way you type.</p>
+  <h2>Hold</h2>
+  <p>When the Hold slot is chosen, a row of quick choices appears under it: the four modifiers, which combine (click <span class="ui">⌃</span> and <span class="ui">⇧</span> for Control-Shift), a <span class="ui">Right side</span> switch for the right-hand modifiers, and your layers. For anything else, choose it from the picker as usual.</p>
+  <div class="box ex"><div class="h">Example: Space that is also a layer key</div><p>Select your Space key. <span class="ui">Add…</span> › <span class="ui">Hold</span>, then click your navigation layer's name. Tapping the key still types a space; holding it switches to the navigation layer for as long as you hold.</p></div>
+  <p>Once a key has a hold, choosing a different key from the picker changes only what a tap sends; the hold stays.</p>
 
-  <h3>What it does</h3>
-  <p><span class="ui">When held</span> and <span class="ui">When tapped</span> each choose a kind of action:</p>
-  <table class="wrap">
-    <tr><th>Choice</th><th>Meaning</th></tr>
-    <tr><td class="ui">Key</td><td>Send a key or modifier.</td></tr>
-    <tr><td class="ui">Layer while held</td><td>Turn a layer on for as long as the key is down.</td></tr>
-    <tr><td class="ui">Go to layer</td><td>Switch to a layer and stay there.</td></tr>
-    <tr><td class="ui">Sticky layer</td><td>Turn a layer on for the next key press.</td></tr>
-    <tr><td class="ui">Sticky key</td><td>Hold a modifier for the next key press.</td></tr>
-  </table>
-  <p>The hold-tap sets the <i>kind</i> of action. The particular key or layer is chosen on each key that uses it. That is why one "home-row mod" behavior can serve A-with-Control, S-with-Option and D-with-Command.</p>
+  <h2>Feel</h2>
+  <p>As soon as a key can hold or take a second tap, the keyboard has to guess: when you press the key, did you mean a tap or a hold? Guess wrong one way and you get stray letters; the other way and you get accidental shortcuts. The <b>feel</b> is the settings that make the guess match the way you type. Each part of a key that has settings, the hold, the extra taps, the override, the sticky key, shows a section with a menu offering three sources:</p>
+  <ul>
+    <li><span class="ui">Keyboard default</span>: the firmware's own timing. Fine for thumb keys and for trying things out.</li>
+    <li>A <b>template</b> you have saved: the key follows it, and changing the template changes every key that uses it.</li>
+    <li><span class="ui">Custom for this key</span>: settings of this key's own, shown underneath in plain words.</li>
+  </ul>
+  <p><span class="ui">Save as template…</span> turns a custom feel into a template with a name. <span class="ui">Detach</span> does the opposite: the key keeps the settings it has but stops following the template.</p>
 
-  <h3>Deciding between hold and tap</h3>
-  <p>The <b>tapping term</b> is the dividing line: release the key sooner and it is a tap; keep it down longer and it is a hold. The interesting case is when you press <i>another</i> key before the tapping term is up. The four <b>flavors</b> differ in what they do then:</p>
-  <table class="wrap">
-    <tr><th>Flavor</th><th>What decides</th><th>Feels like</th></tr>
-    <tr><td class="ui">Hold-preferred</td><td>Holds as soon as another key is pressed.</td><td>Fast for shortcuts. Risky on letter keys: quick typing triggers holds.</td></tr>
-    <tr><td class="ui">Balanced</td><td>Holds if another key is pressed <i>and released</i> while this one is down.</td><td>The usual choice for home-row mods. Overlapping letters in fast typing stay as letters.</td></tr>
-    <tr><td class="ui">Tap-preferred</td><td>Holds only after the tapping term, whatever else you press.</td><td>Safest against accidental holds; you must wait out the term for every hold.</td></tr>
-    <tr><td class="ui">Tap-unless-interrupted</td><td>Taps unless another key is pressed first.</td><td>For a key you mostly tap and only hold together with others.</td></tr>
-  </table>
-
-  <h3>The timing settings</h3>
+  <h3>How a hold is told from a tap</h3>
   <table class="wrap">
     <tr><th>Setting</th><th>What it does</th><th>Advice</th></tr>
-    <tr><td class="ui">Tapping term</td><td>How long the key must be down to count as a hold on its own.</td><td>200 ms suits thumb keys. Use 250 to 300 ms on letter keys.</td></tr>
-    <tr><td class="ui">Quick tap</td><td>If you tap the key and press it again within this time, the second press is always a tap, so holding it repeats the letter.</td><td>Turn it on for letter keys. Without it you cannot hold the key to repeat.</td></tr>
-    <tr><td class="ui">Only hold after a pause in typing</td><td>If another key was pressed less than this long ago, the key is always a tap.</td><td>The best cure for stray modifiers during fast typing. Try 150 ms.</td></tr>
-    <tr><td class="ui">Tap if held alone and released</td><td>If you hold past the tapping term and release without pressing anything else, send the tap anyway.</td><td>Handy for slow, deliberate taps. Avoid on keys you hold while using the mouse.</td></tr>
-    <tr><td class="ui">Hold while undecided</td><td>Applies the hold at once, and takes it back if it turns out to be a tap.</td><td>Makes modifier-click with a mouse feel instant.</td></tr>
+    <tr><td class="ui">Decide by</td><td>What happens when you press <i>another</i> key before the hold time is up. <b>Favor hold</b> holds at once. <b>Balanced</b> holds if the other key is pressed and released while this one is down. <b>Favor tap</b> waits out the hold time whatever else you press. <b>Tap unless another key is pressed</b> is for a key you mostly tap.</td><td>Balanced for home-row mods. Favor hold for thumb keys.</td></tr>
+    <tr><td class="ui">Counts as a hold after</td><td>How long the key must be down to be a hold on its own.</td><td>200 ms suits thumb keys. Use 250 to 300 ms on letter keys.</td></tr>
+    <tr><td class="ui">Tap twice quickly to repeat</td><td>If you tap the key and press it again within this time, the second press is always a tap, so holding it repeats the letter.</td><td>Turn it on for letter keys. Without it you cannot hold the key to repeat.</td></tr>
+    <tr><td class="ui">No hold right after typing</td><td>If another key was pressed less than this long ago, the key is always a tap.</td><td>The best cure for stray modifiers during fast typing. Try 150 ms.</td></tr>
+    <tr><td class="ui">Tap if released with nothing else pressed</td><td>If you hold past the hold time and release without pressing anything else, send the tap anyway.</td><td>Handy for slow, deliberate taps. Avoid on keys you hold while using the mouse.</td></tr>
+    <tr><td class="ui">Hold starts right away</td><td>Applies the hold at once, and takes it back if it turns out to be a tap.</td><td>Makes modifier-click with a mouse feel instant.</td></tr>
+    <tr><td class="ui">Hold only with keys on the other hand</td><td>Pressing a key on the <i>same</i> hand makes this key a tap immediately.</td><td>On for every home-row mod. Rolling two keys on one hand then always types two letters.</td></tr>
+    <tr><td class="ui">Decide when the other key is released</td><td>Delays the other-hand check until the other key is released.</td><td>Needed when holding two modifiers on the same hand.</td></tr>
+    <tr><td class="ui">Hold only with these keys</td><td>A small keyboard drawing for choosing exactly which keys can turn this key into a hold.</td><td>For unusual cases; the other-hand switch covers the usual one.</td></tr>
   </table>
-
-  <h3>Keys that can trigger the hold</h3>
-  <p>A small keyboard drawing lets you limit which <i>other</i> keys can turn this key into a hold. Click keys to choose them, or use <span class="ui">Any key</span>, <span class="ui">Left hand</span> or <span class="ui">Right hand</span>. Pressing a key that is not chosen makes this key a tap immediately.</p>
-  <p>This is what makes home-row mods dependable. You hold Shift with one hand and press the letter with the other, so a left-hand mod should only hold for right-hand keys. Rolling two keys on the <i>same</i> hand then always types two letters. <span class="ui">Decide on release</span> delays that check until the modifier key is released, which you need when holding two modifiers on the same hand.</p>
-  <p>Firmware that knows which hand each key is on, RMK for MoErgo and the Imprint's RMK fork, offers a simpler switch instead: <span class="ui">Hold only for a key on the other hand</span>. One behavior then serves both hands, with no trigger keys to choose. On ZMK, which has no such switch, a layout that uses it is flagged; choose the other hand's keys as triggers instead.</p>
 
   <h2>Home-row mods</h2>
   <p>Home-row mods put Control, Option, Command and Shift under the fingers of your resting position: tap <b>F</b> for f, hold it for Shift. Your hands never leave the home row to reach a modifier.</p>
-  <figure><div class="frame">{{GO60_HRM}}</div><figcaption>A left-hand home-row mod only becomes a hold when the next key is on the right hand (highlighted) or a thumb.</figcaption></figure>
-  <p>They are famous for being fiddly to tune. The two buttons under <span class="ui">Home-row mods</span> create hold-taps that are already tuned sensibly:</p>
-  <ul>
-    <li><b>Balanced</b> flavor, tapping term <b>280 ms</b>, quick tap <b>175 ms</b>, hold only after a <b>150 ms</b> pause in typing.</li>
-    <li><span class="ui">Left hand</span> creates a behavior for keys on the left half that holds only for keys on the right half, and <span class="ui">Right hand</span> the reverse, both deciding on release.</li>
-  </ul>
+  <figure><div class="frame">{{GO60_HRM}}</div><figcaption>A left-hand home-row mod only becomes a hold when the next key is on the right hand (highlighted).</figcaption></figure>
   <div class="box ex"><div class="h">Example: Shift on F and J</div>
   <ol>
-    <li>In Behaviors mode, click <span class="ui">Left hand</span> and <span class="ui">Right hand</span> under Home-row mods. You get two behaviors, labeled <code>hml</code> and <code>hmr</code>.</li>
-    <li>In Keyboard mode, on the base layer, select the <b>F</b> key. In the inspector's Binding box type <code>&amp;hml LSHFT F</code> and press <kbd>Return</kbd>.</li>
-    <li>Select the <b>J</b> key, type <code>&amp;hmr RSHFT J</code> and press <kbd>Return</kbd>.</li>
+    <li>In Templates mode, <span class="ui">New</span> › <span class="ui">Home-row mod</span>. It comes tuned: Balanced, a hold after 280 ms, tap twice to repeat, no hold within 150 ms of typing, and holding only with keys on the other hand.</li>
+    <li>In Keyboard mode, select <b>F</b>. <span class="ui">Add…</span> › <span class="ui">Hold</span>, click <span class="ui">⇧</span>. Under <span class="ui">Hold and tap</span>, choose <b>Home-row mod</b> from the menu.</li>
+    <li>Select <b>J</b> and do the same, with <span class="ui">Right side</span> on before clicking <span class="ui">⇧</span>.</li>
   </ol>
-  <p>The first name after the behavior is the hold, the second the tap. Modifier names are <code>LSHFT</code>, <code>LCTRL</code>, <code>LALT</code>, <code>LGUI</code> and the same starting with <code>R</code> for the right-hand versions. Continue along the row for the other modifiers; a common order from little finger to index is Control, Option, Command, Shift.</p></div>
+  <p>Continue along the row for the other modifiers; a common order from little finger to index is Control, Option, Command, Shift. Select several keys at once to give them the same feel in one go.</p></div>
   <div class="box tip"><div class="h">Tuning by symptom</div>
   <ul>
-    <li><b>Stray capitals or shortcuts while typing fast:</b> raise "Only hold after a pause in typing" (try 175 or 200 ms), or raise the tapping term.</li>
-    <li><b>Holds feel sluggish, or you get letters when you wanted a shortcut:</b> lower the tapping term a little, or lower the pause.</li>
-    <li><b>Cannot repeat a letter by holding it:</b> turn on quick tap; tap, then press and hold.</li>
-  </ul></div>
+    <li><b>Stray capitals or shortcuts while typing fast:</b> raise "No hold right after typing" (try 175 or 200 ms), or raise the hold time.</li>
+    <li><b>Holds feel sluggish, or you get letters when you wanted a shortcut:</b> lower the hold time a little, or lower the pause.</li>
+    <li><b>Cannot repeat a letter by holding it:</b> turn on "Tap twice quickly to repeat"; tap, then press and hold.</li>
+  </ul>
+  <p>Change the template, and every home-row key follows.</p></div>
 
-  <h2>Tap-dance</h2>
-  <p>A tap-dance counts how many times you tap the key in quick succession and does something different for each count. Under <span class="ui">What each number of taps does</span> there is one box per count; <span class="ui">Add Tap</span> adds another and <span class="ui">Remove the last</span> takes one away. <span class="ui">Time allowed between taps</span> is how long the keyboard waits for another tap before acting.</p>
-  <div class="box ex"><div class="h">Example: Shift, or Caps Word on a double tap</div><p>Create a tap-dance. Set one tap to <code>&amp;sk LSHFT</code> (a sticky Shift) and two taps to <b>Caps word</b>. Assign it to a thumb key. Tap once and the next letter is capitalized; tap twice and you type in capitals until the end of the word.</p></div>
-  <p>The cost of a tap-dance is a short delay: after a single tap the keyboard has to wait to see whether a second is coming. Keep them off keys you type constantly.</p>
+  <h2>Double tap, and tap then hold</h2>
+  <p><span class="ui">Add…</span> › <span class="ui">Double tap</span> gives a second tap its own job, and <span class="ui">Another tap</span> a third. <span class="ui">Tap, then hold</span> is what holding the key after one tap does. Under <span class="ui">More than one tap</span>, <span class="ui">Time allowed between taps</span> is how long the keyboard waits for another tap before acting.</p>
+  <div class="box ex"><div class="h">Example: Shift, or Caps Word on a double tap</div><p>Select a thumb key. Choose <b>Shift</b> from the Modifiers tab and turn <span class="ui">Sticky</span> on. <span class="ui">Add…</span> › <span class="ui">Double tap</span>, then choose <b>Caps word</b>. Tap once and the next letter is capitalized; tap twice and you type in capitals until the end of the word.</p></div>
+  <p>The cost of a double tap is a short delay: after a single tap the keyboard has to wait to see whether a second is coming. Keep them off keys you type constantly.</p>
 
-  <h2>Mod-morph</h2>
-  <p>A mod-morph sends one thing <span class="ui">Normally</span> and another <span class="ui">With the modifiers held</span>. Under <span class="ui">Modifiers that switch it</span>, choose which modifiers trigger the switch. By default the modifier is hidden from the second binding, so Shift+Backspace can send a plain Delete; choose modifiers under <span class="ui">Modifiers passed on to the second binding</span> to let them through.</p>
-  <div class="box ex"><div class="h">Example: custom shifted punctuation</div><p>You want a key that types a comma, and a semicolon when shifted. Create a mod-morph: Normally <b>,</b> and with the modifiers held <b>;</b>. Choose both Shifts as the modifiers that switch it. Assign it in place of your comma key.</p></div>
+  <h2>With ⇧ held</h2>
+  <p><span class="ui">Add…</span> › <span class="ui">With ⇧ held</span> gives the key a different job while Shift is down. Under <span class="ui">Override</span> you can choose other modifiers instead, and which modifiers are still held for the override: by default Shift is swallowed, so Shift+Backspace can send a plain Delete.</p>
+  <div class="box ex"><div class="h">Example: custom shifted punctuation</div><p>Select your comma key. <span class="ui">Add…</span> › <span class="ui">With ⇧ held</span>, then choose <b>;</b>. The key types a comma, and a semicolon when shifted.</p></div>
 
-  <h2>Sticky key</h2>
-  <p>A sticky key (also called a one-shot) holds a modifier for you until the next key press: tap Shift, release it, tap <b>a</b>, get <b>A</b>. The built-in sticky key is in ZMK's notation <code>&amp;sk LSHFT</code>. Create your own when you want different timing:</p>
+  <h2>Sticky</h2>
+  <p>A sticky key (also called a one-shot) holds a modifier or a layer for you until the next key press: tap Shift, release it, tap <b>a</b>, get <b>A</b>. <span class="ui">Sticky</span> appears as a switch whenever the tap is a modifier or a layer. Its feel, under <span class="ui">Sticky</span>:</p>
   <ul>
-    <li><span class="ui">Release after</span>: how long the key stays sticky if you press nothing else.</li>
-    <li><span class="ui">Release as soon as the next key is pressed</span>: lets you roll off quickly without capitalizing two letters.</li>
+    <li><span class="ui">Lets go after</span>: how long the key stays sticky if you press nothing else.</li>
+    <li><span class="ui">Or as soon as the next key is pressed</span>: lets you roll off quickly without capitalizing two letters.</li>
     <li><span class="ui">Let modifiers through</span>: pressing another modifier does not use up the sticky key, so you can tap Shift, then Control, then a key.</li>
   </ul>
 
   <h2>Macro</h2>
-  <p>A macro plays back a sequence of steps when you press its key.</p>
+  <p><span class="ui">Add…</span> › <span class="ui">Macro</span> makes the key play a sequence of steps, built right under the slots.</p>
   <h3>The quick way: type text</h3>
   <p>Type into the <span class="ui">Type text</span> box and press <kbd>Return</kbd>. The text is added as a series of taps, with Shift applied where needed.</p>
   <h3>The steps</h3>
   <table class="wrap">
     <tr><th>Step</th><th>What it does</th></tr>
-    <tr><td class="ui">Tap</td><td>Presses and releases a binding.</td></tr>
+    <tr><td class="ui">Tap</td><td>Presses and releases something. Click the step's box and choose from the picker.</td></tr>
     <tr><td class="ui">Press</td><td>Presses and keeps it down, until a matching Release. Use this to hold a modifier across several taps.</td></tr>
     <tr><td class="ui">Release</td><td>Releases something pressed earlier.</td></tr>
     <tr><td class="ui">Change wait time</td><td>From this point, wait this long between steps.</td></tr>
     <tr><td class="ui">Change tap time</td><td>From this point, hold each tap for this long.</td></tr>
     <tr><td class="ui">Wait for key release</td><td>Pauses until you let go of the macro's key. Steps before it happen on press; steps after it happen on release.</td></tr>
-    <tr><td class="ui">Pass parameter</td><td>Hands a value from the key's binding on to the next step, for macros that take parameters.</td></tr>
   </table>
   <p>Under <span class="ui">Timing</span>, <span class="ui">Wait between steps</span> and <span class="ui">Hold each tap for</span> set the pace for the whole macro. If a program misses characters from a macro, slow it down here.</p>
   <div class="box ex"><div class="h">Example: a layer that holds a modifier</div>
   <p>You want a key that, while held, switches to your Nav layer <i>and</i> holds Command, for switching apps with the arrow keys.</p>
   <ol>
-    <li>Add a <span class="ui">Press</span> step and set it to <code>&amp;mo Nav</code>. Add another <span class="ui">Press</span> for <code>&amp;kp LGUI</code>.</li>
+    <li>Add a <span class="ui">Press</span> step and choose <b>Nav while held</b> for it. Add another <span class="ui">Press</span> and choose <b>⌘</b>.</li>
     <li>Add <span class="ui">Wait for key release</span>.</li>
-    <li>Add two <span class="ui">Release</span> steps for the same two bindings.</li>
+    <li>Add two <span class="ui">Release</span> steps for the same two things.</li>
   </ol></div>
-  <p><span class="ui">Parameters a key passes to this macro</span> (0, 1 or 2) is an advanced feature: it lets one macro be reused with a different key or layer on each key that uses it. Leave it at 0 unless you need that.</p>
+  <p>A macro you want on more than one key, or on more than one layer, is saved with <span class="ui">Save as template…</span>. Macro templates appear in the picker's <span class="ui">Macros</span> tab, so they can be chosen for any slot. A key running a macro template shows the template's name with <span class="ui">Open</span> and <span class="ui">Detach</span>.</p>
   <div class="box warn"><div class="h">Do not put passwords in macros</div><p>A macro is stored unprotected in the keyboard and in your project file, and anyone who presses the key gets the text.</p></div>
+
+  <h2>Templates mode</h2>
+  <p>Click <span class="ui">Templates</span> in the mode bar for everything you have saved. Each template is a card with its kind, a one-line summary of its settings in words, and how many keys use it. Select one to change its settings with the same controls the key setup shows; every key that follows it changes with it. Under <span class="ui">Used on</span>, the keys are listed by layer and drawn on a small keyboard; click a key to go to it.</p>
+  <ul>
+    <li><span class="ui">New</span> starts a template from a kind, or from the tuned <span class="ui">Home-row mod</span>.</li>
+    <li><span class="ui">Duplicate</span> makes a copy to vary; <span class="ui">Delete</span> removes a template. Keys that used it keep the settings as their own.</li>
+    <li><span class="ui">Advanced</span> shows the template's name in the generated firmware files, for people who refer to it from their own devicetree.</li>
+  </ul>
+  <p>Hold & tap, multi-tap, override and sticky templates are feels, chosen under a key's setup. Macro templates are whole macros, chosen from the picker.</p>
+
+  <h2>What the firmware can do</h2>
+  <p>Everything in this chapter is built into ZMK firmware, and written to the keyboard on RMK for MoErgo and the Imprint's RMK fork. A hold with the keyboard's default feel also works on plain RMK and on Dygma firmware. Keys that need more than those can do are flagged in the status bar until the firmware changes.</p>
+  <p>Under <span class="ui">Advanced</span> at the bottom of the key setup you can still see and type the key as ZMK writes it, for people following the ZMK documentation. Text the app does not understand is kept exactly as typed and passed to ZMK as it is; such a key has no slots until you choose something else for it.</p>
 </section>
 
 <section class="chapter" id="c9">

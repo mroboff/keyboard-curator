@@ -230,7 +230,8 @@ fn every_construct_is_written_in_zmk_syntax() {
     has("            compatible = \"zmk,behavior-tap-dance\";\n            #binding-cells = <0>;\n            tapping-term-ms = <200>;\n            bindings = <&mo LAYER_Nav>, <&to LAYER_Nav>;");
     has("            bindings = <&kp BSPC>, <&kp DEL>;\n            mods = <(MOD_LSFT|MOD_RSFT)>;\n            keep-mods = <(MOD_RSFT)>;");
     has("            compatible = \"zmk,behavior-sticky-key\";\n            #binding-cells = <1>;\n            bindings = <&kp>;\n            release-after-ms = <800>;\n            quick-release;\n            ignore-modifiers;");
-    has("    macros {\n        hello: hello {\n            compatible = \"zmk,behavior-macro\";\n            #binding-cells = <0>;\n            wait-ms = <30>;\n            bindings\n                = <&macro_press &kp LSHFT>\n                , <&macro_tap &kp H>\n                , <&macro_release &kp LSHFT>\n                , <&macro_tap &kp I>\n                , <&macro_pause_for_release>\n                ;");
+    has("    macros {\n");
+    has("        hello: hello {\n            compatible = \"zmk,behavior-macro\";\n            #binding-cells = <0>;\n            wait-ms = <30>;\n            bindings\n                = <&macro_press &kp LSHFT>\n                , <&macro_tap &kp H>\n                , <&macro_release &kp LSHFT>\n                , <&macro_tap &kp I>\n                , <&macro_pause_for_release>\n                ;");
     has("        /* custom behaviors */");
 
     has("    combos {\n        compatible = \"zmk,combos\";\n        combo_caps_word_");
@@ -610,4 +611,57 @@ fn reading_and_writing_every_key_as_slots_leaves_the_keymap_unchanged() {
             );
         }
     }
+}
+
+#[test]
+fn holds_for_the_other_hand_become_one_node_per_hand() {
+    use kc_model::behavior::HoldTapSettings;
+    use kc_model::setup::{Choice, KeySetup, Part};
+
+    let go60 = board("moergo-go60");
+    let mut p = Project::new("Hands", &go60);
+    let base = p.layers[0].id;
+    let keys = &go60.layout(&go60.default_layout).unwrap().keys;
+    let (left, right) = (
+        kc_boards::geometry::hand_positions(keys, false),
+        kc_boards::geometry::hand_positions(keys, true),
+    );
+    // A home-row mod template on one key of each hand.
+    let mut setup = KeySetup::plain(kp("F"));
+    setup.hold = Some(kp("LSHFT"));
+    setup.feel.hold = Choice::Custom(HoldTapSettings::home_row());
+    p.apply_setup(base, left[5], &setup).unwrap();
+    let template = p
+        .save_as_template(base, left[5], Part::Hold, "Home-row mod")
+        .unwrap();
+    let mut setup = KeySetup::plain(kp("J"));
+    setup.hold = Some(kp("RSHFT"));
+    setup.feel.hold = Choice::Template(template);
+    p.apply_setup(base, right[5], &setup).unwrap();
+    assert_eq!(p.behaviors.len(), 1, "one template serves both hands");
+
+    let text = keymap(&p, &go60, &stock(&go60)).unwrap();
+    let positions = |list: &[usize]| {
+        list.iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    // The left-hand key holds only for right-hand keys, and the other way
+    // round, through a second node.
+    assert!(text.contains(&format!(
+        "home_row_mod: home_row_mod {{\n            compatible = \"zmk,behavior-hold-tap\";\n            #binding-cells = <2>;\n            flavor = \"balanced\";\n            tapping-term-ms = <280>;\n            quick-tap-ms = <175>;\n            require-prior-idle-ms = <150>;\n            hold-trigger-key-positions = <{}>;",
+        positions(&right)
+    )), "{text}");
+    assert!(text.contains(&format!(
+        "home_row_mod_right: home_row_mod_right {{\n            compatible = \"zmk,behavior-hold-tap\";\n            #binding-cells = <2>;\n            flavor = \"balanced\";\n            tapping-term-ms = <280>;\n            quick-tap-ms = <175>;\n            require-prior-idle-ms = <150>;\n            hold-trigger-key-positions = <{}>;",
+        positions(&left)
+    )), "{text}");
+    assert!(text.contains("&home_row_mod LSHFT F"));
+    assert!(text.contains("&home_row_mod_right RSHFT J"));
+    // The layout itself is untouched.
+    assert_eq!(p.behaviors.len(), 1);
+    assert!(kc_model::validate(&p, &go60, &stock(&go60))
+        .iter()
+        .all(|problem| problem.severity != kc_model::Severity::Error));
 }

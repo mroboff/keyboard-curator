@@ -61,7 +61,7 @@
   <div class="flow">
     <div class="st"><b>My Boards</b>Your keyboards. Add one, pick one.</div><div class="ar">→</div>
     <div class="st"><b>Board's page</b>Firmware, Settings, Layouts, Build &amp; Flash or Keyboard, Key Tester.</div><div class="ar">→</div>
-    <div class="st"><b>Layout editor</b>One layout: keys, layers, behaviors, combos, lighting, pointing.</div>
+    <div class="st"><b>Layout editor</b>One layout: keys, layers, templates, combos, lighting, pointing.</div>
   </div>
   <p>A board's page has <span class="ui">‹ My Boards</span> at its top left; the editor has <span class="ui">‹ Back</span> and a breadcrumb naming the board and the layout. <kbd>⌘</kbd><kbd>W</kbd> closes the layout or the board's page. The board's page is described in Chapter 12.</p>
 
@@ -75,13 +75,14 @@
         <div style="margin-top:3px"><span class="chip">↑ Up</span> <span class="chip">↓ Down</span></div>
         <div style="margin-top:3px"><span class="chip">Duplicate</span> <span class="chip">Delete</span></div></div>
       <div>
-        <div class="modes"><span class="callout-n">2</span><span class="chip on">Keyboard</span><span class="chip">Lighting</span><span class="chip">Behaviors</span><span class="chip">Combos</span><span class="chip">Pointing</span><span class="chip">Advanced</span><span class="chip">Generated Files</span><span class="chip">Apply</span></div>
+        <div class="modes"><span class="callout-n">2</span><span class="chip on">Keyboard</span><span class="chip">Lighting</span><span class="chip">Templates</span><span class="chip">Combos</span><span class="chip">Pointing</span><span class="chip">Advanced</span><span class="chip">Generated Files</span><span class="chip">Apply</span></div>
         <div class="canvas"><span class="callout-n">3</span>{{GO60_SELECT}}</div>
         <div class="bottom">
           <div><span class="callout-n">4</span><span class="chip" style="width:24mm">Search keys</span><div style="margin-top:4px"><span class="chip on">Basic</span> <span class="chip">Symbols</span> <span class="chip">Modifiers</span> <span class="chip">Navigation</span> <span class="chip">Layers</span> <span class="chip">…</span></div>
             <div style="margin-top:4px"><span class="chip">A</span> <span class="chip">B</span> <span class="chip">C</span> <span class="chip">D</span> <span class="chip">E</span> <span class="chip">F</span> <span class="chip">G</span> <span class="chip">H</span> <span class="chip">I</span> <span class="chip">J</span> <span class="chip">K</span> <span class="chip">L</span> <span class="chip">M</span></div></div>
-          <div><span class="callout-n">5</span><span style="color:#8a93a3">BINDING</span><div class="chip" style="width:100%;margin-top:2px">&amp;kp A</div>
-            <div style="margin-top:4px;color:#8a93a3">WITH MODIFIERS</div><span class="chip">⌃</span> <span class="chip">⌥</span> <span class="chip">⇧</span> <span class="chip">⌘</span></div>
+          <div><span class="callout-n">5</span><span style="color:#8a93a3">Tap</span> <span class="chip">A</span>
+            <div style="margin-top:4px;color:#8a93a3">With modifiers</div><span class="chip">⌃</span> <span class="chip">⌥</span> <span class="chip">⇧</span> <span class="chip">⌘</span>
+            <div style="margin-top:4px"><span class="chip">Add…</span></div></div>
         </div>
         <div class="status"><span><span class="callout-n">6</span>MoErgo Go60 · No problems</span><span>~/Documents/Keyboard Curator/My Go60.kcproj</span></div>
       </div>
@@ -93,7 +94,7 @@
     <li><span class="callout-n">2</span><b>Mode bar.</b> Chooses what the main area shows. Each mode has its own chapter. Messages from the app, such as "Copied 3 key(s)", appear to the right of the modes.</li>
     <li><span class="callout-n">3</span><b>Keyboard.</b> A drawing of your keyboard showing the selected layer. An outline in the accent color marks the selected key.</li>
     <li><span class="callout-n">4</span><b>Key picker.</b> Everything a key can be assigned, organized into tabs, with a search box (Chapters 5 and 7).</li>
-    <li><span class="callout-n">5</span><b>Inspector.</b> Details of the selected key, with controls for modifiers and holds.</li>
+    <li><span class="callout-n">5</span><b>Key setup.</b> The selected key in slots: its tap, with modifiers, and whatever else it does when held or tapped again (Chapter 8).</li>
     <li><span class="callout-n">6</span><b>Status bar.</b> Your keyboard, a count of problems in the layout, and where the layout is saved. Some themes also show the editing shortcuts here.</li>
   </ul>
 
@@ -102,7 +103,7 @@
     <tr><th>Mode</th><th>What you do there</th><th>Chapter</th></tr>
     <tr><td class="ui">Keyboard</td><td>Choose what each key does on each layer.</td><td>5, 6, 7</td></tr>
     <tr><td class="ui">Lighting</td><td>Paint a color onto each key, per layer.</td><td>11</td></tr>
-    <tr><td class="ui">Behaviors</td><td>Create keys with more than one job: hold-taps, tap-dances, macros.</td><td>8</td></tr>
+    <tr><td class="ui">Templates</td><td>The feels and macros you have saved to reuse across keys.</td><td>8</td></tr>
     <tr><td class="ui">Combos</td><td>Define keys that do something when pressed together.</td><td>9</td></tr>
     <tr><td class="ui">Pointing</td><td>Set up trackballs and touchpads.</td><td>10</td></tr>
     <tr><td class="ui">Advanced</td><td>Layer rules, and text for anything the editor does not cover.</td><td>12</td></tr>
@@ -168,33 +169,20 @@
   </ul>
   <p>The picker only offers what your board's firmware can do. If something described in this guide is missing from your picker, the firmware chosen on the board's page does not support it.</p>
 
-  <h2>The inspector</h2>
-  <p>The panel at the bottom right shows the selected key in detail and offers the most common adjustments.</p>
-
-  <h3>Binding</h3>
-  <p>The text box shows the key's binding in ZMK's notation, for example <code>&amp;kp A</code>. You can ignore it. But if you know the notation, or are following instructions from the ZMK documentation, you can type any binding here and press <kbd>Return</kbd>. Text the app understands becomes a normal, editable binding. Text it does not understand is kept exactly as typed and passed to ZMK as it is.</p>
+  <h2>The key setup</h2>
+  <p>The panel at the bottom right shows the selected key in slots. <span class="ui">Tap</span> is what a press does; the others, added with <span class="ui">Add…</span>, are what holding it or tapping it again does. Chapter 8 covers them all. This chapter covers what every key has.</p>
 
   <h3>With modifiers</h3>
   <p>The four buttons <span class="ui">⌃ ⌥ ⇧ ⌘</span> add a modifier to what the key sends. They appear for any key that sends a key.</p>
   <div class="box ex"><div class="h">Example: one key for "reopen closed tab"</div><p>Assign <b>T</b> to a key, then click <span class="ui">⇧</span> and <span class="ui">⌘</span> in the inspector. The keycap reads <b>⇧⌘T</b>, and pressing the key sends Shift-Command-T.</p></div>
 
-  <h3>When held</h3>
-  <p>This row gives a key a second job when you hold it instead of tapping it:</p>
-  <ul>
-    <li><span class="ui">None</span>: an ordinary key.</li>
-    <li><span class="ui">⌃ ⌥ ⇧ ⌘</span>: hold for that modifier, tap for the key. ZMK calls this a <b>mod-tap</b>.</li>
-    <li>A layer's name: hold for that layer, tap for the key. ZMK calls this a <b>layer-tap</b>.</li>
-  </ul>
-  <div class="box ex"><div class="h">Example: Space that is also a layer key</div><p>Select your Space key. Under <span class="ui">When held</span>, click your navigation layer's name. Tapping the key still types a space; holding it switches to the navigation layer for as long as you hold.</p></div>
-  <p>Once a key has a hold, picking a different key from the picker changes only what a tap sends; the hold stays. These built-in holds use the firmware's default timing. When you want to tune how a hold is told apart from a tap, create your own hold-tap in Behaviors mode (Chapter 8).</p>
+  <h3>Hold</h3>
+  <p><span class="ui">Add…</span> › <span class="ui">Hold</span> gives a key a second job when you hold it instead of tapping it: a modifier, a layer, or anything else from the picker. A quick row of modifiers and layers appears under the slot.</p>
+  <div class="box ex"><div class="h">Example: Space that is also a layer key</div><p>Select your Space key. <span class="ui">Add…</span> › <span class="ui">Hold</span>, then click your navigation layer's name. Tapping the key still types a space; holding it switches to the navigation layer for as long as you hold.</p></div>
+  <p>Once a key has a hold, picking a different key from the picker changes only what a tap sends; the hold stays. A new hold uses the keyboard's default feel; how to tune it, and how to keep that tuning in a template, is in Chapter 8.</p>
 
-  <h3>Values and Layer</h3>
-  <p>Some bindings carry a number or a layer. For those the inspector shows:</p>
-  <ul>
-    <li><span class="ui">Values</span>, with − and + buttons. For example, a "set a specific color" lighting key has hue, saturation and brightness.</li>
-    <li><span class="ui">Layer</span>, with a button per layer, for a key such as "hold for layer…".</li>
-  </ul>
-  <p>A key that uses one of your own behaviors has an <span class="ui">Edit Behavior</span> button, which takes you to it in Behaviors mode.</p>
+  <h3>Advanced</h3>
+  <p>Folded away at the bottom of the panel is the key as ZMK writes it, for example <code>&amp;kp A</code>. You can ignore it. But if you know the notation, or are following instructions from the ZMK documentation, you can type any binding there and press <kbd>Return</kbd>. Text the app understands becomes a normal key with slots. Text it does not understand is kept exactly as typed and passed to ZMK as it is.</p>
 
   <h2>Working with several keys</h2>
   <table class="wrap">
@@ -330,6 +318,6 @@
   </table>
   <div class="box warn"><div class="h">Keep a bootloader key</div><p>If no key in your layout enters the bootloader, you can still flash by using the reset button on the keyboard itself, but it is less convenient. The app warns you when a ZMK layout has no bootloader key. The factory layouts have them on their system layer; leave them there.</p></div>
 
-  <h2>Custom</h2>
-  <p>Behaviors you have created yourself in Behaviors mode appear here: your hold-taps, tap-dances, macros and so on. Behaviors defined as text under <span class="ui">Custom behaviors</span> in Advanced mode, and those that come with the add-ons built into your firmware, appear here too.</p>
+  <h2>Macros</h2>
+  <p>Macros you have saved as templates (Chapter 8) appear here, so they can be put on any key. Behaviors defined as text under <span class="ui">Custom behaviors</span> in Advanced mode, and those that come with the add-ons built into your firmware, appear here too.</p>
 </section>

@@ -36,7 +36,7 @@ pub fn import_rmk(
     imported.project.assign_scopes();
     let report = Report {
         layers: imported.project.layers.len(),
-        behaviors: imported.project.behaviors.len(),
+        templates: imported.project.behavior_templates().count(),
         combos: imported.project.combos.len(),
         raw_bindings: 0,
         raw_blocks: Vec::new(),

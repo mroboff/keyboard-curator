@@ -459,6 +459,122 @@ fn addons_fixture(board: &Board, ids: &[&str]) -> (Project, FirmwareConfig) {
     (p, config)
 }
 
+/// Every slot a key can have, set up the way the key setup panel does it:
+/// holds with default and custom feels, a template used on both hands,
+/// double taps, tap then hold, a shift override, sticky keys and a macro
+/// built on a key. The compile check proves ZMK accepts the lot.
+fn slots_fixture(board: &Board) -> (Project, FirmwareConfig) {
+    use kc_model::behavior::HoldTapSettings;
+    use kc_model::setup::{Choice, KeySetup, Part};
+
+    let mut p = Project::new(format!("{} slots", board.name), board);
+    let base = p.layers[0].id;
+    let nav = p.add_layer("Nav").unwrap();
+    let keys = &board.layout(&board.default_layout).unwrap().keys;
+    let left = kc_boards::geometry::hand_positions(keys, false);
+    let right = kc_boards::geometry::hand_positions(keys, true);
+    let apply = |p: &mut Project, position: usize, setup: &KeySetup| {
+        p.apply_setup(base, position, setup).unwrap();
+    };
+
+    // A hold with the default feel, and one with a custom feel.
+    let mut setup = KeySetup::plain(kp("SPACE"));
+    setup.hold = Some(Binding::layer("mo", nav));
+    apply(&mut p, left[0], &setup);
+    let mut setup = KeySetup::plain(kp("A"));
+    setup.hold = Some(kp("LS(LCTRL)"));
+    setup.feel.hold = Choice::Custom(HoldTapSettings {
+        tapping_term_ms: 250,
+        retro_tap: true,
+        ..HoldTapSettings::default()
+    });
+    apply(&mut p, left[1], &setup);
+
+    // A home-row-mod template on both hands.
+    let mut setup = KeySetup::plain(kp("F"));
+    setup.hold = Some(kp("LSHFT"));
+    setup.feel.hold = Choice::Custom(HoldTapSettings::home_row());
+    apply(&mut p, left[2], &setup);
+    let template = p
+        .save_as_template(base, left[2], Part::Hold, "Home-row mod")
+        .unwrap();
+    let mut setup = KeySetup::plain(kp("J"));
+    setup.hold = Some(kp("RSHFT"));
+    setup.feel.hold = Choice::Template(template);
+    apply(&mut p, right[2], &setup);
+    // The template with a layer hold, which needs a variant.
+    let mut setup = KeySetup::plain(kp("RET"));
+    setup.hold = Some(Binding::layer("mo", nav));
+    setup.feel.hold = Choice::Template(template);
+    apply(&mut p, right[3], &setup);
+
+    // Double tap, tap then hold, a third tap.
+    let mut setup = KeySetup::plain(kp("Q"));
+    setup.double_tap = Some(kp("ESC"));
+    apply(&mut p, left[3], &setup);
+    let mut setup = KeySetup::plain(kp("W"));
+    setup.hold = Some(kp("LALT"));
+    setup.double_tap = Some(kp("TAB"));
+    setup.tap_hold = Some(Binding::layer("mo", nav));
+    setup.more_taps = vec![Binding::new("caps_word", vec![])];
+    apply(&mut p, left[4], &setup);
+
+    // A shift override, and one on a key with a hold.
+    let mut setup = KeySetup::plain(kp("COMMA"));
+    setup.shifted = Some(kp("SEMI"));
+    apply(&mut p, right[0], &setup);
+    let mut setup = KeySetup::plain(kp("BSPC"));
+    setup.hold = Some(kp("RCTRL"));
+    setup.shifted = Some(kp("DEL"));
+    apply(&mut p, right[1], &setup);
+
+    // Sticky modifier and layer, with default and custom feels.
+    let mut setup = KeySetup::plain(kp("LSHFT"));
+    setup.sticky = true;
+    apply(&mut p, left[5], &setup);
+    let mut setup = KeySetup::plain(Binding::layer("mo", nav));
+    setup.sticky = true;
+    setup.feel.sticky = Choice::Custom(kc_model::behavior::StickyKeySettings {
+        release_after_ms: 500,
+        quick_release: true,
+        ..Default::default()
+    });
+    apply(&mut p, right[4], &setup);
+    // Sticky under a hold, and a double tap on a sticky key.
+    let mut setup = KeySetup::plain(kp("LGUI"));
+    setup.sticky = true;
+    setup.double_tap = Some(Binding::new("caps_word", vec![]));
+    apply(&mut p, left[6], &setup);
+
+    // A macro built on a key, and the same macro on a second key as a
+    // template.
+    let label = p.free_label("macro");
+    let macro_id = p
+        .add_behavior(
+            label,
+            "",
+            BehaviorKind::Macro(Macro {
+                wait_ms: None,
+                tap_ms: None,
+                params: 0,
+                steps: vec![
+                    MacroStep::Press(vec![kp("LSHFT")]),
+                    MacroStep::Tap(vec![kp("H"), kp("I")]),
+                    MacroStep::Release(vec![kp("LSHFT")]),
+                ],
+            }),
+        )
+        .unwrap();
+    p.behavior_mut(macro_id).unwrap().scope = kc_model::behavior::Scope::Key;
+    let setup = KeySetup::plain(Binding::user(macro_id, vec![]));
+    apply(&mut p, right[5], &setup);
+    p.make_template(macro_id, "Say hi").unwrap();
+    let mut setup = KeySetup::plain(Binding::user(macro_id, vec![]));
+    setup.hold = Some(kp("RALT"));
+    apply(&mut p, right[6], &setup);
+    (p, FirmwareConfig::stock(board))
+}
+
 /// Add-ons that only add behaviors of their own.
 const PLAIN_ADDONS: [&str; 5] = [
     "zmk-auto-layer",
@@ -496,6 +612,7 @@ fn fixtures_match_the_emitter() {
     let projects = boards.iter().flat_map(|board| {
         [
             (board, board.id.clone(), fixture(board)),
+            (board, format!("{}-slots", board.id), slots_fixture(board)),
             (
                 board,
                 format!("{}-factory", board.id),

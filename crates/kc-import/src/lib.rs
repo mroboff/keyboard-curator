@@ -17,7 +17,9 @@ pub use rmk::import_rmk;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Report {
     pub layers: usize,
-    pub behaviors: usize,
+    /// Definitions the user named for reuse; a key's own are counted with
+    /// the keys.
+    pub templates: usize,
     pub combos: usize,
     /// Bindings kept as raw text because they could not be read.
     pub raw_bindings: usize,
@@ -125,8 +127,8 @@ impl Report {
     /// A one-paragraph summary for the user.
     pub fn summary(&self) -> String {
         let mut text = format!(
-            "Imported {} layer(s), {} behavior(s) and {} combo(s).",
-            self.layers, self.behaviors, self.combos
+            "Imported {} layer(s), {} template(s) and {} combo(s).",
+            self.layers, self.templates, self.combos
         );
         if !self.raw_blocks.is_empty() {
             text.push_str(&format!(

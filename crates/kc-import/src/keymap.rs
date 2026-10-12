@@ -291,7 +291,6 @@ impl Importer<'_> {
                 match self.behavior_kind(node) {
                     Some(kind) => match self.project.add_behavior(label.clone(), label, kind) {
                         Ok(id) => {
-                            self.report.behaviors += 1;
                             if let Ok(def) = self.project.behavior_mut(id) {
                                 def.description = node.comment.clone();
                             }
@@ -781,6 +780,7 @@ pub fn import_keymap(
     // Definitions the file named become templates or belong to their key
     // by how they are used.
     project.assign_scopes();
+    report.templates = project.behavior_templates().count();
     Ok((project, report))
 }
 

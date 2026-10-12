@@ -87,7 +87,7 @@ fn generated_keymaps_survive_a_round_trip() {
         );
         assert_eq!(report.layers, project.layers.len());
         assert_eq!(imported.layers[0].description, "The letters.");
-        assert_eq!(report.behaviors, project.behaviors.len());
+        assert_eq!(report.templates, imported.behavior_templates().count());
         assert_eq!(report.combos, project.combos.len());
         assert_eq!(imported.reserved_layers, project.reserved_layers);
         checked += 1;
@@ -105,7 +105,7 @@ fn the_go60_factory_keymap_imports_to_the_factory_template() {
     let template = Project::from_template("Go60", &go60);
 
     assert_eq!(report.layers, 5);
-    assert_eq!(report.behaviors, 12);
+    assert_eq!(report.templates, 1, "the magic key's hold-tap");
     assert_eq!(report.raw_bindings, 0);
     // Everything in it is modeled, the tap-to-right-click processor too.
     assert_eq!(report.raw_blocks, [] as [&str; 0]);
@@ -216,7 +216,7 @@ fn what_cannot_be_read_is_kept_and_reported() {
         Binding::kp("LC(A)".parse().unwrap())
     );
     // The unknown behavior, and the tap-dance that needs it, stay as text.
-    assert_eq!(report.behaviors, 0);
+    assert_eq!(report.templates, 0);
     assert!(project.raw.behaviors.contains("zmk,behavior-something-new"));
     assert!(project.raw.behaviors.contains("td: td {"));
     // Bindings to it are kept, and still assignable as written.
@@ -504,7 +504,7 @@ fn files_find_their_board() {
     assert!(imported
         .report
         .summary()
-        .starts_with("Imported 1 layer(s), 0 behavior(s) and 0 combo(s)."));
+        .starts_with("Imported 1 layer(s), 0 template(s) and 0 combo(s)."));
     assert!(import_file("x.keymap", &keymap(7, ""), None, &boards).is_err());
 }
 
@@ -550,7 +550,9 @@ fn moergo_layout_editor_keymaps_import_completely() {
         behavior("bt_select_0").kind,
         BehaviorKind::Macro(_)
     ));
-    assert_eq!(report.behaviors, 8);
+    // The magic key's hold-tap and the Bluetooth keys' multi-taps are
+    // reused or take values from the key; the rest belong to their keys.
+    assert_eq!(report.templates, 4);
     assert_eq!(project.behaviors.len(), 8);
     // The comment above a behavior is its description.
     assert_eq!(
@@ -633,7 +635,7 @@ fn rmk_configuration_files_are_imported_for_the_board_they_fit() {
     assert_eq!(boards[imported.board].id, "moergo-go60");
     assert_eq!(imported.project.name, "tailorkey");
     assert_eq!(imported.report.layers, 3);
-    assert!(imported.report.behaviors >= 5);
+    assert!(imported.report.templates >= 5);
     assert_eq!(imported.report.combos, 2);
     assert!(!imported.report.notes.is_empty());
     assert!(imported.report.summary().contains("Imported 3 layer(s)"));
@@ -656,7 +658,11 @@ fn rmk_configuration_files_are_imported_for_the_board_they_fit() {
     assert_eq!(imported.report.layers, 12);
     assert_eq!(imported.project.layers[0].name, "Base (QWERTY)");
     assert_eq!(imported.report.combos, 14);
-    assert!(imported.report.behaviors >= 13);
+    assert!(
+        imported.report.templates >= 4,
+        "{}",
+        imported.report.templates
+    );
     assert!(imported
         .carried
         .settings
@@ -673,7 +679,7 @@ fn the_glove80_factory_keymap_imports_to_the_factory_template() {
     let template = Project::from_template("Glove80", &glove80);
 
     assert_eq!(report.layers, 4);
-    assert_eq!(report.behaviors, 7);
+    assert_eq!(report.templates, 1, "the magic key's hold-tap");
     assert_eq!(report.raw_bindings, 0);
     assert_eq!(report.raw_blocks, [] as [&str; 0]);
     assert_eq!(report.notes, [] as [&str; 0]);
@@ -723,7 +729,8 @@ fn tailorkey_for_the_glove80_imports_from_the_layout_editor() {
     // Everything in it is read: the editor's `&lower` and `&magic` keys too.
     assert_eq!(report.raw_bindings, 0);
     assert_eq!(report.raw_blocks, [] as [&str; 0]);
-    assert!(report.behaviors >= 70, "{}", report.behaviors);
+    // The home-row and thumb hold-taps take their key from each key.
+    assert!(report.templates >= 8, "{}", report.templates);
     // Mouse emulation is a firmware setting, not part of the layout; it is
     // not one the app offers as a control, so it travels as a `.conf` line.
     assert!(

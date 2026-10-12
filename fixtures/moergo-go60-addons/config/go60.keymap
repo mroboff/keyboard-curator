@@ -32,6 +32,7 @@
     };
 
     behaviors {
+        // Template: Magic
         magic: magic {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -39,36 +40,42 @@
             tapping-term-ms = <200>;
             bindings = <&mo>, <&rgb_ug_status_macro>;
         };
+        // Key 47 on Base: Keypad while held; tap twice for Switch to Keypad
         keypad_td: keypad_td {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             tapping-term-ms = <200>;
             bindings = <&mo LAYER_Keypad>, <&to LAYER_Keypad>;
         };
+        // Key 54 on Base: SymbolNav while held; tap twice for Switch to SymbolNav
         symbol_nav_td: symbol_nav_td {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             tapping-term-ms = <200>;
             bindings = <&mo LAYER_SymbolNav>, <&to LAYER_SymbolNav>;
         };
+        // Key 38 on Magic: Macro: Select Bluetooth 1; tap twice for BT 0 off
         bt_0: bt_0 {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             tapping-term-ms = <200>;
             bindings = <&bt_select_0>, <&bt BT_DISC 0>;
         };
+        // Key 39 on Magic: Macro: Select Bluetooth 2; tap twice for BT 1 off
         bt_1: bt_1 {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             tapping-term-ms = <200>;
             bindings = <&bt_select_1>, <&bt BT_DISC 1>;
         };
+        // Key 40 on Magic: Macro: Select Bluetooth 3; tap twice for BT 2 off
         bt_2: bt_2 {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             tapping-term-ms = <200>;
             bindings = <&bt_select_2>, <&bt BT_DISC 2>;
         };
+        // Key 41 on Magic: Macro: Select Bluetooth 4; tap twice for BT 3 off
         bt_3: bt_3 {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
@@ -94,6 +101,7 @@
     };
 
     macros {
+        // Key 36 on Base: Macro: Show status lights, hold for Magic
         rgb_ug_status_macro: rgb_ug_status_macro {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -101,6 +109,7 @@
                 = <&macro_tap &rgb_ug RGB_STATUS>
                 ;
         };
+        // Key 38 on Magic: Macro: Select Bluetooth 1; tap twice for BT 0 off
         bt_select_0: bt_select_0 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -108,6 +117,7 @@
                 = <&macro_tap &out OUT_BLE &bt BT_SEL 0>
                 ;
         };
+        // Key 39 on Magic: Macro: Select Bluetooth 2; tap twice for BT 1 off
         bt_select_1: bt_select_1 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -115,6 +125,7 @@
                 = <&macro_tap &out OUT_BLE &bt BT_SEL 1>
                 ;
         };
+        // Key 40 on Magic: Macro: Select Bluetooth 3; tap twice for BT 2 off
         bt_select_2: bt_select_2 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -122,6 +133,7 @@
                 = <&macro_tap &out OUT_BLE &bt BT_SEL 2>
                 ;
         };
+        // Key 41 on Magic: Macro: Select Bluetooth 4; tap twice for BT 3 off
         bt_select_3: bt_select_3 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;

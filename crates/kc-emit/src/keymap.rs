@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 
-use kc_boards::geometry::Key;
+use kc_boards::geometry::{self, Key};
 use kc_boards::Board;
 use kc_model::behavior::{BehaviorDef, BehaviorKind, Flavor, MacroStep};
 use kc_model::features::{InputProcessor, KeyLight, LockKind, Rgb};
 use kc_model::text::{format_binding, layer_constant, LayerStyle};
-use kc_model::{BehaviorRef, Binding, FirmwareConfig, LayerId, Project};
+use kc_model::{BehaviorId, BehaviorRef, Binding, FirmwareConfig, LayerId, Location, Project};
 use kc_zmk::Feature;
 
 use crate::{profile, EmitError, NOTICE};
@@ -90,10 +90,122 @@ fn mods(mods: &[kc_zmk::Modifier]) -> String {
     format!("<({})>", flags.join("|"))
 }
 
+/// What to write above a definition's node: its description, or else the
+/// template's name, or the key it belongs to and what that key does.
+fn node_comment(project: &Project, def: &BehaviorDef) -> Vec<String> {
+    let lines: Vec<String> = def
+        .description
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.trim().to_string())
+        .collect();
+    if !lines.is_empty() {
+        return lines;
+    }
+    if def.is_template() {
+        return vec![format!("Template: {}", def.name)];
+    }
+    let owner = project
+        .top_owners(def.id)
+        .into_iter()
+        .find_map(|o| match o {
+            Location::Key { layer, position } => Some((layer, position)),
+            _ => None,
+        });
+    let Some((layer, position)) = owner else {
+        return Vec::new();
+    };
+    let Some(layer) = project.layer(layer) else {
+        return Vec::new();
+    };
+    let what = layer
+        .bindings
+        .get(position)
+        .map(|b| kc_model::words::describe(project, b))
+        .unwrap_or_default();
+    vec![format!("Key {position} on {}: {what}", layer.name)]
+}
+
+/// A key on a layer.
+type KeyAt = (LayerId, usize);
+
+/// Hold-taps that hold only for keys on the other hand, resolved into
+/// trigger positions from where each key sits, since ZMK has no such
+/// switch. A definition used on both hands becomes one node per hand.
+/// Keys that reach such a definition only through another one keep the
+/// first node.
+fn resolve_hands(project: &Project, keys: &[geometry::Key]) -> Project {
+    let mut resolved = project.clone();
+    let ids: Vec<BehaviorId> = resolved
+        .behaviors
+        .iter()
+        .filter(|d| {
+            matches!(&d.kind, BehaviorKind::HoldTap(h)
+                if h.opposite_hand_hold && h.hold_trigger_key_positions.is_empty())
+        })
+        .map(|d| d.id)
+        .collect();
+    let set = |def: &mut BehaviorDef, positions: Vec<usize>| {
+        if let BehaviorKind::HoldTap(h) = &mut def.kind {
+            h.hold_trigger_key_positions = positions;
+            h.opposite_hand_hold = false;
+        }
+    };
+    for id in ids {
+        let (mut left, mut right): (Vec<KeyAt>, Vec<KeyAt>) = (Vec::new(), Vec::new());
+        for owner in resolved.top_owners(id) {
+            if let Location::Key { layer, position } = owner {
+                match geometry::on_right(keys, position) {
+                    Some(true) => right.push((layer, position)),
+                    Some(false) => left.push((layer, position)),
+                    None => {}
+                }
+            }
+        }
+        let (left_keys, right_keys) = (
+            geometry::hand_positions(keys, false),
+            geometry::hand_positions(keys, true),
+        );
+        match (left.is_empty(), right.is_empty()) {
+            (true, true) => set(resolved.behavior_mut(id).expect("listed"), Vec::new()),
+            (false, true) => set(resolved.behavior_mut(id).expect("listed"), right_keys),
+            (true, false) => set(resolved.behavior_mut(id).expect("listed"), left_keys),
+            (false, false) => {
+                let source = resolved.behavior(id).expect("listed").clone();
+                let label = resolved.label_for(&format!("{}_right", source.label));
+                let copy = resolved
+                    .add_behavior(label, source.name.clone(), source.kind.clone())
+                    .expect("a free label is valid");
+                let def = resolved.behavior_mut(copy).expect("just added");
+                def.scope = source.scope;
+                def.follows = source.follows;
+                def.description = source.description.clone();
+                set(def, left_keys);
+                set(resolved.behavior_mut(id).expect("listed"), right_keys);
+                for (layer, position) in right {
+                    let Ok(layer) = resolved.layer_mut(layer) else {
+                        continue;
+                    };
+                    if let Some(Binding::Behavior {
+                        behavior: BehaviorRef::User { user },
+                        ..
+                    }) = layer.bindings.get_mut(position)
+                    {
+                        if *user == id {
+                            *user = copy;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    resolved
+}
+
 fn behavior(w: &mut Writer, def: &BehaviorDef) {
     let cells = def.kind.param_count();
-    for line in def.description.lines().filter(|l| !l.trim().is_empty()) {
-        w.line(2, &format!("// {}", line.trim()));
+    for line in node_comment(w.project, def) {
+        w.line(2, &format!("// {line}"));
     }
     w.line(2, &format!("{}: {} {{", def.label, def.label));
     let compatible = match &def.kind {
@@ -358,6 +470,8 @@ pub fn keymap(
     let layout = board
         .layout(&project.layout)
         .ok_or_else(|| EmitError::NoLayout(project.layout.clone()))?;
+    let resolved = resolve_hands(project, &layout.keys);
+    let project = &resolved;
 
     let constants: Vec<String> = project
         .layers

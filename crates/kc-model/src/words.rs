@@ -139,17 +139,8 @@ fn built_in(project: &Project, label: &str, params: &[Param]) -> String {
                 }
             }
         }
-        ([param], [Param::Command { name, args }]) => {
-            if let ParamKind::Command(commands) = param.kind {
-                if let Some(c) = commands.iter().find(|c| c.name == name) {
-                    let mut text = c.description.to_string();
-                    for arg in args {
-                        text.push_str(&format!(" {arg}"));
-                    }
-                    return text;
-                }
-            }
-        }
+        // Commands read as their keycap legends, which the picker shows too.
+        ([_], [Param::Command { name, args }]) => return command_legend(name, args),
         _ => {}
     }
     def.name.to_string()

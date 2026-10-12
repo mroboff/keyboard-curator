@@ -148,16 +148,7 @@ impl Workspace {
 
     /// Key positions on one hand, judged by the layout's center line.
     pub(super) fn hand_positions(&self, right: bool) -> Vec<usize> {
-        let keys = self.layout_keys();
-        let Some(bounds) = kc_boards::geometry::bounds(keys) else {
-            return Vec::new();
-        };
-        let middle = (bounds.min.x + bounds.max.x) / 2.;
-        keys.iter()
-            .enumerate()
-            .filter(|(_, key)| (key.center().x > middle) == right)
-            .map(|(index, _)| index)
-            .collect()
+        kc_boards::geometry::hand_positions(self.layout_keys(), right)
     }
 
     fn add_template(&mut self, kind: New, window: &mut Window, cx: &mut Context<Self>) {

@@ -17,6 +17,7 @@
 
 / {
     behaviors {
+        // Template: Home-row mod
         hml: hml {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -28,18 +29,21 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: Nav tap-dance
         nav_td: nav_td {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             tapping-term-ms = <200>;
             bindings = <&mo LAYER_Nav>, <&to LAYER_Nav>;
         };
+        // Template: Backspace or Delete
         bspc_del: bspc_del {
             compatible = "zmk,behavior-mod-morph";
             #binding-cells = <0>;
             bindings = <&kp BSPC>, <&kp DEL>;
             mods = <(MOD_LSFT|MOD_RSFT)>;
         };
+        // Template: Quick sticky key
         skq: skq {
             compatible = "zmk,behavior-sticky-key";
             #binding-cells = <1>;
@@ -51,6 +55,7 @@
     };
 
     macros {
+        // Template: Type Hi
         hello: hello {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -66,6 +71,7 @@
                 , <&macro_tap &kp EXCL>
                 ;
         };
+        // Template: Ctrl with a key
         ctrl_with: ctrl_with {
             compatible = "zmk,behavior-macro-one-param";
             #binding-cells = <1>;

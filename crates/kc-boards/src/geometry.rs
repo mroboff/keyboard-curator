@@ -169,6 +169,21 @@ pub fn neighbor(keys: &[Key], from: usize, direction: Direction) -> Option<usize
         .map(|(index, _)| index)
 }
 
+/// Whether the key at `position` sits on the right half, judged by the
+/// layout's center line. `None` for a position the layout lacks.
+pub fn on_right(keys: &[Key], position: usize) -> Option<bool> {
+    let bounds = bounds(keys)?;
+    let middle = (bounds.min.x + bounds.max.x) / 2.;
+    Some(keys.get(position)?.center().x > middle)
+}
+
+/// The positions of every key on one hand.
+pub fn hand_positions(keys: &[Key], right: bool) -> Vec<usize> {
+    (0..keys.len())
+        .filter(|&i| on_right(keys, i) == Some(right))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

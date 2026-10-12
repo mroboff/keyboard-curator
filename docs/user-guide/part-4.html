@@ -40,7 +40,7 @@
     <tr><td>Unicode characters</td><td>urob</td><td>Accented letters, symbols and emoji on a US layout without changing the system's keyboard language.</td></tr>
     <tr><td>Helper macros</td><td>urob</td><td>Hand-written additions in Custom Behaviors and Custom Devicetree, and pasting in snippets from other people's keymaps.</td></tr>
   </table>
-  <p>Most add-ons give you behaviors to define yourself. The editor's <span class="ui">Advanced</span> mode offers an <span class="ui">Insert … Starter</span> button for each one you have added, which pastes a working example into <span class="ui">Custom behaviors</span> for you to change; the behavior then appears in the picker's Custom tab.</p>
+  <p>Most add-ons give you behaviors to define yourself. The editor's <span class="ui">Advanced</span> mode offers an <span class="ui">Insert … Starter</span> button for each one you have added, which pastes a working example into <span class="ui">Custom behaviors</span> for you to change; the behavior then appears in the picker's Macros tab.</p>
 
   <h3>Custom source (ZMK)</h3>
   <p><span class="ui">Custom source</span> builds from another ZMK repository and revision (a branch, tag or commit) in place of the chosen firmware's own, for trying a fork or an unmerged feature. The app still assumes the firmware chosen above when deciding what to offer. <span class="ui">Use This Source</span> applies it; <span class="ui">Use the Firmware's Own</span> goes back.</p>
@@ -134,7 +134,7 @@
     <li>Under <span class="ui">also turn on</span>, choose the layer to switch on.</li>
   </ol>
   <h3>Custom devicetree</h3>
-  <p>Two text boxes take anything the editor does not cover, written into the keymap file exactly as you type it, so they are for people following the ZMK documentation. <span class="ui">Custom behaviors</span> goes inside the keymap's behaviors section, and behaviors defined there appear in the picker's Custom tab; <span class="ui">Custom devicetree</span> goes at the end of the keymap file. Add-ons you have built in offer a starter for each box.</p>
+  <p>Two text boxes take anything the editor does not cover, written into the keymap file exactly as you type it, so they are for people following the ZMK documentation. <span class="ui">Custom behaviors</span> goes inside the keymap's behaviors section, and behaviors defined there appear in the picker's Macros tab; <span class="ui">Custom devicetree</span> goes at the end of the keymap file. Add-ons you have built in offer a starter for each box.</p>
 </section>
 
 <section class="chapter" id="c13">
@@ -247,14 +247,14 @@
   <h2>What comes across</h2>
   <ul>
     <li>Layers and their names, and every key assignment.</li>
-    <li>Hold-taps, tap-dances, mod-morphs, sticky keys and macros, which become editable behaviors.</li>
-    <li>The description written above a behavior, when the file has one.</li>
+    <li>Hold-taps, tap-dances, mod-morphs, sticky keys and macros, which become slots on their keys; those used on several keys, or taking a key or layer from each, become templates.</li>
+    <li>The description written above a behavior, when the file has one, kept as a note on the key or the template.</li>
     <li>Combos and layer rules.</li>
     <li>Trackball and touchpad settings, mouse-key speeds, and their different settings on particular layers (Chapter 10).</li>
     <li>Per-key colors, from files that have them.</li>
   </ul>
   <p>Firmware settings found in the file belong to the board, not the layout, so the app asks: <span class="ui">Apply to Board</span> replaces the board's own values for those settings; <span class="ui">Ignore</span> leaves the board as it is. Settings the app does not know are kept as extra settings.</p>
-  <p>After importing, the app shows a short summary: how many layers, behaviors and combos were read, and anything it could not fully understand.</p>
+  <p>After importing, the app shows a short summary: how many layers, templates and combos were read, and anything it could not fully understand.</p>
   <p>Files that build their contents with ZMK's helper macros, or include parts only under a condition (<code>#ifdef</code>), are read the way the firmware build would read them. If a file chooses by a name the app does not know, the summary says so and that part is left out, as a build would leave it out.</p>
   <h2>What is kept as it is</h2>
   <p>Hand-written ZMK files can contain almost anything. Whatever the app cannot turn into something editable is not thrown away. It is kept as text in the editor's <span class="ui">Advanced</span> mode and written back out unchanged when you build. A binding the app does not recognize shows on its key as raw text and still works.</p>
@@ -368,12 +368,12 @@
   </ol>
 
   <h2>4. Home-row mods</h2>
-  <p><i>For:</i> shortcuts without reaching. <i>Uses:</i> Behaviors.</p>
+  <p><i>For:</i> shortcuts without reaching. <i>Uses:</i> a hold on each home-row key, and a template.</p>
   <ol class="steps">
-    <li>In Behaviors mode, click <span class="ui">Left hand</span> and <span class="ui">Right hand</span> under Home-row mods.</li>
-    <li>In Keyboard mode, set the left home row through the Binding box: <code>&amp;hml LCTRL A</code>, <code>&amp;hml LALT S</code>, <code>&amp;hml LGUI D</code>, <code>&amp;hml LSHFT F</code>.</li>
-    <li>Mirror it on the right: <code>&amp;hmr RSHFT J</code>, <code>&amp;hmr RGUI K</code>, <code>&amp;hmr RALT L</code>, <code>&amp;hmr RCTRL SEMI</code>.</li>
-    <li>Apply, build, flash, and type normally for a day before changing any timing. Then tune by symptom (Chapter 8).</li>
+    <li>In Templates mode, <span class="ui">New</span> › <span class="ui">Home-row mod</span>.</li>
+    <li>In Keyboard mode, select <b>A</b>. <span class="ui">Add…</span> › <span class="ui">Hold</span>, click <span class="ui">⌃</span>, and under <span class="ui">Hold and tap</span> choose <b>Home-row mod</b>. Then <b>S</b> with <span class="ui">⌥</span>, <b>D</b> with <span class="ui">⌘</span>, <b>F</b> with <span class="ui">⇧</span>.</li>
+    <li>Mirror it on the right with <span class="ui">Right side</span> on: <b>J</b> with <span class="ui">⇧</span>, <b>K</b> with <span class="ui">⌘</span>, <b>L</b> with <span class="ui">⌥</span>, <b>;</b> with <span class="ui">⌃</span>.</li>
+    <li>Apply, build, flash, and type normally for a day before changing any timing. Then tune the template by symptom (Chapter 8).</li>
   </ol>
 
   <h2>5. A combo for Escape and one for Caps Word</h2>
@@ -385,11 +385,11 @@
   </ol>
 
   <h2>6. A macro that types your email address</h2>
-  <p><i>Uses:</i> Behaviors, macro.</p>
+  <p><i>Uses:</i> a macro on a key.</p>
   <ol class="steps">
-    <li>In Behaviors mode, click <span class="ui">Macro</span>. Name it "Email".</li>
+    <li>In Keyboard mode, select a key on a layer you do not hit by accident. <span class="ui">Add…</span> › <span class="ui">Macro</span>.</li>
     <li>In <span class="ui">Type text</span>, type your address and press <kbd>Return</kbd>. The steps fill in.</li>
-    <li>In Keyboard mode, pick a key on a layer you do not hit by accident and assign <b>Email</b> from the Custom tab.</li>
+    <li>Want it on another layer too? <span class="ui">Save as template…</span>, name it "Email", and choose it from the picker's Macros tab on the other key.</li>
   </ol>
 
   <h2>7. Layers you can see</h2>
@@ -504,24 +504,26 @@
     <tr><td>Firmware</td><td>The program that runs inside the keyboard.</td></tr>
     <tr><td>Flash</td><td>To install firmware on the keyboard.</td></tr>
     <tr><td>Gui</td><td>The Command key on a Mac; the Windows key on a PC.</td></tr>
-    <tr><td>Hold-tap</td><td>A key that does one thing held and another tapped. Mod-tap and layer-tap are kinds of hold-tap.</td></tr>
-    <tr><td>Home-row mods</td><td>Modifiers placed on the home-row letter keys as hold-taps.</td></tr>
+    <tr><td>Feel</td><td>The settings behind a key's hold, extra taps, override or sticky behavior: the keyboard's default, a template, or the key's own.</td></tr>
+    <tr><td>Hold &amp; tap</td><td>A key that does one thing held and another tapped. ZMK calls it a hold-tap; mod-tap and layer-tap are the built-in kinds.</td></tr>
+    <tr><td>Home-row mods</td><td>Modifiers placed on the home-row letter keys as holds.</td></tr>
+    <tr><td>Key setup</td><td>The panel showing the selected key in slots: tap, hold, double tap and so on.</td></tr>
     <tr><td>Keymap</td><td>The complete set of layers and bindings; also the file ZMK reads them from.</td></tr>
     <tr><td>Layer</td><td>One complete set of key assignments. Several can be active, stacked.</td></tr>
-    <tr><td>Layout</td><td>What the keys do, saved as a <code>.kcproj</code> file: layers, behaviors, combos, colors, pointing.</td></tr>
+    <tr><td>Layout</td><td>What the keys do, saved as a <code>.kcproj</code> file: layers, keys, templates, combos, colors, pointing.</td></tr>
     <tr><td>Live configuration</td><td>Writing a layout to a running keyboard over USB, with no build: the Defy, and RMK for MoErgo.</td></tr>
     <tr><td>Macro</td><td>A recorded sequence of key actions played by one key.</td></tr>
-    <tr><td>Mod-morph</td><td>A key that changes what it sends while a modifier is held.</td></tr>
+    <tr><td>Multi-tap</td><td>A key that does different things depending on how many times it is tapped. ZMK calls it a tap-dance.</td></tr>
     <tr><td>Modifier</td><td>Shift, Control, Option/Alt or Command/Gui.</td></tr>
     <tr><td>moergo-rmk</td><td>colonelpanic's community RMK firmware for MoErgo's boards, and the base of the Imprint's RMK fork. "RMK for MoErgo" in the app.</td></tr>
     <tr><td>Peripheral</td><td>The half of a split keyboard that talks only to the main half.</td></tr>
     <tr><td>Profile</td><td>One remembered Bluetooth device.</td></tr>
     <tr><td>RMK</td><td>A keyboard firmware written in Rust. See rmk.rs.</td></tr>
     <tr><td>Rynk</td><td>RMK's host protocol, over which the app reads and writes a keyboard's configuration.</td></tr>
+    <tr><td>Shift override</td><td>A key that sends something else while Shift, or the modifiers you choose, is held. ZMK calls it a mod-morph.</td></tr>
     <tr><td>Sticky key / one-shot</td><td>A modifier or layer that applies to the next key press only.</td></tr>
     <tr><td>TailorKey</td><td>Moosy Research's layout for the MoErgo boards, offered as a template on the Imprint. See sites.google.com/view/tailorkey.</td></tr>
-    <tr><td>Tap-dance</td><td>A key that does different things depending on how many times it is tapped.</td></tr>
-    <tr><td>Tapping term</td><td>How long a hold-tap must be held to count as a hold.</td></tr>
+    <tr><td>Template</td><td>A feel or a macro saved under a name, so that several keys share it and change together.</td></tr>
     <tr><td>Theme</td><td>The app's look, chosen under View › Theme.</td></tr>
     <tr><td>Transparent</td><td>A key that defers to the layer beneath.</td></tr>
     <tr><td>UF2</td><td>The file format of firmware copied onto a bootloader drive.</td></tr>

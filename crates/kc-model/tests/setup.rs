@@ -766,7 +766,7 @@ fn settings_and_bindings_are_described_in_words() {
                 }]
             )
         ),
-        "Switch to a Bluetooth profile 2"
+        "BT 2"
     );
     assert_eq!(words::modifier_name(Modifier::RGui), "Right ⌘");
     assert_eq!(

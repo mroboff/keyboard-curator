@@ -183,6 +183,7 @@
     };
 
     behaviors {
+        // Template: hrm_pinky (left hand)
         hrm_pinky: hrm_pinky {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -194,6 +195,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_ring (left hand)
         hrm_ring: hrm_ring {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -205,6 +207,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_middle (left hand)
         hrm_middle: hrm_middle {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -216,6 +219,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_index (left hand)
         hrm_index: hrm_index {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -227,6 +231,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: thumb_layer
         thumb_layer: thumb_layer {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -235,6 +240,7 @@
             quick-tap-ms = <300>;
             bindings = <&mo>, <&kp>;
         };
+        // Template: thumb_space_layer
         thumb_space_layer: thumb_space_layer {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -243,6 +249,7 @@
             quick-tap-ms = <150>;
             bindings = <&mo>, <&kp>;
         };
+        // Template: autoshift
         autoshift: autoshift {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -250,6 +257,7 @@
             tapping-term-ms = <190>;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_pinky (right hand)
         hrm_pinky_right: hrm_pinky_right {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -261,6 +269,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_ring (right hand)
         hrm_ring_right: hrm_ring_right {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -272,6 +281,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_middle (right hand)
         hrm_middle_right: hrm_middle_right {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -283,6 +293,7 @@
             hold-trigger-on-release;
             bindings = <&kp>, <&kp>;
         };
+        // Template: hrm_index (right hand)
         hrm_index_right: hrm_index_right {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -297,6 +308,7 @@
     };
 
     macros {
+        // Key 75 on Cursor: Macro: Select next word
         select_next_word: select_next_word {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -308,6 +320,7 @@
                 , <&macro_release &kp LEFT_CONTROL>
                 ;
         };
+        // Key 74 on Cursor: Macro: Select to line end
         select_to_line_end: select_to_line_end {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -317,6 +330,7 @@
                 , <&macro_release &kp LEFT_SHIFT>
                 ;
         };
+        // Key 73 on Cursor: Macro: Cursor wiggle
         cursor_wiggle: cursor_wiggle {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -327,6 +341,7 @@
                 , <&macro_tap &kp LEFT_ARROW>
                 ;
         };
+        // Template: Select word
         select_word: select_word {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -341,6 +356,7 @@
                 , <&macro_release &kp LEFT_CONTROL>
                 ;
         };
+        // Template: Select line
         select_line: select_line {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -351,6 +367,7 @@
                 , <&macro_release &kp LEFT_SHIFT>
                 ;
         };
+        // Key 60 on Symbol: Macro: Two dots
         two_dots: two_dots {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;

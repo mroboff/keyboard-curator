@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!(
         "{} layers, {} behaviors, {} combos, {} raw bindings",
-        report.layers, report.behaviors, report.combos, report.raw_bindings
+        report.layers, report.templates, report.combos, report.raw_bindings
     );
     println!("kept as text: {:?}", report.raw_blocks);
     for note in &report.notes {

@@ -21,6 +21,7 @@
 
 / {
     behaviors {
+        // Template: Magic
         magic: magic {
             compatible = "zmk,behavior-hold-tap";
             #binding-cells = <2>;
@@ -28,6 +29,7 @@
             tapping-term-ms = <200>;
             bindings = <&mo>, <&rgb_ug_status_macro>;
         };
+        // Key 54 on Base: Lower while held; tap twice for Switch to Lower
         layer_td: layer_td {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
@@ -53,6 +55,7 @@
     };
 
     macros {
+        // Key 64 on Base: Macro: Show status lights, hold for Magic
         rgb_ug_status_macro: rgb_ug_status_macro {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -60,6 +63,7 @@
                 = <&macro_tap &rgb_ug RGB_STATUS>
                 ;
         };
+        // Key 69 on Magic: Macro: Bluetooth 1
         bt_0: bt_0 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -67,6 +71,7 @@
                 = <&macro_tap &out OUT_BLE &bt BT_SEL 0>
                 ;
         };
+        // Key 70 on Magic: Macro: Bluetooth 2
         bt_1: bt_1 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -74,6 +79,7 @@
                 = <&macro_tap &out OUT_BLE &bt BT_SEL 1>
                 ;
         };
+        // Key 52 on Magic: Macro: Bluetooth 3
         bt_2: bt_2 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
@@ -81,6 +87,7 @@
                 = <&macro_tap &out OUT_BLE &bt BT_SEL 2>
                 ;
         };
+        // Key 53 on Magic: Macro: Bluetooth 4
         bt_3: bt_3 {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
