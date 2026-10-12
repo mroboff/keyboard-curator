@@ -200,15 +200,18 @@ impl KeySetup {
         }
 
         if let Some(side) = hold_tap(project, &current) {
-            if setup.tap_hold.is_some() && setup.feel.hold != side.choice {
+            let feel = if setup.tap_hold.is_some() {
                 // Two hold-taps with different feels have no single slot.
-                return None;
-            }
+                // A built-in and a definition with default settings agree.
+                same_feel(&setup.feel.hold, &side.choice)?
+            } else {
+                side.choice.clone()
+            };
             if let Some(def) = side.def(project) {
                 keep_note(def);
             }
             setup.hold = Some(side.hold);
-            setup.feel.hold = side.choice;
+            setup.feel.hold = feel;
             setup.prior.hold = side.owned;
             current = side.tap;
         }
@@ -249,6 +252,24 @@ impl KeySetup {
     }
 }
 
+/// The one feel two hold-taps on a key share, or `None` when they differ.
+/// The keyboard's default and settings of the key's own that still match
+/// the defaults count as the same.
+fn same_feel<S: Clone + Default + PartialEq>(a: &Choice<S>, b: &Choice<S>) -> Option<Choice<S>> {
+    let is_default = |c: &Choice<S>| match c {
+        Choice::Default => true,
+        Choice::Custom(s) => *s == S::default(),
+        Choice::Template(_) => false,
+    };
+    if a == b {
+        Some(a.clone())
+    } else if is_default(a) && is_default(b) {
+        Some(Choice::Default)
+    } else {
+        None
+    }
+}
+
 fn is_none(binding: &Binding) -> bool {
     matches!(binding, Binding::Behavior { behavior: BehaviorRef::BuiltIn(l), .. } if l == "none")
 }
@@ -257,7 +278,10 @@ fn owned(def: &BehaviorDef) -> Option<BehaviorId> {
     (def.scope == Scope::Key).then_some(def.id)
 }
 
-/// Where a definition's settings come from, as the slots show it.
+/// Where a definition's settings come from, as the slots show it. Only a
+/// built-in behavior is the keyboard's default; a definition of the key's
+/// own is custom even while its settings still match the defaults, so that
+/// choosing "custom" shows the settings to change.
 fn choice<S>(def: &BehaviorDef) -> Choice<S>
 where
     S: Clone + Default + PartialEq,
@@ -269,14 +293,9 @@ where
     if let Some(template) = def.follows {
         return Choice::Template(template);
     }
-    let own: S = match def.kind.settings().try_into() {
-        Ok(s) => s,
-        Err(_) => return Choice::Default,
-    };
-    if own == S::default() {
-        Choice::Default
-    } else {
-        Choice::Custom(own)
+    match def.kind.settings().try_into() {
+        Ok(own) => Choice::Custom(own),
+        Err(_) => Choice::Default,
     }
 }
 

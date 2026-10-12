@@ -2478,12 +2478,11 @@ impl Workspace {
                     .map(|main| match self.mode {
                         Mode::Keyboard => main.child(self.render_canvas(cx)).child(
                             div()
-                                .h_80()
+                                .h_72()
                                 .flex()
                                 .border_t_1()
                                 .border_color(border)
-                                .child(self.render_picker(cx))
-                                .child(self.render_key_setup(cx)),
+                                .child(self.render_picker(cx)),
                         ),
                         Mode::Lighting => main.child(self.render_lighting(cx)),
                         // The key picker is only there for behaviors that
@@ -2514,6 +2513,11 @@ impl Workspace {
                     })
                     .child(self.render_status(cx)),
             )
+            // The key setup stands beside the whole column, full height,
+            // as the layer list does on the other side.
+            .when(self.mode == Mode::Keyboard, |row| {
+                row.child(self.render_key_setup(cx))
+            })
     }
 }
 

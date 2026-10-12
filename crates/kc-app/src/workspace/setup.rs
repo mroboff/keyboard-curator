@@ -687,14 +687,19 @@ impl Workspace {
     ) -> impl IntoElement {
         let workspace = cx.weak_entity();
         let custom = Rc::new(custom);
-        let mut options: Vec<(String, Pick)> = vec![(
-            "Keyboard default".into(),
-            Rc::new(move |this, window, cx| {
-                this.edit_setups("Change Feel", window, cx, |setup| {
-                    set_choice_default(setup, part);
-                });
-            }),
-        )];
+        let mut options: Vec<(String, Pick)> = Vec::new();
+        // A hold or a sticky key has a built-in with the keyboard's own
+        // feel; extra taps and overrides always need settings of their own.
+        if matches!(part, Part::Hold | Part::Sticky) {
+            options.push((
+                "Keyboard default".into(),
+                Rc::new(move |this, window, cx| {
+                    this.edit_setups("Change Feel", window, cx, |setup| {
+                        set_choice_default(setup, part);
+                    });
+                }),
+            ));
+        }
         for (template, name) in templates {
             options.push((
                 name,

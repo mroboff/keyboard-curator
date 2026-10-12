@@ -108,7 +108,8 @@ fn holds_with_the_default_feel_use_built_in_behaviors() {
     assert_eq!(text(&p, base, 2), "&ht_1 0 A");
     let back = KeySetup::of(&p, base, 2).unwrap();
     assert_eq!(back.hold, Some(Binding::new("caps_word", vec![])));
-    assert_eq!(back.feel.hold, Choice::Default);
+    // There is a node of the key's own, so the feel is its own to change.
+    assert_eq!(back.feel.hold, Choice::Custom(HoldTapSettings::default()));
     assert_eq!(p.behaviors[0].scope, Scope::Key);
     assert!(errors(&p, &board).is_empty());
 }
@@ -187,7 +188,7 @@ fn second_taps_nest_a_multi_tap_around_the_hold() {
         (back.tap.clone(), back.double_tap.clone()),
         (kp("A"), Some(kp("B")))
     );
-    assert_eq!(back.feel.taps, Choice::Default);
+    assert_eq!(back.feel.taps, Choice::Custom(TapDanceSettings::default()));
 
     // Hold, double tap, tap-then-hold and a third tap together.
     setup.hold = Some(kp("LSHFT"));
@@ -252,7 +253,10 @@ fn shift_overrides_and_sticky_keys_wrap_the_tap() {
     assert_eq!(text(&p, base, 0), "&mm_1");
     let back = KeySetup::of(&p, base, 0).unwrap();
     assert_eq!(back.shifted, Some(kp("SEMICOLON")));
-    assert_eq!(back.feel.shifted, Choice::Default);
+    assert_eq!(
+        back.feel.shifted,
+        Choice::Custom(ModMorphSettings::default())
+    );
     assert_eq!(
         words::describe(&p, p.binding(base, 0).unwrap()),
         ",, with ⇧ held ;"
