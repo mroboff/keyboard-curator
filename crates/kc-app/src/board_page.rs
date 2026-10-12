@@ -589,6 +589,90 @@ impl BoardPage {
         .detach();
     }
 
+    /// Writes a backup file back to the connected keyboard, after asking.
+    /// What the keyboard holds is saved to disk first.
+    fn restore_backup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(saved) = self.saved(cx).cloned() else {
+            return;
+        };
+        let Some(backups) = dirs::config_dir().map(|d| d.join("Keyboard Curator").join("backups"))
+        else {
+            return;
+        };
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Restore".into()),
+        });
+        let (board, config) = (self.board.clone(), saved.firmware.clone());
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = chosen.await else {
+                return;
+            };
+            let Some(file) = paths.into_iter().next() else {
+                return;
+            };
+            let name = file
+                .file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+            let answer = this.update_in(cx, |_, window, cx| {
+                window.prompt(
+                    PromptLevel::Warning,
+                    &format!("Restore “{name}” to the keyboard?"),
+                    Some(&format!(
+                        "This writes the backup back to “{}”: everything in it that differs from what the keyboard holds now, except the lights and the wireless side. What the keyboard holds now is saved first, in {}.",
+                        saved.name,
+                        backups.display()
+                    )),
+                    &["Cancel", "Restore"],
+                    cx,
+                )
+            });
+            let Ok(answer) = answer else {
+                return;
+            };
+            if answer.await != Ok(1) {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.live = Some("Restoring the backup…".into());
+                this.live_busy = true;
+                cx.notify();
+            });
+            let restored = cx
+                .background_executor()
+                .spawn(async move {
+                    kc_firmware::live::restore(
+                        &board,
+                        &config,
+                        saved.device.as_ref(),
+                        &file,
+                        &backups,
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.live_busy = false;
+                this.live = Some(match restored {
+                    Ok(applied) if !applied.changed => {
+                        "The keyboard already holds what the backup holds. Nothing was written.".to_string()
+                    }
+                    Ok(applied) => format!(
+                        "Restored: {} change(s). What the keyboard held before is saved in {}.",
+                        applied.changes.len(),
+                        applied
+                            .backup
+                            .map_or_else(String::new, |path| path.display().to_string())
+                    ),
+                    Err(error) => format!("Nothing more was written: {error}."),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     // Ready-made firmware
 
     /// Fetches the chosen firmware's released files, checks them, and hands
@@ -1693,7 +1777,7 @@ impl BoardPage {
             .child(
                 panel(
                     "Read from the keyboard",
-                    "Opens what the keyboard holds now as a new layout: every layer's keys and the colors under them. Nothing is written to the keyboard. Close Dygma's Bazecor first; only one program can talk to the keyboard at a time.".into(),
+                    "Opens what the keyboard holds now as a new layout: every layer's keys, superkeys as key setups, macros, the colors under the keys and the underglow. The keyboard's settings are offered to the board. Nothing is written to the keyboard. Close Dygma's Bazecor first; only one program can talk to the keyboard at a time.".into(),
                 )
                 .when(!self.live_busy, |panel| {
                     panel.child(
@@ -1720,6 +1804,24 @@ impl BoardPage {
                                 .label("Apply To Keyboard…")
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.apply_to_keyboard(window, cx);
+                                })),
+                        ),
+                    )
+                }),
+            )
+            .child(
+                panel(
+                    "Restore a backup",
+                    "Every write saves what the keyboard held first, as one file holding everything the keyboard lists. Restoring writes a chosen file back to the keyboard it came from: everything in it that differs, except the lights and the wireless side, which are left as they are. The keyboard is saved again first.".into(),
+                )
+                .when(!self.live_busy, |panel| {
+                    panel.child(
+                        div().flex().child(
+                            Button::new("restore-backup")
+                                .ghost()
+                                .label("Restore a Backup…")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.restore_backup(window, cx);
                                 })),
                         ),
                     )

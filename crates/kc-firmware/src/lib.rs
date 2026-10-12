@@ -278,7 +278,7 @@ pub mod live {
                 Ok(Applied {
                     changed: !applied.sent.is_empty(),
                     backup: saved,
-                    changes: applied.sent.iter().map(|s| (*s).to_string()).collect(),
+                    changes: applied.sent,
                 })
             }
             (Family::Rmk, Delivery::Released) => {
@@ -303,6 +303,50 @@ pub mod live {
             }
             _ => Err(not_live(board, config)),
         }
+    }
+
+    /// Whether a backup this app took can be written back from here.
+    /// Rynk backups are files Rynkbench and moergo-control restore.
+    pub fn can_restore(board: &Board, config: &FirmwareConfig) -> bool {
+        config.family(board) == Family::Dygma
+    }
+
+    /// Writes a backup file this app took back to the keyboard it came
+    /// from: everything that differs, except the lights and the wireless
+    /// side. What the keyboard holds now is saved into `backups` first.
+    pub fn restore(
+        board: &Board,
+        config: &FirmwareConfig,
+        device: Option<&Device>,
+        file: &Path,
+        backups: &Path,
+    ) -> Result<Applied, String> {
+        if !can_restore(board, config) {
+            return Err(
+                "this firmware's backups are restored with Rynkbench or moergo-control".into(),
+            );
+        }
+        let text = std::fs::read_to_string(file).map_err(|e| e.to_string())?;
+        let saved = kc_dygma::Image::from_json(&text).map_err(|e| e.to_string())?;
+        let mut taken = None;
+        let applied = kc_dygma::restore(board, device, &saved, |before| {
+            std::fs::create_dir_all(backups)?;
+            let path = backups.join(format!(
+                "{}-{}-{}.json",
+                board.id,
+                before.chip_id.trim(),
+                stamp()
+            ));
+            std::fs::write(&path, before.to_json())?;
+            taken = Some(path);
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+        Ok(Applied {
+            changed: !applied.sent.is_empty(),
+            backup: taken,
+            changes: applied.sent,
+        })
     }
 
     /// Whether the firmware can restart a half into its bootloader on

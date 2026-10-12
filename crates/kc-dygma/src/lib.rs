@@ -57,7 +57,65 @@ pub const WRITES: [&str; 5] = [
 
 /// Whether a command may ever be written.
 pub fn writable(command: &str) -> bool {
-    WRITES.contains(&command) || settings::is_command(command)
+    WRITES.contains(&command) || settings::is_command(command) || restorable(command)
+}
+
+/// Parts of command names that a backup leaves out, as Bazecor's backup
+/// does (src/api/backup/Backup.ts, `Backup.Commands`): actions, the
+/// factory keymap, hardware probes, and values that are not
+/// configuration. A command containing any of these is neither read for
+/// the backup nor written by a restore.
+pub const BACKUP_SKIP: [&str; 28] = [
+    "eeprom",
+    "hardware",
+    "settings.valid?",
+    "settings.version",
+    "settings.crc",
+    "keymap.default",
+    "layer",
+    "help",
+    "version",
+    "led.mode",
+    "led.theme",
+    "led.at",
+    "led.setMultiple",
+    "led.getMultiple",
+    "led.setAll",
+    "macros.trigger",
+    "macros.memory",
+    "upgrade",
+    "settings.printConfig",
+    "settings.aliveInterval",
+    "settings.spiSpeed",
+    "settings.cpuSpeed",
+    "settings.ledDriverPullUp",
+    "settings.underGlow",
+    "settings.ledDriver",
+    "wireless.battery.left",
+    "wireless.battery.right",
+    "wireless.battery",
+];
+
+/// Whether a command the keyboard lists goes into a backup: anything but
+/// the skip list and what the image already holds in a field of its own.
+pub fn backup_extra(command: &str) -> bool {
+    !BACKUP_SKIP.iter().any(|skip| command.contains(skip))
+        && !READS.contains(&command)
+        && !settings::is_command(command)
+}
+
+/// Whether a backup's command is written back by a restore. Bazecor's
+/// restore leaves the lights and the wireless side alone (`led.*` and
+/// `wireless.*`), and so does this one.
+pub fn restorable(command: &str) -> bool {
+    (backup_extra(command) || settings::is_command(command))
+        && !command.starts_with("led.")
+        && !command.starts_with("wireless.")
+}
+
+/// Whether a command may ever be read.
+pub fn readable(command: &str) -> bool {
+    READS.contains(&command) || settings::is_command(command) || backup_extra(command)
 }
 
 /// Commands every Focus firmware has, sent whether or not `help` lists
@@ -157,7 +215,7 @@ impl<T: Read + Write> Focus<T> {
     /// only when the keyboard lists them; a command it lacks reads as
     /// `None`.
     fn read(&mut self, command: &str) -> Result<Option<String>, FocusError> {
-        if !READS.contains(&command) && !settings::is_command(command) {
+        if !readable(command) {
             return Err(FocusError::Refused(command.to_string()));
         }
         if !self.has(command)? {
@@ -208,6 +266,25 @@ impl<T: Read + Write> Focus<T> {
         Ok(())
     }
 
+    /// Writes `saved` back to this keyboard: see [`restore`].
+    pub fn restore_image(
+        &mut self,
+        saved: &Image,
+        backup: impl FnOnce(&Image) -> std::io::Result<()>,
+    ) -> Result<Applied, FocusError> {
+        let before = self.read_image()?;
+        let new = before.with_backup(saved)?;
+        if new == before {
+            return Ok(Applied {
+                before,
+                sent: Vec::new(),
+            });
+        }
+        backup(&before)?;
+        let sent = self.write_changes(&before, &new)?;
+        Ok(Applied { before, sent })
+    }
+
     /// Reads everything this app works with from the keyboard.
     pub fn read_image(&mut self) -> Result<Image, FocusError> {
         Ok(Image {
@@ -239,6 +316,23 @@ impl<T: Read + Write> Focus<T> {
                 }
                 found
             },
+            extra: {
+                // Everything else the keyboard lists that a backup keeps,
+                // as the keyboard wrote it.
+                let listed: Vec<String> = self
+                    .commands()?
+                    .iter()
+                    .filter(|c| backup_extra(c))
+                    .cloned()
+                    .collect();
+                let mut found = std::collections::BTreeMap::new();
+                for command in listed {
+                    if let Some(text) = self.read(&command)? {
+                        found.insert(command, text.trim().to_string());
+                    }
+                }
+                found
+            },
             palette: self.read_numbers("palette")?,
             colormap: self.read_numbers("colormap.map")?,
             superkeys: self.read_numbers_if_any("superkeys.map")?,
@@ -255,7 +349,7 @@ impl<T: Read + Write> Focus<T> {
         &mut self,
         current: &Image,
         new: &Image,
-    ) -> Result<Vec<&'static str>, FocusError> {
+    ) -> Result<Vec<String>, FocusError> {
         // The same sizes, or something is wrong and nothing is sent.
         if current.keymap.len() != new.keymap.len()
             || current.palette.len() != new.palette.len()
@@ -268,25 +362,25 @@ impl<T: Read + Write> Focus<T> {
         // which matter more, as they were.
         if current.palette != new.palette {
             self.write("palette", &new.palette)?;
-            sent.push("palette");
+            sent.push("palette".into());
         }
         if current.colormap != new.colormap {
             self.write("colormap.map", &new.colormap)?;
-            sent.push("colormap.map");
+            sent.push("colormap.map".into());
         }
         // Macros before the superkeys that may name them, and both before
         // the keys that name either.
         if current.macros != new.macros {
             self.write("macros.map", &new.macros)?;
-            sent.push("macros.map");
+            sent.push("macros.map".into());
         }
         if current.superkeys != new.superkeys {
             self.write("superkeys.map", &new.superkeys)?;
-            sent.push("superkeys.map");
+            sent.push("superkeys.map".into());
         }
         if current.keymap != new.keymap {
             self.write("keymap.custom", &new.keymap)?;
-            sent.push("keymap.custom");
+            sent.push("keymap.custom".into());
         }
         // Settings last, each one value, only where the keyboard has the
         // command and the value differs.
@@ -299,7 +393,17 @@ impl<T: Read + Write> Focus<T> {
             };
             if before != after {
                 self.write(mapping.command, std::slice::from_ref(after))?;
-                sent.push(mapping.command);
+                sent.push(mapping.command.into());
+            }
+        }
+        // What a restore brings back beyond those, as it was read.
+        for (command, after) in &new.extra {
+            let Some(before) = current.extra.get(command) else {
+                continue;
+            };
+            if before != after {
+                self.write(command, std::slice::from_ref(after))?;
+                sent.push(command.clone());
             }
         }
         Ok(sent)
@@ -327,6 +431,10 @@ pub struct Image {
     /// keyboard.
     #[serde(default)]
     pub battery: std::collections::BTreeMap<String, String>,
+    /// Everything else the keyboard listed that a backup keeps, by
+    /// command, as the keyboard wrote it: what [`backup_extra`] allows.
+    #[serde(default)]
+    pub extra: std::collections::BTreeMap<String, String>,
     /// The palette's color channels, color after color.
     pub palette: Vec<u8>,
     /// One palette index per light, layer after layer.
@@ -387,6 +495,53 @@ impl Image {
     /// The image as a file, for a backup taken before writing.
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("an image always serializes")
+    }
+
+    /// A backup file read back.
+    pub fn from_json(text: &str) -> Result<Image, FocusError> {
+        serde_json::from_str(text).map_err(|e| FocusError::Unfit(format!("not a backup file: {e}")))
+    }
+
+    /// The image this keyboard should hold to be as `backup` was: the
+    /// backup's keys, colors, superkeys, macros and settings, except the
+    /// lights and the wireless side, which a restore leaves alone.
+    pub fn with_backup(&self, backup: &Image) -> Result<Image, FocusError> {
+        if self.hardware != backup.hardware || self.chip_id.trim() != backup.chip_id.trim() {
+            return Err(FocusError::Unfit(format!(
+                "this backup is from another keyboard ({} {}); this one is {} {}",
+                backup.hardware.trim(),
+                backup.chip_id.trim(),
+                self.hardware.trim(),
+                self.chip_id.trim()
+            )));
+        }
+        if self.keymap.len() != backup.keymap.len()
+            || self.palette.len() != backup.palette.len()
+            || self.colormap.len() != backup.colormap.len()
+        {
+            return Err(FocusError::Mismatch);
+        }
+        let mut image = self.clone();
+        image.keymap = backup.keymap.clone();
+        image.palette = backup.palette.clone();
+        image.colormap = backup.colormap.clone();
+        if !self.superkeys.is_empty() && !backup.superkeys.is_empty() {
+            image.superkeys = backup.superkeys.clone();
+        }
+        if !self.macros.is_empty() && !backup.macros.is_empty() {
+            image.macros = backup.macros.clone();
+        }
+        for (command, value) in &backup.settings {
+            if restorable(command) && self.settings.contains_key(command) {
+                image.settings.insert(command.clone(), value.clone());
+            }
+        }
+        for (command, value) in &backup.extra {
+            if restorable(command) && self.extra.contains_key(command) {
+                image.extra.insert(command.clone(), value.clone());
+            }
+        }
+        Ok(image)
     }
 
     /// The keyboard's settings as the board takes them.
@@ -997,13 +1152,13 @@ pub fn read(board: &Board, device: Option<&Device>) -> Result<Image, FocusError>
     open(&port)?.read_image()
 }
 
-/// What an apply did.
+/// What an apply or a restore did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Applied {
     /// What the keyboard held before, for the backup.
     pub before: Image,
     /// The commands that were sent; none when the keyboard already matched.
-    pub sent: Vec<&'static str>,
+    pub sent: Vec<String>,
 }
 
 /// Works out what the keyboard should hold for `project` and writes what
@@ -1030,4 +1185,19 @@ pub fn apply(
     backup(&before)?;
     let sent = focus.write_changes(&before, &new)?;
     Ok(Applied { before, sent })
+}
+
+/// Writes a backup back to the keyboard it was taken from: everything in
+/// it that differs from what the keyboard holds now, except the lights
+/// and the wireless side. `backup` is called with what the keyboard holds
+/// before anything is sent, and the write only goes ahead if it succeeds.
+pub fn restore(
+    board: &Board,
+    device: Option<&Device>,
+    saved: &Image,
+    backup: impl FnOnce(&Image) -> std::io::Result<()>,
+) -> Result<Applied, FocusError> {
+    let port = find_port(board, device).ok_or(FocusError::NotFound)?;
+    let mut focus = open(&port)?;
+    focus.restore_image(saved, backup)
 }

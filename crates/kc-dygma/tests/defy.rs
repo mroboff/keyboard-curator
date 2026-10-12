@@ -463,6 +463,13 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
     }
     // Only the keymap differed, so only the keymap was written.
     assert_eq!(writes, 1);
+    // Every read is one this app allows: a field of the image, a setting,
+    // or something a backup keeps.
+    for line in &keyboard.received {
+        if !line.contains(' ') {
+            assert!(kc_dygma::readable(line), "{line}");
+        }
+    }
     // Wireless commands are only ever read, and only the settings and
     // battery ones.
     for line in &keyboard.received {
@@ -833,4 +840,115 @@ fn settings_are_read_and_written_as_the_keyboard_lists_them() {
         .received
         .iter()
         .any(|line| line.starts_with("wireless")));
+}
+
+#[test]
+fn a_backup_holds_everything_the_keyboard_lists_and_restores_what_differs() {
+    let (_, profile) = defy();
+    let mut keyboard = Simulated::new(&profile);
+    // Commands beyond the image's own fields: some a backup keeps, some
+    // it leaves out because Bazecor's does (actions, probes, the factory
+    // keymap, the lights' effect).
+    for (command, value) in [
+        ("mouse.speedDelay", "6"),
+        ("led.fade", "0"),
+        ("keymap.default", "0 0 0"),
+        ("hardware.side_power", "1"),
+        ("layer.activate", ""),
+        ("settings.aliveInterval", "100"),
+        ("eeprom.erase", ""),
+    ] {
+        keyboard.values.insert(command.into(), value.into());
+    }
+    let mut focus = Focus::new(keyboard);
+    let image = focus.read_image().unwrap();
+    let extra: Vec<&str> = image.extra.keys().map(String::as_str).collect();
+    assert_eq!(extra, ["led.fade", "mouse.speedDelay"]);
+    assert_eq!(image.settings["led.brightness"], "153");
+    // The file round-trips.
+    let text = image.to_json();
+    assert_eq!(kc_dygma::Image::from_json(&text).unwrap(), image);
+    // Nothing on the skip list was ever sent.
+    let keyboard = focus.into_inner();
+    for line in &keyboard.received {
+        for skipped in [
+            "keymap.default",
+            "hardware.side_power",
+            "layer.activate",
+            "settings.aliveInterval",
+            "eeprom.erase",
+        ] {
+            assert!(!line.starts_with(skipped), "{line}");
+        }
+    }
+
+    // The keyboard changes: a key, a macro, two settings, a light setting
+    // and a wireless one, and something only the backup keeps.
+    let mut changed = keyboard;
+    let mut keymap = vec![0u16; profile.layers * profile.slots];
+    keymap[profile.key_slots[0]] = 20;
+    changed.set("keymap.custom", &keymap);
+    changed.values.insert("macros.map".into(), "8 4 0 0".into());
+    changed
+        .values
+        .insert("qukeys.holdTimeout".into(), "180".into());
+    changed
+        .values
+        .insert("mouse.speedDelay".into(), "12".into());
+    changed.values.insert("led.brightness".into(), "40".into());
+    changed.values.insert("led.fade".into(), "1".into());
+    changed
+        .values
+        .insert("wireless.rf.power".into(), "0".into());
+    let mut focus = Focus::new(changed);
+
+    // Restoring brings back what differs, leaves the lights and the
+    // wireless side as they are, and saves the current state first.
+    let mut taken = None;
+    let applied = focus
+        .restore_image(&image, |before| {
+            taken = Some(before.clone());
+            Ok(())
+        })
+        .unwrap();
+    let before = taken.expect("a backup was taken");
+    assert_eq!(before, applied.before);
+    assert_eq!(before.keymap[profile.key_slots[0]], 20);
+    assert_eq!(
+        applied.sent,
+        [
+            "macros.map",
+            "keymap.custom",
+            "qukeys.holdTimeout",
+            "mouse.speedDelay"
+        ]
+    );
+    let after = focus.read_image().unwrap();
+    assert_eq!(after.keymap, image.keymap);
+    assert_eq!(after.macros, image.macros);
+    assert_eq!(after.settings["qukeys.holdTimeout"], "250");
+    assert_eq!(after.extra["mouse.speedDelay"], "6");
+    assert_eq!(after.settings["led.brightness"], "40");
+    assert_eq!(after.extra["led.fade"], "1");
+    assert_eq!(after.settings["wireless.rf.power"], "0");
+
+    // Restored again, nothing differs and nothing is sent or saved.
+    let again = focus
+        .restore_image(&image, |_| panic!("no backup needed"))
+        .unwrap();
+    assert!(again.sent.is_empty());
+
+    // A backup from another keyboard is refused before anything is sent.
+    let mut other = image.clone();
+    other.chip_id = "fedcba9876543210".into();
+    let refused = focus.restore_image(&other, |_| panic!("not reached"));
+    assert!(
+        matches!(refused, Err(FocusError::Unfit(message)) if message.contains("another keyboard"))
+    );
+    let mut short = image.clone();
+    short.keymap.pop();
+    assert!(matches!(
+        focus.restore_image(&short, |_| panic!("not reached")),
+        Err(FocusError::Mismatch)
+    ));
 }
