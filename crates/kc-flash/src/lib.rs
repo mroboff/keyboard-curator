@@ -8,7 +8,7 @@ pub mod uf2;
 
 use std::path::{Path, PathBuf};
 
-use kc_boards::board::Side;
+use kc_boards::board::{FirmwareProfile, Side};
 use kc_boards::Board;
 
 pub use uf2::{Uf2Error, Uf2Info};
@@ -68,11 +68,15 @@ pub enum Half {
     NotThisBoard,
 }
 
-pub fn identify(board: &Board, bootloader: &Bootloader) -> Half {
+pub fn identify(board: &Board, profile: &FirmwareProfile, bootloader: &Bootloader) -> Half {
     let matches: Vec<Side> = board
         .halves
         .iter()
-        .filter(|h| h.bootloader_volume == bootloader.name)
+        .filter(|h| {
+            board
+                .bootloader(profile, h.side)
+                .is_some_and(|facts| facts.volumes.contains(&bootloader.name))
+        })
         .map(|h| h.side)
         .collect();
     match matches.as_slice() {
@@ -95,9 +99,16 @@ pub enum FlashError {
 }
 
 /// Checks that `firmware` is a UF2 file the `side` half of `board` accepts.
-pub fn check(board: &Board, side: Side, firmware: &[u8]) -> Result<Uf2Info, FlashError> {
+pub fn check(
+    board: &Board,
+    profile: &FirmwareProfile,
+    side: Side,
+    firmware: &[u8],
+) -> Result<Uf2Info, FlashError> {
     let info = uf2::inspect(firmware)?;
-    let expected = board.half(side).and_then(|h| h.uf2_family);
+    let expected = board
+        .bootloader(profile, side)
+        .and_then(|facts| facts.uf2_family);
     // A combined file carries both halves; each bootloader takes its own.
     match expected {
         Some(family) if !info.families.is_empty() && !info.families.contains(&family) => {
@@ -125,12 +136,13 @@ pub fn flash(bootloader: &Bootloader, firmware: &[u8]) -> Result<(), FlashError>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
     pub side: Side,
-    /// The volume to wait for.
-    pub volume: String,
+    /// The volume names to wait for; any one of them.
+    pub volumes: Vec<String>,
 }
 
-/// The halves of `board` in flashing order.
-pub fn plan(board: &Board) -> Vec<Step> {
+/// The halves of `board` in flashing order, as flashed when running
+/// `profile`.
+pub fn plan(board: &Board, profile: &FirmwareProfile) -> Vec<Step> {
     board
         .flash
         .order
@@ -138,7 +150,7 @@ pub fn plan(board: &Board) -> Vec<Step> {
         .filter_map(|side| {
             Some(Step {
                 side: *side,
-                volume: board.half(*side)?.bootloader_volume.clone(),
+                volumes: board.bootloader(profile, *side)?.volumes,
             })
         })
         .collect()
@@ -208,38 +220,45 @@ mod tests {
         let found = scan(&volumes.0);
         let (assimilator, go60_right) = (&found[0], &found[1]);
         let (go60, imprint) = (board("moergo-go60"), board("cyboard-imprint"));
-        assert_eq!(identify(&go60, go60_right), Half::Known(Side::Right));
-        assert_eq!(identify(&go60, assimilator), Half::NotThisBoard);
+        let (stock, cyboard) = (&go60.firmware[0], &imprint.firmware[0]);
+        assert_eq!(identify(&go60, stock, go60_right), Half::Known(Side::Right));
+        assert_eq!(identify(&go60, stock, assimilator), Half::NotThisBoard);
         // Both Imprint halves mount under the same name.
-        assert_eq!(identify(&imprint, assimilator), Half::Either);
+        assert_eq!(identify(&imprint, cyboard, assimilator), Half::Either);
     }
 
     #[test]
     fn plans_follow_the_vendor_order() {
-        let sides = |id: &str| plan(&board(id)).iter().map(|s| s.side).collect::<Vec<_>>();
+        let steps = |id: &str| {
+            let board = board(id);
+            plan(&board, &board.firmware[0])
+        };
+        let sides = |id: &str| steps(id).iter().map(|s| s.side).collect::<Vec<_>>();
         assert_eq!(sides("moergo-go60"), [Side::Right, Side::Left]);
         assert_eq!(sides("cyboard-imprint"), [Side::Left, Side::Right]);
-        assert_eq!(plan(&board("moergo-go60"))[0].volume, "GO60RHBOOT");
+        assert_eq!(steps("moergo-go60")[0].volumes, ["GO60RHBOOT"]);
     }
 
     #[test]
     fn firmware_for_the_wrong_half_is_caught() {
         let go60 = board("moergo-go60");
+        let stock = &go60.firmware[0];
         let left = uf2::tests::image(&[0x9809_B007]);
         let both = uf2::tests::image(&[0x9809_B007, 0x980A_B007]);
-        assert!(check(&go60, Side::Left, &left).is_ok());
+        assert!(check(&go60, stock, Side::Left, &left).is_ok());
         assert!(matches!(
-            check(&go60, Side::Right, &left),
+            check(&go60, stock, Side::Right, &left),
             Err(FlashError::WrongHalf)
         ));
         assert!(
-            check(&go60, Side::Right, &both).is_ok(),
+            check(&go60, stock, Side::Right, &both).is_ok(),
             "a combined file suits either half"
         );
         // The Imprint declares no family, so any valid UF2 is accepted.
-        assert!(check(&board("cyboard-imprint"), Side::Right, &left).is_ok());
+        let imprint = board("cyboard-imprint");
+        assert!(check(&imprint, &imprint.firmware[0], Side::Right, &left).is_ok());
         assert!(matches!(
-            check(&go60, Side::Left, b"not firmware"),
+            check(&go60, stock, Side::Left, b"not firmware"),
             Err(FlashError::Firmware(_))
         ));
     }

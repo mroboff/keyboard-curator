@@ -1,0 +1,116 @@
+# Controller boards that shields plug into: the module that carries the
+# microcontroller, the radio and the bootloader. A shield's firmware profile
+# names one by `id`; the board's halves then need no bootloader facts of
+# their own. The ZMK board names and connectors are from ZMK v0.3.0's
+# board metadata (app/boards/arm/*/*.zmk.yml, MIT). Bootloader volume names
+# are from each bootloader's own source (UF2_VOLUME_LABEL in
+# adafruit/Adafruit_nRF52_Bootloader src/boards/*/board.h, and Seeed's and
+# Keycapsss's builds of it); RP2040 boards use the chip's own bootloader,
+# which always mounts as RPI-RP2. UF2 family IDs are from
+# microsoft/uf2 utils/uf2families.json.
+
+[[controllers]]
+id = "nice_nano_v2"
+name = "nice!nano v2"
+board = "nice_nano_v2"
+connector = "pro_micro"
+bootloader_volumes = ["NICENANO"]
+uf2_family = 0xADA52840
+bootloader_entry = "Double-tap the reset button, or short the RST and GND pins together twice quickly."
+notes = ["Supermini nRF52840 clones ship with the same bootloader and are built as a nice!nano v2."]
+
+[[controllers]]
+id = "nice_nano"
+name = "nice!nano v1"
+board = "nice_nano"
+connector = "pro_micro"
+bootloader_volumes = ["NICENANO"]
+uf2_family = 0xADA52840
+bootloader_entry = "Double-tap the reset button, or short the RST and GND pins together twice quickly."
+
+[[controllers]]
+id = "puchi_ble_v1"
+name = "Puchi-BLE"
+board = "puchi_ble_v1"
+connector = "pro_micro"
+bootloader_volumes = ["NRF52BOOT"]
+uf2_family = 0xADA52840
+bootloader_entry = "Short the RST and GND pins together twice within half a second."
+
+[[controllers]]
+id = "nrfmicro_13"
+name = "nRFMicro 1.3 and 1.4"
+board = "nrfmicro_13"
+connector = "pro_micro"
+bootloader_volumes = ["NRFMICRO"]
+uf2_family = 0xADA52840
+bootloader_entry = "Double-tap the reset button."
+
+[[controllers]]
+id = "bluemicro840_v1"
+name = "BlueMicro840"
+board = "bluemicro840_v1"
+connector = "pro_micro"
+bootloader_volumes = ["BLUEMICRO"]
+uf2_family = 0xADA52840
+bootloader_entry = "Double-tap the reset button."
+
+[[controllers]]
+id = "mikoto_520"
+name = "Mikoto"
+board = "mikoto_520"
+connector = "pro_micro"
+bootloader_volumes = ["MIKOTO-BOOT"]
+uf2_family = 0xADA52840
+bootloader_entry = "Double-tap the reset button."
+
+[[controllers]]
+id = "seeeduino_xiao_ble"
+name = "Seeed XIAO BLE"
+board = "seeeduino_xiao_ble"
+connector = "seeed_xiao"
+# Seeed's bootloader for the Sense variant mounts as XIAO-SENSE; the plain
+# XIAO BLE build mounts as XIAO-BOOT.
+bootloader_volumes = ["XIAO-SENSE", "XIAO-BOOT"]
+uf2_family = 0xADA52840
+bootloader_entry = "Double-tap the reset button beside the USB connector."
+
+[[controllers]]
+id = "sparkfun_pro_micro_rp2040"
+name = "SparkFun Pro Micro RP2040"
+board = "sparkfun_pro_micro_rp2040"
+connector = "pro_micro"
+bootloader_volumes = ["RPI-RP2"]
+uf2_family = 0xE48BFF56
+bootloader_entry = "Hold the BOOT button while plugging the keyboard in, or while pressing reset."
+notes = ["No Bluetooth: an RP2040 keyboard is wired only."]
+
+[[controllers]]
+id = "adafruit_kb2040"
+name = "Adafruit KB2040"
+board = "adafruit_kb2040"
+connector = "pro_micro"
+bootloader_volumes = ["RPI-RP2"]
+uf2_family = 0xE48BFF56
+bootloader_entry = "Hold the BOOT button while plugging the keyboard in, or while pressing reset."
+notes = ["No Bluetooth: an RP2040 keyboard is wired only."]
+
+[[controllers]]
+id = "boardsource_blok"
+name = "Boardsource Blok"
+board = "boardsource_blok"
+connector = "pro_micro"
+bootloader_volumes = ["RPI-RP2"]
+uf2_family = 0xE48BFF56
+bootloader_entry = "Hold the BOOT button while plugging the keyboard in, or while pressing reset."
+notes = ["No Bluetooth: an RP2040 keyboard is wired only."]
+
+[[controllers]]
+id = "seeeduino_xiao_rp2040"
+name = "Seeed XIAO RP2040"
+board = "seeeduino_xiao_rp2040"
+connector = "seeed_xiao"
+bootloader_volumes = ["RPI-RP2"]
+uf2_family = 0xE48BFF56
+bootloader_entry = "Hold the B button while pressing R, or while plugging the keyboard in."
+notes = ["No Bluetooth: an RP2040 keyboard is wired only."]

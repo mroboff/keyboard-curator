@@ -11,6 +11,7 @@
 id = "dygma-defy"
 name = "Defy"
 vendor = "Dygma"
+verified = true
 # Dygma publishes no brightness limit, and its own app allows the full range.
 brightness_cap = 100
 default_layout = "defy"
@@ -33,12 +34,10 @@ bootloader_entry = "Firmware updates are done with Dygma's Bazecor, not from her
 [[halves]]
 side = "left"
 central = true
-bootloader_volume = ""
 
 [[halves]]
 side = "right"
 central = false
-bootloader_volume = ""
 
 [[firmware]]
 id = "dygma-defy"

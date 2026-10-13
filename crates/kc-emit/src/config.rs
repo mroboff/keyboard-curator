@@ -112,13 +112,13 @@ pub fn west(profile: &FirmwareProfile, config: &FirmwareConfig, addons: &[Addon]
     out
 }
 
-/// The name of the firmware artifact for one half, such as `imprint_left`.
+/// The name of the firmware artifact for one half, such as `imprint_left`,
+/// or for a whole keyboard, such as `reviung41`.
 pub fn artifact_name(profile: &FirmwareProfile, side: Side) -> String {
-    let side = match side {
-        Side::Left => "left",
-        Side::Right => "right",
-    };
-    format!("{}_{side}", profile.config_name)
+    match side {
+        Side::Whole => profile.config_name.clone(),
+        side => format!("{}_{}", profile.config_name, side.name()),
+    }
 }
 
 /// The name of the generated overlay that tells one half's firmware which

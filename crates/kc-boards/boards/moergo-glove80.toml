@@ -6,6 +6,7 @@
 id = "moergo-glove80"
 name = "Glove80"
 vendor = "MoErgo"
+verified = true
 # MoErgo voids the warranty above this (CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX):
 # more draws current that can damage the computer.
 brightness_cap = 80

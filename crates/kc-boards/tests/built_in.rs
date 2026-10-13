@@ -116,8 +116,8 @@ fn go60_halves_and_firmware() {
     assert_eq!(go60.brightness_cap, 40);
     assert_eq!(go60.flash.order, [Side::Right, Side::Left]);
     assert_eq!(
-        go60.half(Side::Right).unwrap().bootloader_volume,
-        "GO60RHBOOT"
+        go60.half(Side::Right).unwrap().bootloader_volume.as_deref(),
+        Some("GO60RHBOOT")
     );
     assert_every_key_lit(&go60);
 
@@ -239,12 +239,20 @@ fn glove80_halves_and_firmware() {
     assert_eq!(glove80.brightness_cap, 80);
     assert_eq!(glove80.flash.order, [Side::Right, Side::Left]);
     assert_eq!(
-        glove80.half(Side::Left).unwrap().bootloader_volume,
-        "GLV80LHBOOT"
+        glove80
+            .half(Side::Left)
+            .unwrap()
+            .bootloader_volume
+            .as_deref(),
+        Some("GLV80LHBOOT")
     );
     assert_eq!(
-        glove80.half(Side::Right).unwrap().bootloader_volume,
-        "GLV80RHBOOT"
+        glove80
+            .half(Side::Right)
+            .unwrap()
+            .bootloader_volume
+            .as_deref(),
+        Some("GLV80RHBOOT")
     );
     assert!(glove80.half(Side::Left).unwrap().central);
     assert_every_key_lit(&glove80);
@@ -327,4 +335,137 @@ fn imprint_rmk_firmware_is_configured_live() {
     assert_eq!(rmk.led_of(&imprint, 41), Some(0));
     assert_eq!(rmk.led_of(&imprint, 42), Some(41));
     assert_eq!(rmk.key_of_led(&imprint, 81), Some(79));
+}
+
+/// A keyboard that is not split, built as a shield on a controller from
+/// the table: its bootloader facts come from the controller.
+const WHOLE: &str = r#"
+id = "test-whole"
+name = "Whole"
+vendor = "Test"
+brightness_cap = 0
+default_layout = "l"
+
+[flash]
+order = ["whole"]
+
+[[halves]]
+side = "whole"
+central = true
+
+[[firmware]]
+id = "zmk"
+name = "ZMK on a nice!nano v2"
+zephyr = "3.5"
+config_name = "whole"
+workflow = "w"
+zmk = { url = "u", revision = "r" }
+controller = "nice_nano_v2"
+
+[[firmware.builds]]
+side = "whole"
+board = "nice_nano_v2"
+shield = "whole"
+
+[[layouts]]
+id = "l"
+name = "L"
+keys = [[100, 100, 0, 0, 0, 0, 0]]
+"#;
+
+#[test]
+fn the_controller_table_is_sound() {
+    let controllers = kc_boards::controllers();
+    assert!(controllers.len() >= 8);
+    let mut ids = std::collections::HashSet::new();
+    for controller in controllers {
+        assert!(
+            ids.insert(controller.id.as_str()),
+            "{} twice",
+            controller.id
+        );
+        assert!(
+            !controller.bootloader_volumes.is_empty(),
+            "{}",
+            controller.id
+        );
+        assert!(controller.uf2_family.is_some(), "{}", controller.id);
+        assert!(
+            ["pro_micro", "seeed_xiao"].contains(&controller.connector.as_str()),
+            "{} exposes {}",
+            controller.id,
+            controller.connector
+        );
+        assert!(!controller.bootloader_entry.is_empty(), "{}", controller.id);
+    }
+    assert_eq!(
+        kc_boards::controller("nice_nano_v2")
+            .unwrap()
+            .bootloader_volumes,
+        ["NICENANO"]
+    );
+}
+
+#[test]
+fn a_shield_takes_its_bootloader_from_its_controller() {
+    use kc_boards::BoardError;
+
+    let board = Board::from_toml(WHOLE).unwrap();
+    assert!(!board.verified);
+    let profile = &board.firmware[0];
+    let facts = board.bootloader(profile, Side::Whole).unwrap();
+    assert_eq!(facts.volumes, ["NICENANO"]);
+    assert_eq!(facts.uf2_family, Some(0xADA5_2840));
+    assert!(facts.entry.starts_with("Double-tap the reset button"));
+    assert_eq!(board.bootloader_entry(profile), facts.entry);
+    assert_eq!(board.bootloader(profile, Side::Left), None);
+
+    // The board's own words win over the controller's.
+    let own = WHOLE.replace(
+        "order = [\"whole\"]",
+        "order = [\"whole\"]\nbootloader_entry = \"Hold Esc.\"",
+    );
+    assert_eq!(
+        Board::from_toml(&own).unwrap().bootloader_entry(profile),
+        "Hold Esc."
+    );
+
+    let unknown = WHOLE.replace("controller = \"nice_nano_v2\"", "controller = \"nope\"");
+    assert_eq!(
+        Board::from_toml(&unknown),
+        Err(BoardError::UnknownController {
+            profile: "zmk".into(),
+            controller: "nope".into()
+        })
+    );
+    let mismatch = WHOLE.replace("board = \"nice_nano_v2\"", "board = \"seeeduino_xiao_ble\"");
+    assert!(matches!(
+        Board::from_toml(&mismatch),
+        Err(BoardError::ControllerMismatch { .. })
+    ));
+    let none = WHOLE.replace("controller = \"nice_nano_v2\"\n", "");
+    assert_eq!(
+        Board::from_toml(&none),
+        Err(BoardError::NoBootloader {
+            profile: "zmk".into(),
+            side: Side::Whole
+        })
+    );
+    let halves = WHOLE.replace(
+        "side = \"whole\"\ncentral = true\n",
+        "side = \"whole\"\ncentral = true\n\n[[halves]]\nside = \"left\"\ncentral = false\n",
+    );
+    assert_eq!(Board::from_toml(&halves), Err(BoardError::WholeAndHalves));
+}
+
+#[test]
+fn the_boards_that_ship_by_hand_are_verified() {
+    for id in [
+        "cyboard-imprint",
+        "moergo-go60",
+        "moergo-glove80",
+        "dygma-defy",
+    ] {
+        assert!(board(id).verified, "{id}");
+    }
 }

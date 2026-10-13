@@ -147,8 +147,8 @@ pub fn fetch_release(
             .find(|f| f.name == file.name)
             .map(|f| f.side)
             .ok_or_else(|| format!("{} is not a file this board expects", file.name))?;
-        let info =
-            kc_flash::check(board, side, &file.bytes).map_err(|e| format!("{}: {e}", file.name))?;
+        let info = kc_flash::check(board, profile, side, &file.bytes)
+            .map_err(|e| format!("{}: {e}", file.name))?;
         let (start, end) = (
             fetched.manifest.application_range.start(),
             fetched.manifest.application_range.end(),

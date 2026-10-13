@@ -15,6 +15,11 @@ pub struct Board {
     pub id: String,
     pub name: String,
     pub vendor: String,
+    /// Whether this definition has been checked on a real keyboard. A board
+    /// made from a firmware's own files starts out unverified, and the app
+    /// says so where the board is chosen.
+    #[serde(default)]
+    pub verified: bool,
     /// Highest LED brightness (percent) the firmware may be configured for.
     pub brightness_cap: u8,
     /// The layout a new project starts with.
@@ -66,6 +71,37 @@ pub struct PhysicalLayout {
 pub enum Side {
     Left,
     Right,
+    /// A keyboard that is not split: the one unit there is to flash.
+    Whole,
+}
+
+impl Side {
+    /// The side as it appears in file and artifact names.
+    pub fn name(self) -> &'static str {
+        match self {
+            Side::Left => "left",
+            Side::Right => "right",
+            Side::Whole => "whole",
+        }
+    }
+
+    /// The side in a sentence: "the left half", "the keyboard".
+    pub fn label(self) -> &'static str {
+        match self {
+            Side::Left => "left half",
+            Side::Right => "right half",
+            Side::Whole => "keyboard",
+        }
+    }
+
+    /// The side as a title: "Left Half", "Keyboard".
+    pub fn title(self) -> &'static str {
+        match self {
+            Side::Left => "Left Half",
+            Side::Right => "Right Half",
+            Side::Whole => "Keyboard",
+        }
+    }
 }
 
 /// One half of a split keyboard.
@@ -75,8 +111,10 @@ pub struct Half {
     pub side: Side,
     /// The central half holds the keymap and talks to the host.
     pub central: bool,
-    /// Volume name the UF2 bootloader mounts as.
-    pub bootloader_volume: String,
+    /// Volume name the UF2 bootloader mounts as. Left out when the firmware
+    /// profile names a controller, which carries it instead.
+    #[serde(default)]
+    pub bootloader_volume: Option<String>,
     /// The UF2 family ID this half's bootloader accepts, when the vendor
     /// uses a different one per half. Lets a wrong-half file be caught.
     pub uf2_family: Option<u32>,
@@ -123,11 +161,45 @@ pub struct PointingDevice {
 pub struct FlashInfo {
     /// The order the vendor recommends flashing the halves in.
     pub order: Vec<Side>,
-    /// How to put a half into its bootloader, in the user's terms.
+    /// How to put a half into its bootloader, in the user's terms. Empty
+    /// when the controller's own words apply.
+    #[serde(default)]
     pub bootloader_entry: String,
     /// How to unlock ZMK Studio on the keyboard, when its firmware is built
     /// with Studio.
     pub studio_unlock: Option<String>,
+}
+
+/// A controller board that a shield plugs into: the module that carries
+/// the microcontroller and the bootloader. The table is `controllers.toml`
+/// beside the boards; a firmware profile names one by ID.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Controller {
+    pub id: String,
+    pub name: String,
+    /// The ZMK board name a build for it names.
+    pub board: String,
+    /// The connector it exposes, in ZMK's words: `pro_micro`, `seeed_xiao`.
+    pub connector: String,
+    /// The volume names its UF2 bootloader mounts as. Some have shipped
+    /// with more than one.
+    pub bootloader_volumes: Vec<String>,
+    pub uf2_family: Option<u32>,
+    pub bootloader_entry: String,
+    /// What the user should know: clones built as it, what it lacks.
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
+/// How one unit of a keyboard is flashed: what its bootloader mounts as,
+/// which firmware it accepts and how to reach it, from the half itself or
+/// from the controller its firmware profile names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BootloaderFacts {
+    pub volumes: Vec<String>,
+    pub uf2_family: Option<u32>,
+    pub entry: String,
 }
 
 /// A feature a firmware profile provides.
@@ -282,6 +354,11 @@ pub struct FirmwareProfile {
     /// What an RMK build for this board is made from. RMK only, and
     /// required for it.
     pub rmk: Option<RmkProfile>,
+    /// The controller board the keyboard's shield is built for, by its ID
+    /// in the controller table, when the keyboard is a shield. The
+    /// bootloader facts then come from the controller.
+    #[serde(default)]
+    pub controller: Option<String>,
     #[serde(default)]
     pub builds: Vec<BuildTarget>,
 }
@@ -562,6 +639,19 @@ pub enum BoardError {
     StarterKeyCount { found: usize, keys: usize },
     #[error("starter key `{0}` is not a ZMK keycode")]
     UnknownStarterKey(String),
+    #[error("a whole keyboard has no left or right half besides")]
+    WholeAndHalves,
+    #[error("firmware profile `{profile}` names controller `{controller}`, which the controller table does not have")]
+    UnknownController { profile: String, controller: String },
+    #[error("firmware profile `{profile}` builds for board `{board}`, but its controller `{controller}` is built as `{expected}`")]
+    ControllerMismatch {
+        profile: String,
+        controller: String,
+        board: String,
+        expected: String,
+    },
+    #[error("firmware profile `{profile}` builds for the {side:?} half, which has no bootloader volume and no controller to take one from")]
+    NoBootloader { profile: String, side: Side },
 }
 
 impl Board {
@@ -582,6 +672,39 @@ impl Board {
 
     pub fn profile(&self, id: &str) -> Option<&FirmwareProfile> {
         self.firmware.iter().find(|p| p.id == id)
+    }
+
+    /// The controller a firmware profile is built for, when it names one.
+    pub fn controller(profile: &FirmwareProfile) -> Option<&'static Controller> {
+        profile.controller.as_deref().and_then(crate::controller)
+    }
+
+    /// How the `side` unit is flashed when it runs `profile`: the half's
+    /// own bootloader facts, or failing those the profile's controller's.
+    pub fn bootloader(&self, profile: &FirmwareProfile, side: Side) -> Option<BootloaderFacts> {
+        let half = self.half(side)?;
+        let controller = Self::controller(profile);
+        let volumes = match (&half.bootloader_volume, controller) {
+            (Some(volume), _) => vec![volume.clone()],
+            (None, Some(controller)) => controller.bootloader_volumes.clone(),
+            (None, None) => return None,
+        };
+        Some(BootloaderFacts {
+            volumes,
+            uf2_family: half
+                .uf2_family
+                .or_else(|| controller.and_then(|c| c.uf2_family)),
+            entry: self.bootloader_entry(profile),
+        })
+    }
+
+    /// How to put the keyboard into its bootloader: the board's own words,
+    /// or failing those the controller's.
+    pub fn bootloader_entry(&self, profile: &FirmwareProfile) -> String {
+        if !self.flash.bootloader_entry.is_empty() {
+            return self.flash.bootloader_entry.clone();
+        }
+        Self::controller(profile).map_or_else(String::new, |c| c.bootloader_entry.clone())
     }
 
     /// The families this board has firmware for, in the order they first
@@ -643,6 +766,9 @@ impl Board {
         let centrals = self.halves.iter().filter(|h| h.central).count();
         if centrals != 1 {
             return Err(BoardError::CentralCount(centrals));
+        }
+        if sides.contains(&Side::Whole) && sides.len() > 1 {
+            return Err(BoardError::WholeAndHalves);
         }
 
         let mut lit = HashSet::new();
@@ -757,10 +883,36 @@ impl Board {
                     return Err(BoardError::BadDygma(profile.id.clone()));
                 }
             }
+            let controller =
+                match &profile.controller {
+                    Some(id) => Some(crate::controller(id).ok_or_else(|| {
+                        BoardError::UnknownController {
+                            profile: profile.id.clone(),
+                            controller: id.clone(),
+                        }
+                    })?),
+                    None => None,
+                };
             for build in &profile.builds {
                 if !has(build.side) {
                     return Err(BoardError::UnknownHalf {
                         what: format!("firmware profile `{}`", profile.id),
+                        side: build.side,
+                    });
+                }
+                if let Some(controller) = controller {
+                    if build.board != controller.board {
+                        return Err(BoardError::ControllerMismatch {
+                            profile: profile.id.clone(),
+                            controller: controller.id.clone(),
+                            board: build.board.clone(),
+                            expected: controller.board.clone(),
+                        });
+                    }
+                }
+                if self.bootloader(profile, build.side).is_none() {
+                    return Err(BoardError::NoBootloader {
+                        profile: profile.id.clone(),
                         side: build.side,
                     });
                 }

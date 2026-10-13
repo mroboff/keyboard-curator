@@ -8,18 +8,11 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use kc_boards::board::Side;
+use kc_boards::board::{FirmwareProfile, Side};
 use kc_boards::Board;
 use kc_flash::{Bootloader, Half};
 
 use crate::workspace::{help, subheading};
-
-fn side_name(side: Side) -> &'static str {
-    match side {
-        Side::Left => "left",
-        Side::Right => "right",
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 enum Progress {
@@ -30,7 +23,8 @@ enum Progress {
 
 struct Step {
     side: Side,
-    volume: String,
+    /// The volume names the half's bootloader mounts as; any one will do.
+    volumes: Vec<String>,
     /// The firmware chosen for this half.
     firmware: Option<(PathBuf, Vec<u8>)>,
     progress: Progress,
@@ -38,6 +32,9 @@ struct Step {
 
 pub struct FlashView {
     board: Board,
+    /// The firmware the keyboard runs, which says how it is flashed when
+    /// the board's halves do not.
+    profile: FirmwareProfile,
     steps: Vec<Step>,
     /// Bootloader drives currently mounted.
     drives: Vec<Bootloader>,
@@ -45,16 +42,9 @@ pub struct FlashView {
 }
 
 impl FlashView {
-    pub fn new(board: Board, cx: &mut Context<Self>) -> Self {
-        let steps = kc_flash::plan(&board)
-            .into_iter()
-            .map(|step| Step {
-                side: step.side,
-                volume: step.volume,
-                firmware: None,
-                progress: Progress::Waiting,
-            })
-            .collect();
+    pub fn new(board: Board, profile: &str, cx: &mut Context<Self>) -> Self {
+        let profile = board.profile(profile).unwrap_or(&board.firmware[0]).clone();
+        let steps = Self::steps(&board, &profile);
         // Watch for bootloader drives for as long as this view exists.
         cx.spawn(async move |this, cx| loop {
             let drives = kc_flash::scan(Path::new(kc_flash::VOLUMES));
@@ -74,10 +64,40 @@ impl FlashView {
         .detach();
         Self {
             board,
+            profile,
             steps,
             drives: Vec::new(),
             message: None,
         }
+    }
+
+    fn steps(board: &Board, profile: &FirmwareProfile) -> Vec<Step> {
+        kc_flash::plan(board, profile)
+            .into_iter()
+            .map(|step| Step {
+                side: step.side,
+                volumes: step.volumes,
+                firmware: None,
+                progress: Progress::Waiting,
+            })
+            .collect()
+    }
+
+    /// Follows the keyboard's firmware choice. A different firmware can
+    /// mean a different controller, so the steps start over, unless a
+    /// flash is under way.
+    pub fn set_profile(&mut self, profile: &str, cx: &mut Context<Self>) {
+        if self.profile.id == profile {
+            return;
+        }
+        let Some(profile) = self.board.profile(profile).cloned() else {
+            return;
+        };
+        self.profile = profile;
+        if self.steps.iter().all(|s| s.progress == Progress::Waiting) {
+            self.steps = Self::steps(&self.board, &self.profile);
+        }
+        cx.notify();
     }
 
     /// Takes firmware from a build, replacing anything chosen before.
@@ -126,10 +146,10 @@ impl FlashView {
             for step in &mut self.steps {
                 let has_family = self
                     .board
-                    .half(step.side)
-                    .is_some_and(|h| h.uf2_family.is_some());
-                let by_name = name.contains(side_name(step.side));
-                let suits = match kc_flash::check(&self.board, step.side, &bytes) {
+                    .bootloader(&self.profile, step.side)
+                    .is_some_and(|facts| facts.uf2_family.is_some());
+                let by_name = name.contains(step.side.name());
+                let suits = match kc_flash::check(&self.board, &self.profile, step.side, &bytes) {
                     Ok(info) => (has_family && !info.families.is_empty()) || by_name,
                     Err(kc_flash::FlashError::WrongHalf) => false,
                     Err(error) => {
@@ -180,8 +200,8 @@ impl FlashView {
     fn drive_for(&self, index: usize) -> Option<&Bootloader> {
         let step = &self.steps[index];
         self.drives.iter().find(|drive| {
-            drive.name == step.volume
-                && match kc_flash::identify(&self.board, drive) {
+            step.volumes.contains(&drive.name)
+                && match kc_flash::identify(&self.board, &self.profile, drive) {
                     Half::Known(side) => side == step.side,
                     Half::Either => self.current() == Some(index),
                     Half::NotThisBoard => false,
@@ -238,9 +258,9 @@ impl Render for FlashView {
                     (_, Some(_), true) => ("Bootloader found. Ready to flash.".to_string(), accent),
                     (_, Some(_), false) if current == Some(index) => (
                         format!(
-                            "Connect the {} half by USB and put it into its bootloader. Waiting for {}…",
-                            side_name(step.side),
-                            step.volume
+                            "Connect the {} by USB and put it into its bootloader. Waiting for {}…",
+                            step.side.label(),
+                            step.volumes.join(" or ")
                         ),
                         muted,
                     ),
@@ -254,7 +274,11 @@ impl Render for FlashView {
                     .p_4()
                     .rounded_lg()
                     .border_1()
-                    .border_color(if current == Some(index) { accent } else { border })
+                    .border_color(if current == Some(index) {
+                        accent
+                    } else {
+                        border
+                    })
                     .child(
                         div()
                             .flex_1()
@@ -262,9 +286,9 @@ impl Render for FlashView {
                             .flex_col()
                             .gap_1()
                             .child(div().text_sm().child(format!(
-                                "{}. {} half",
+                                "{}. {}",
                                 index + 1,
-                                if step.side == Side::Left { "Left" } else { "Right" }
+                                step.side.title()
                             )))
                             .child(
                                 div()
@@ -278,7 +302,7 @@ impl Render for FlashView {
                         row.child(
                             Button::new(("flash", index))
                                 .primary()
-                                .label(format!("Flash {} Half", if step.side == Side::Left { "Left" } else { "Right" }))
+                                .label(format!("Flash {}", step.side.title()))
                                 .on_click(cx.listener(move |this, _, _, cx| this.flash(index, cx))),
                         )
                     })
@@ -334,7 +358,10 @@ impl Render for FlashView {
                         div()
                             .text_xs()
                             .text_color(muted)
-                            .child(format!("To enter the bootloader: {}", self.board.flash.bootloader_entry)),
+                            .child(format!(
+                                "To enter the bootloader: {}",
+                                self.board.bootloader_entry(&self.profile)
+                            )),
                     )
                     .when(finished, |page| {
                         page.child(div().text_sm().text_color(success).child(

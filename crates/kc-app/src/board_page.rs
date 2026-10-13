@@ -156,7 +156,8 @@ impl BoardPage {
             cx.notify();
         })
         .detach();
-        let flash = cx.new(|cx| FlashView::new(board.clone(), cx));
+        // The firmware it follows is set on every render.
+        let flash = cx.new(|cx| FlashView::new(board.clone(), &board.firmware[0].id, cx));
         let tester = cx.new(|cx| KeyTester::new(board.clone(), window, cx));
 
         let mut page = Self {
@@ -726,9 +727,9 @@ impl BoardPage {
     fn enter_bootloader(&mut self, side: Side, cx: &mut Context<Self>) {
         let (board, config) = (self.board.clone(), self.config(cx));
         let device = self.saved(cx).and_then(|k| k.device.clone());
-        let name = if side == Side::Left { "left" } else { "right" };
         self.live = Some(format!(
-            "Asking the {name} half to restart into its bootloader…"
+            "Asking the {} to restart into its bootloader…",
+            side.label()
         ));
         self.live_busy = true;
         cx.notify();
@@ -743,7 +744,8 @@ impl BoardPage {
                 this.live_busy = false;
                 this.live = Some(match result {
                     Ok(()) => format!(
-                        "The {name} half is restarting into its bootloader. Its drive appears below in a moment."
+                        "The {} is restarting into its bootloader. Its drive appears below in a moment.",
+                        side.label()
                     ),
                     Err(error) => format!("{error}."),
                 });
@@ -2088,6 +2090,9 @@ impl BoardPage {
 
 impl Render for BoardPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let profile = self.config(cx).profile;
+        self.flash
+            .update(cx, |flash, cx| flash.set_profile(&profile, cx));
         let theme = cx.theme();
         let (muted, border, success) = (theme.muted_foreground, theme.border, theme.success);
         let Some(saved) = self.saved(cx).cloned() else {

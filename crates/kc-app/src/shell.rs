@@ -103,11 +103,10 @@ pub(crate) fn connection_hint(boards: &[Board]) -> String {
         .iter()
         .filter_map(|board| {
             let central = board.halves.iter().find(|h| h.central)?;
-            let side = match central.side {
-                Side::Left => "left",
-                Side::Right => "right",
-            };
-            Some(format!("the {side} half of the {}", board.name))
+            Some(match central.side {
+                Side::Whole => format!("the {}", board.name),
+                side => format!("the {} of the {}", side.label(), board.name),
+            })
         })
         .collect::<Vec<_>>();
     format!(
@@ -1637,6 +1636,11 @@ impl Shell {
             .child(div().w_72().child(Input::new(&self.name_input)))
             .child(label("MODEL"))
             .child(div().flex().flex_wrap().gap_1().children(models))
+            .when(!board.verified, |page| {
+                page.child(div().text_xs().text_color(muted).child(
+                    "This board was made from its firmware's own files and has not been tried on a real keyboard yet. If something is off, say so on the project's issue tracker.",
+                ))
+            })
             .child(label("FIRMWARE"))
             .child(
                 div()

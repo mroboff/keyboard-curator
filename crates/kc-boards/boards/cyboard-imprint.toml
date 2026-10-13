@@ -5,6 +5,7 @@
 id = "cyboard-imprint"
 name = "Imprint"
 vendor = "Cyboard"
+verified = true
 # ZMK_RGB_UNDERGLOW_BRT_MAX in the shield's Kconfig.defconfig.
 brightness_cap = 50
 default_layout = "physical_layout_imprint_function_row_full_bottom_row"

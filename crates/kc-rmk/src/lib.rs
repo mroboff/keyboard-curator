@@ -330,16 +330,13 @@ pub fn keymap(project: &Project, profile: &RmkProfile) -> Result<String, String>
     Ok(out)
 }
 
-fn side_name(side: Side) -> &'static str {
-    match side {
-        Side::Left => "left",
-        Side::Right => "right",
-    }
-}
-
-/// The name of the firmware file for one half, such as `imprint_left.uf2`.
+/// The name of the firmware file for one half, such as `imprint_left.uf2`,
+/// or for a whole keyboard, such as `reviung41.uf2`.
 pub fn artifact_name(profile: &FirmwareProfile, side: Side) -> String {
-    format!("{}_{}.uf2", profile.config_name, side_name(side))
+    match side {
+        Side::Whole => format!("{}.uf2", profile.config_name),
+        side => format!("{}_{}.uf2", profile.config_name, side.name()),
+    }
 }
 
 /// How a git revision is named in a Cargo dependency: a full commit hash
@@ -438,7 +435,12 @@ pub fn generate(
         .find(|h| h.central)
         .ok_or("the board has no central half")?;
     let peripheral = board.halves.iter().find(|h| !h.central);
-    let family = |half: &kc_boards::board::Half| half.uf2_family.unwrap_or(NRF52840_FAMILY);
+    let family = |half: &kc_boards::board::Half| {
+        board
+            .bootloader(profile, half.side)
+            .and_then(|facts| facts.uf2_family)
+            .unwrap_or(NRF52840_FAMILY)
+    };
     // Central first: which binary goes on which half, and its family.
     let mut images = vec![("central", central.side, family(central))];
     if let Some(half) = peripheral {

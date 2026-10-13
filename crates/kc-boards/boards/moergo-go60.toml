@@ -5,6 +5,7 @@
 id = "moergo-go60"
 name = "Go60"
 vendor = "MoErgo"
+verified = true
 # MoErgo voids the warranty above this (CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX).
 brightness_cap = 40
 default_layout = "physical_layout0"

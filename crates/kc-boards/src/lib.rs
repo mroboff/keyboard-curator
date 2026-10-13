@@ -7,14 +7,36 @@ pub mod board;
 pub mod dts;
 pub mod geometry;
 
-pub use board::{Board, BoardError, Delivery, Family};
+use std::sync::OnceLock;
 
-const BUILT_IN: &[&str] = &[
-    include_str!("../boards/cyboard-imprint.toml"),
-    include_str!("../boards/moergo-go60.toml"),
-    include_str!("../boards/moergo-glove80.toml"),
-    include_str!("../boards/dygma-defy.toml"),
-];
+use serde::Deserialize;
+
+pub use board::{Board, BoardError, Controller, Delivery, Family};
+
+// Written by the build script: one `include_str!` per file under `boards/`.
+include!(concat!(env!("OUT_DIR"), "/built_in.rs"));
+
+const CONTROLLERS: &str = include_str!("../controllers.toml");
+
+#[derive(Deserialize)]
+struct ControllerTable {
+    controllers: Vec<Controller>,
+}
+
+/// The controller boards that shields are built for.
+pub fn controllers() -> &'static [Controller] {
+    static TABLE: OnceLock<Vec<Controller>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        toml::from_str::<ControllerTable>(CONTROLLERS)
+            .expect("the controller table is valid")
+            .controllers
+    })
+}
+
+/// A controller by its ID.
+pub fn controller(id: &str) -> Option<&'static Controller> {
+    controllers().iter().find(|c| c.id == id)
+}
 
 /// Every board that ships with the app.
 pub fn built_in() -> Result<Vec<Board>, BoardError> {
