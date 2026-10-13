@@ -11,6 +11,8 @@ use crate::proto::{self, behaviors, core, keymap, meta, request, request_respons
 pub enum StudioError {
     #[error("the keyboard is locked: unlock ZMK Studio on it first")]
     Locked,
+    #[error("no connected keyboard answers ZMK Studio: connect it by USB, with firmware built with Studio")]
+    NotFound,
     #[error("the keyboard did not answer")]
     NoAnswer,
     #[error("the keyboard does not support this ({0})")]
@@ -197,6 +199,14 @@ impl<T: Read + Write> Client<T> {
                 }
             })
             .collect()
+    }
+
+    /// The keyboard's physical layouts, with which one is in use.
+    pub fn physical_layouts(&mut self) -> Result<keymap::PhysicalLayouts, StudioError> {
+        match self.keymap(keymap::request::RequestType::GetPhysicalLayouts(true))? {
+            keymap::response::ResponseType::GetPhysicalLayouts(layouts) => Ok(layouts),
+            _ => Err(StudioError::Protocol),
+        }
     }
 
     /// The keymap as the keyboard currently has it, unsaved changes included.

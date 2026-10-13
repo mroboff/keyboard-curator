@@ -233,7 +233,7 @@ pub mod behaviors {
 pub mod keymap {
     #[derive(Clone, PartialEq, prost::Message)]
     pub struct Request {
-        #[prost(oneof = "request::RequestType", tags = "1, 2, 3, 4, 5")]
+        #[prost(oneof = "request::RequestType", tags = "1, 2, 3, 4, 5, 6")]
         pub request_type: Option<request::RequestType>,
     }
 
@@ -250,12 +250,14 @@ pub mod keymap {
             SaveChanges(bool),
             #[prost(bool, tag = "5")]
             DiscardChanges(bool),
+            #[prost(bool, tag = "6")]
+            GetPhysicalLayouts(bool),
         }
     }
 
     #[derive(Clone, PartialEq, prost::Message)]
     pub struct Response {
-        #[prost(oneof = "response::ResponseType", tags = "1, 2, 3, 4, 5")]
+        #[prost(oneof = "response::ResponseType", tags = "1, 2, 3, 4, 5, 6")]
         pub response_type: Option<response::ResponseType>,
     }
 
@@ -272,7 +274,46 @@ pub mod keymap {
             SaveChanges(super::SaveChangesResponse),
             #[prost(bool, tag = "5")]
             DiscardChanges(bool),
+            #[prost(message, tag = "6")]
+            GetPhysicalLayouts(super::PhysicalLayouts),
         }
+    }
+
+    /// The keyboard's physical layouts, as its firmware declares them.
+    #[derive(Clone, PartialEq, prost::Message)]
+    pub struct PhysicalLayouts {
+        #[prost(uint32, tag = "1")]
+        pub active_layout_index: u32,
+        #[prost(message, repeated, tag = "2")]
+        pub layouts: Vec<PhysicalLayout>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    pub struct PhysicalLayout {
+        #[prost(string, tag = "1")]
+        pub name: String,
+        #[prost(message, repeated, tag = "2")]
+        pub keys: Vec<KeyPhysicalAttrs>,
+    }
+
+    /// One key's place, in the units devicetree uses: hundredths of a key
+    /// unit, and hundredths of a degree.
+    #[derive(Clone, PartialEq, prost::Message)]
+    pub struct KeyPhysicalAttrs {
+        #[prost(sint32, tag = "1")]
+        pub width: i32,
+        #[prost(sint32, tag = "2")]
+        pub height: i32,
+        #[prost(sint32, tag = "3")]
+        pub x: i32,
+        #[prost(sint32, tag = "4")]
+        pub y: i32,
+        #[prost(sint32, tag = "5")]
+        pub r: i32,
+        #[prost(sint32, tag = "6")]
+        pub rx: i32,
+        #[prost(sint32, tag = "7")]
+        pub ry: i32,
     }
 
     #[derive(Clone, PartialEq, prost::Message)]

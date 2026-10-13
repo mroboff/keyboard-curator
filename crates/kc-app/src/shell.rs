@@ -30,6 +30,9 @@ use crate::{
 struct KeyboardForm {
     /// The boards to choose between, as indices into the board list.
     choices: Vec<usize>,
+    /// Among them, boards made from what a connected keyboard reported
+    /// over ZMK Studio. One is kept only if it is chosen.
+    discovered: Vec<usize>,
     board: usize,
     firmware: String,
     /// The connected device the new board will be linked to.
@@ -142,7 +145,11 @@ impl Shell {
         })
         .detach();
         let library = cx.new(Library::new);
-        cx.observe(&library, |_, _, cx| cx.notify()).detach();
+        cx.observe(&library, |this, _, cx| {
+            this.refresh_boards(cx);
+            cx.notify();
+        })
+        .detach();
         let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("Board name"));
         cx.subscribe_in(
             &name_input,
@@ -162,7 +169,7 @@ impl Shell {
             }
         })
         .detach();
-        Self {
+        let mut shell = Self {
             boards,
             state,
             library,
@@ -178,7 +185,9 @@ impl Shell {
             exhibit: None,
             window_style: None,
             focus,
-        }
+        };
+        shell.refresh_boards(cx);
+        shell
     }
 
     /// Whether the open layout has changes that are not on disk.
@@ -1035,6 +1044,14 @@ impl Shell {
         cx.notify();
     }
 
+    /// The boards there are: the ones that ship with the app, then the
+    /// ones saved with the keyboards, made from what a keyboard reported.
+    fn refresh_boards(&mut self, cx: &App) {
+        let mut boards = kc_boards::built_in().unwrap_or_default();
+        boards.extend(self.library.read(cx).keyboards().boards().iter().cloned());
+        self.boards = Rc::new(boards);
+    }
+
     /// Starts adding a board that need not be connected, or even owned.
     fn start_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let board = self
@@ -1050,10 +1067,87 @@ impl Shell {
             .suggest_name(&self.boards[board]);
         let form = KeyboardForm {
             choices: (0..self.boards.len()).collect(),
+            discovered: Vec::new(),
             board,
             firmware: self.boards[board].firmware[0].id.clone(),
             device: None,
             note: None,
+            suggested,
+        };
+        self.open_form(form, window, cx);
+    }
+
+    /// Opens the form for a keyboard whose model its name did not settle,
+    /// with a board made from what it reported over Studio first, when it
+    /// answered, and the possible models after.
+    fn offer_discovered(
+        &mut self,
+        found: kc_device::Detected,
+        discovered: Vec<kc_studio::session::Discovered>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut boards = (*self.boards).clone();
+        let mut discovered_indices = Vec::new();
+        let mut notes = Vec::new();
+        let reported = discovered
+            .iter()
+            .find(|d| d.device.as_ref() == found.usb.link().as_ref() || discovered.len() == 1);
+        match reported {
+            Some(keyboard) if !keyboard.layouts.is_empty() => {
+                let usb = kc_boards::board::UsbId {
+                    vendor: found.usb.vendor,
+                    product: found.usb.product,
+                    name: keyboard.name.clone(),
+                };
+                match Board::from_studio(
+                    &keyboard.name,
+                    Some(usb),
+                    &keyboard.layouts,
+                    keyboard.active,
+                ) {
+                    Ok(board) if !boards.iter().any(|b| b.id == board.id) => {
+                        let keys = board.layout(&board.default_layout).map_or(0, |l| l.keys.len());
+                        notes.push(format!(
+                            "The keyboard calls itself “{}” and reported its own layout over ZMK Studio ({keys} keys). Choose it to edit the keyboard as it is, with no firmware build; or choose its model from the list, if it is there, to build firmware for it.",
+                            keyboard.name
+                        ));
+                        boards.push(board);
+                        discovered_indices.push(boards.len() - 1);
+                    }
+                    Ok(_) => {}
+                    Err(error) => notes.push(format!("What the keyboard reported could not be used: {error}.")),
+                }
+            }
+            Some(keyboard) if !keyboard.unlocked => {
+                notes.push(format!(
+                    "“{}” answers ZMK Studio but is locked, so it could not report its layout. Unlock Studio on it and try again, or choose its model.",
+                    keyboard.name
+                ));
+            }
+            _ => notes.push(
+                "Its name does not say for certain which model it is, and it did not answer ZMK Studio, so check the model.".into(),
+            ),
+        }
+        if found.usb.link().is_none() {
+            notes.push("It reports no serial number, so it cannot be linked and will not be recognized later.".into());
+        }
+        self.boards = Rc::new(boards);
+        let mut choices = discovered_indices.clone();
+        choices.extend(found.boards.iter().copied());
+        let board = choices[0];
+        let suggested = self
+            .library
+            .read(cx)
+            .keyboards()
+            .suggest_name(&self.boards[board]);
+        let form = KeyboardForm {
+            choices,
+            discovered: discovered_indices,
+            board,
+            firmware: self.boards[board].firmware[0].id.clone(),
+            device: Some(found.usb.clone()),
+            note: Some(notes.join(" ")),
             suggested,
         };
         self.open_form(form, window, cx);
@@ -1068,26 +1162,39 @@ impl Shell {
         let fresh = detected.iter().find(|d| saved(&d.usb).is_none());
         let already = detected.iter().find_map(|d| saved(&d.usb));
         match (fresh, already) {
-            (Some(found), _) => {
+            (Some(found), _) if found.certain => {
                 let board = found.boards[0];
-                let mut notes = Vec::new();
-                if !found.certain {
-                    notes.push(
-                        "Its name does not say for certain which model it is, so check the model.",
-                    );
-                }
-                if found.usb.link().is_none() {
-                    notes.push("It reports no serial number, so it cannot be linked and will not be recognized later.");
-                }
+                let note = found.usb.link().is_none().then(|| {
+                    "It reports no serial number, so it cannot be linked and will not be recognized later.".to_string()
+                });
                 let form = KeyboardForm {
                     choices: found.boards.clone(),
+                    discovered: Vec::new(),
                     board,
                     firmware: self.boards[board].firmware[0].id.clone(),
                     device: Some(found.usb.clone()),
-                    note: (!notes.is_empty()).then(|| notes.join(" ")),
+                    note,
                     suggested: keyboards.suggest_name(&self.boards[board]),
                 };
                 self.open_form(form, window, cx);
+            }
+            // A ZMK keyboard whose name the app does not know: ask it over
+            // Studio what it is, and offer that beside the possible models.
+            (Some(found), _) => {
+                let found = found.clone();
+                self.notice = Some("Asking the keyboard what it is over ZMK Studio…".into());
+                cx.notify();
+                cx.spawn_in(window, async move |this, cx| {
+                    let discovered = cx
+                        .background_executor()
+                        .spawn(async { kc_studio::session::discover() })
+                        .await;
+                    let _ = this.update_in(cx, |this, window, cx| {
+                        this.notice = None;
+                        this.offer_discovered(found, discovered, window, cx);
+                    });
+                })
+                .detach();
             }
             (None, Some(keyboard)) => {
                 let (id, name) = (keyboard.id, keyboard.name.clone());
@@ -1139,8 +1246,12 @@ impl Shell {
         let board = self.boards[form.board].clone();
         let firmware = form.firmware.clone();
         let link = form.device.as_ref().and_then(UsbDevice::link);
+        let keep_board = form.discovered.contains(&form.board);
         let result = self.library.update(cx, |library, cx| {
             library.change(cx, |k| {
+                if keep_board {
+                    k.add_board(board.clone());
+                }
                 let id = k.add(&name, &board, &firmware)?;
                 // The device was free when the form opened; if it has been
                 // taken since, the board is added unlinked.
@@ -1752,6 +1863,8 @@ impl Shell {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.form = None;
                                 this.error = None;
+                                // Drops any board offered from a keyboard.
+                                this.refresh_boards(cx);
                                 cx.notify();
                             })),
                     ),

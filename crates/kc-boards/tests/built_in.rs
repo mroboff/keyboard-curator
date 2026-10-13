@@ -506,3 +506,46 @@ fn the_generated_zmk_boards_are_whole() {
         }
     }
 }
+
+/// A board made from what a keyboard reports over ZMK Studio: whole, with
+/// one firmware that is never built, and the keys as reported.
+#[test]
+fn a_board_can_be_made_from_what_a_keyboard_reports() {
+    use kc_boards::board::UsbId;
+
+    let corne = board("corne");
+    let keys = corne.layout(&corne.default_layout).unwrap().keys.clone();
+    let usb = UsbId {
+        vendor: 0x1d50,
+        product: 0x615e,
+        name: "Corne-ish Zen".into(),
+    };
+    let layouts = [
+        ("".to_string(), keys.clone()),
+        ("Five".to_string(), keys[..40].to_vec()),
+    ];
+    let made = Board::from_studio("Corne-ish Zen", Some(usb.clone()), &layouts, 1).unwrap();
+    assert_eq!(made.id, "studio-corne-ish-zen");
+    assert_eq!(made.name, "Corne-ish Zen");
+    assert!(!made.verified);
+    assert_eq!(made.usb, [usb]);
+    assert_eq!(made.default_layout, "layout_1");
+    assert_eq!(made.layouts[0].name, "Layout 1");
+    assert_eq!(made.layouts[0].keys, keys);
+    assert_eq!(made.half(Side::Whole).map(|h| h.central), Some(true));
+    let profile = &made.firmware[0];
+    assert!(profile.studio_only);
+    assert_eq!(profile.delivery(), Delivery::Studio);
+    assert!(Delivery::Studio.is_live());
+    assert_eq!(profile.features(), [Capability::Studio]);
+    assert_eq!(made.bootloader(profile, Side::Whole), None);
+    assert_eq!(made.flash.order, []);
+
+    assert!(Board::from_studio("Nothing", None, &[], 0).is_err());
+    assert_eq!(
+        Board::from_studio("  My  Board!! ", None, &layouts, 0)
+            .unwrap()
+            .id,
+        "studio-my-board"
+    );
+}

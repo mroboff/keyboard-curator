@@ -49,6 +49,8 @@ Repeat this block for each row of the table at the end.
 - [ ] Per-key lighting: colors show on both halves; the brightness cap holds (Go60 40, Glove80 80, Imprint 50); lock and battery lights change state.
 - [ ] Recovery: pull the USB cable during a flash, then flash again; the keyboard recovers. Flash the vendor's own firmware back and confirm the keyboard is as it was.
 
+**A keyboard added from ZMK Studio** (Add Connected Board with a keyboard whose name the app does not know, Studio unlocked): the offered model names the keyboard and its key count; the editor shows its keys where they are; Read From Keyboard brings the layers and keys; a changed key applies and survives the keyboard being unplugged; a backup layout file is written first. Try it with an Imprint, Go60 or Glove80 whose USB name has been changed, so the app does not recognize it.
+
 **ZMK shields** (the boards under `crates/kc-boards/boards/zmk`): none is covered by this checklist. They ship unverified and say so; a shield is struck off that list only once someone has run "Every board, every firmware" on it with a real keyboard and its controller.
 
 **Dygma Defy only** (Bazecor closed throughout; reopen it only where it says)

@@ -101,6 +101,10 @@ pub struct Keyboards {
     format: u32,
     keyboards: Vec<Keyboard>,
     next_id: u32,
+    /// Boards the app has no file for, made from what a keyboard reported
+    /// over ZMK Studio. They go with the keyboards that use them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    boards: Vec<Board>,
 }
 
 impl Default for Keyboards {
@@ -109,7 +113,21 @@ impl Default for Keyboards {
             format: FORMAT,
             keyboards: Vec::new(),
             next_id: 1,
+            boards: Vec::new(),
         }
+    }
+}
+
+impl Keyboards {
+    /// The boards saved here, beside the ones that ship with the app.
+    pub fn boards(&self) -> &[Board] {
+        &self.boards
+    }
+
+    /// Keeps a board made from a keyboard, replacing one with the same ID.
+    pub fn add_board(&mut self, board: Board) {
+        self.boards.retain(|b| b.id != board.id);
+        self.boards.push(board);
     }
 }
 

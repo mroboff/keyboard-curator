@@ -3983,6 +3983,7 @@ dependencies = [
  "kc-model",
  "kc-rmk",
  "kc-rynk",
+ "kc-studio",
  "kc-zmk",
  "thiserror 2.0.21",
 ]

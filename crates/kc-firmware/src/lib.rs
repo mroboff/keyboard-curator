@@ -83,6 +83,8 @@ pub fn expressible(
 /// options, RMK's runtime settings, or Dygma's Focus settings.
 pub fn settings(board: &Board, config: &FirmwareConfig) -> &'static [Setting] {
     match config.family(board) {
+        // Firmware nobody builds has no settings to build in.
+        Family::Zmk if config.delivery(board) == Delivery::Studio => &[],
         Family::Zmk => kc_zmk::settings::SETTINGS,
         Family::Rmk if config.delivery(board) == Delivery::Released => kc_rmk::settings::SETTINGS,
         Family::Rmk => &[],
@@ -231,6 +233,15 @@ pub mod live {
                     notes: image.battery_summary().into_iter().collect(),
                 })
             }
+            (Family::Zmk, Delivery::Studio) => {
+                let project =
+                    kc_studio::session::read_board(board, &name).map_err(|e| e.to_string())?;
+                Ok(Read {
+                    project,
+                    carried: Carried::default(),
+                    notes: Vec::new(),
+                })
+            }
             (Family::Rmk, Delivery::Released) => {
                 let profile = board
                     .profile(&config.profile)
@@ -279,6 +290,24 @@ pub mod live {
                     changed: !applied.sent.is_empty(),
                     backup: saved,
                     changes: applied.sent,
+                })
+            }
+            (Family::Zmk, Delivery::Studio) => {
+                // What the keyboard holds is kept as a layout file first.
+                let held = kc_studio::session::read_board(board, &format!("{} before", board.name))
+                    .map_err(|e| e.to_string())?;
+                std::fs::create_dir_all(backups).map_err(|e| e.to_string())?;
+                let serial = device.map_or("keyboard", |d| d.serial.as_str());
+                let path = backups.join(format!("{}-{}-{}.kcproj", board.id, serial, stamp()));
+                std::fs::write(&path, kc_model::file::to_json(&held)).map_err(|e| e.to_string())?;
+                let changed = kc_studio::session::send_board(project).map_err(|e| e.to_string())?;
+                Ok(Applied {
+                    changed: changed > 0,
+                    backup: Some(path).filter(|_| changed > 0),
+                    changes: (changed > 0)
+                        .then(|| format!("{changed} keys"))
+                        .into_iter()
+                        .collect(),
                 })
             }
             (Family::Rmk, Delivery::Released) => {
@@ -401,6 +430,10 @@ pub fn generate(
 ) -> Result<Vec<GeneratedFile>, FirmwareError> {
     let family = config.family(board);
     match family {
+        // Firmware the app never builds has no files.
+        Family::Zmk if config.delivery(board) == Delivery::Studio => {
+            Err(FirmwareError::NoBuild("the keyboard"))
+        }
         Family::Zmk => kc_emit::generate(project, board, config).map_err(|error| match error {
             kc_emit::EmitError::Invalid(problems) => FirmwareError::Invalid(problems),
             other => FirmwareError::Other(other.to_string()),

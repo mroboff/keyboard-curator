@@ -159,3 +159,28 @@ fn moergo_rmk_is_taken_from_a_release_and_configured_live() {
     assert!(kc_firmware::live::apply(&project, &go60, &config, None, &backups).is_err());
     assert!(!backups.exists());
 }
+
+/// A keyboard the app has no file for, made from what it reported over
+/// ZMK Studio, is configured live and kept with the user's keyboards.
+#[test]
+fn a_keyboard_reported_over_studio_is_live_and_kept_with_the_keyboards() {
+    use kc_firmware::Delivery;
+    use kc_model::Keyboards;
+
+    let corne = board("corne");
+    let keys = corne.layout(&corne.default_layout).unwrap().keys.clone();
+    let made = Board::from_studio("Mystery Board", None, &[("Default".into(), keys)], 0).unwrap();
+    let config = FirmwareConfig::stock(&made);
+    assert_eq!(config.delivery(&made), Delivery::Studio);
+    assert!(!kc_firmware::live::can_restore(&made, &config));
+    assert!(kc_firmware::settings(&made, &config).is_empty());
+    assert!(generate(&Project::new("Mine", &made), &made, &config).is_err());
+
+    let mut keyboards = Keyboards::default();
+    keyboards.add_board(made.clone());
+    keyboards.add_board(made.clone());
+    let id = keyboards.add("Mystery", &made, "studio").unwrap();
+    let again = Keyboards::from_json(&keyboards.to_json()).unwrap();
+    assert_eq!(again.boards(), std::slice::from_ref(&made));
+    assert_eq!(again.get(id).unwrap().board, "studio-mystery-board");
+}

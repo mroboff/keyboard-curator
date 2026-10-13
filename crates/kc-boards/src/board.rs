@@ -261,12 +261,16 @@ pub enum Delivery {
     /// and flashed once; the configuration is then written to the running
     /// keyboard, as with [`Delivery::Live`].
     Released,
+    /// The firmware stays as it is, whatever it was built from; the layers
+    /// and keys are written to the running keyboard over ZMK Studio.
+    /// Nothing is built, so nothing the firmware lacks can be added.
+    Studio,
 }
 
 impl Delivery {
     /// Whether the layout is written to the running keyboard.
     pub fn is_live(self) -> bool {
-        matches!(self, Delivery::Live | Delivery::Released)
+        matches!(self, Delivery::Live | Delivery::Released | Delivery::Studio)
     }
 }
 
@@ -359,6 +363,11 @@ pub struct FirmwareProfile {
     /// bootloader facts then come from the controller.
     #[serde(default)]
     pub controller: Option<String>,
+    /// Firmware the app never builds: the keyboard is edited over ZMK
+    /// Studio as it is. Such a profile has no source and no builds, and
+    /// only the capabilities it lists.
+    #[serde(default)]
+    pub studio_only: bool,
     #[serde(default)]
     pub builds: Vec<BuildTarget>,
 }
@@ -521,6 +530,9 @@ impl FirmwareProfile {
     /// Everything this firmware can do: its family's base and its own
     /// capabilities.
     pub fn features(&self) -> Vec<Capability> {
+        if self.studio_only {
+            return self.capabilities.clone();
+        }
         let mut features = self.family.base_features().to_vec();
         for capability in &self.capabilities {
             if !features.contains(capability) {
@@ -533,6 +545,9 @@ impl FirmwareProfile {
     /// How a layout reaches a keyboard running this firmware: the family's
     /// way, unless the firmware is taken from releases and configured live.
     pub fn delivery(&self) -> Delivery {
+        if self.studio_only {
+            return Delivery::Studio;
+        }
         match self.rmk.as_ref().map(|rmk| rmk.flavor) {
             Some(RmkFlavor::MoergoRmk) => Delivery::Released,
             _ => self.family.delivery(),
@@ -672,6 +687,88 @@ impl Board {
 
     pub fn profile(&self, id: &str) -> Option<&FirmwareProfile> {
         self.firmware.iter().find(|p| p.id == id)
+    }
+
+    /// A board for a keyboard the app has no file for, from what the
+    /// keyboard reports over ZMK Studio: its name, its layouts with the
+    /// keys in binding order, and which layout it is using. The keyboard
+    /// is edited as it is; its firmware is never built here.
+    pub fn from_studio(
+        name: &str,
+        usb: Option<UsbId>,
+        layouts: &[(String, Vec<Key>)],
+        active: usize,
+    ) -> Result<Self, BoardError> {
+        let slug: String = name
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect::<String>()
+            .split('-')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+        let layouts: Vec<PhysicalLayout> = layouts
+            .iter()
+            .enumerate()
+            .map(|(index, (name, keys))| PhysicalLayout {
+                id: format!("layout_{index}"),
+                name: if name.trim().is_empty() {
+                    format!("Layout {}", index + 1)
+                } else {
+                    name.clone()
+                },
+                keys: keys.clone(),
+                underglow: Vec::new(),
+            })
+            .collect();
+        let board = Board {
+            id: format!("studio-{slug}"),
+            name: name.to_string(),
+            vendor: "ZMK Studio".into(),
+            verified: false,
+            brightness_cap: 100,
+            default_layout: format!("layout_{}", active.min(layouts.len().saturating_sub(1))),
+            starter_keys: Vec::new(),
+            usb: usb.into_iter().collect(),
+            flash: FlashInfo {
+                order: Vec::new(),
+                bootloader_entry: String::new(),
+                studio_unlock: None,
+            },
+            halves: vec![Half {
+                side: Side::Whole,
+                central: true,
+                bootloader_volume: None,
+                uf2_family: None,
+                leds: None,
+            }],
+            pointing: Vec::new(),
+            firmware: vec![FirmwareProfile {
+                id: "studio".into(),
+                name: "The firmware on the keyboard, over ZMK Studio".into(),
+                family: Family::Zmk,
+                experimental: false,
+                notes: vec![
+                    "The keyboard's firmware stays as it is. Layers and keys are written to it over ZMK Studio; combos, new behaviors, settings and lighting would need firmware built for the keyboard, which needs a board file.".into(),
+                ],
+                zephyr: String::new(),
+                config_name: String::new(),
+                workflow: String::new(),
+                zmk: None,
+                modules: Vec::new(),
+                capabilities: vec![Capability::Studio],
+                lighting: None,
+                dygma: None,
+                rmk: None,
+                controller: None,
+                studio_only: true,
+                builds: Vec::new(),
+            }],
+            layouts,
+        };
+        board.validate()?;
+        Ok(board)
     }
 
     /// The controller a firmware profile is built for, when it names one.
@@ -826,6 +923,7 @@ impl Board {
                 return Err(BoardError::LightingMismatch(profile.id.clone()));
             }
             if profile.family == Family::Zmk
+                && !profile.studio_only
                 && (profile.zmk.is_none()
                     || profile.config_name.is_empty()
                     || profile.workflow.is_empty()

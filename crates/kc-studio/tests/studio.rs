@@ -18,6 +18,7 @@ struct Keyboard {
     names: Vec<&'static str>,
     live: keymap::Keymap,
     saved: keymap::Keymap,
+    layouts: Vec<keymap::PhysicalLayout>,
 }
 
 /// A stream whose other end is a simulated keyboard: requests written to
@@ -121,6 +122,14 @@ impl Wire {
                     keymap::request::RequestType::DiscardChanges(_) => {
                         keyboard.live = keyboard.saved.clone();
                         keymap::response::ResponseType::DiscardChanges(true)
+                    }
+                    keymap::request::RequestType::GetPhysicalLayouts(_) => {
+                        keymap::response::ResponseType::GetPhysicalLayouts(
+                            keymap::PhysicalLayouts {
+                                active_layout_index: 0,
+                                layouts: keyboard.layouts.clone(),
+                            },
+                        )
                     }
                 };
                 request_response::Subsystem::Keymap(keymap::Response {
@@ -238,12 +247,32 @@ fn keyboard_running(project: &Project) -> (Wire, BehaviorTable) {
         available_layers: 0,
         max_layer_name_length: 20,
     };
+    // The keyboard's layout, as its firmware declares it: the Go60's.
+    let layouts = vec![keymap::PhysicalLayout {
+        name: "Go60".into(),
+        keys: go60()
+            .layout("physical_layout0")
+            .unwrap()
+            .keys
+            .iter()
+            .map(|k| keymap::KeyPhysicalAttrs {
+                width: k.w,
+                height: k.h,
+                x: k.x,
+                y: k.y,
+                r: k.rot,
+                rx: k.rx,
+                ry: k.ry,
+            })
+            .collect(),
+    }];
     let wire = Wire {
         keyboard: Rc::new(RefCell::new(Keyboard {
             unlocked: true,
             names: NAMES.to_vec(),
             saved: live.clone(),
             live,
+            layouts,
         })),
         decoder: Rc::default(),
         outgoing: Rc::default(),
@@ -454,6 +483,35 @@ fn a_session_reads_compares_changes_and_saves() {
         wire.keyboard.borrow().saved.layers[1].bindings[5].behavior_id,
         12
     );
+}
+
+/// What a keyboard reports about its keys is enough to make a board for
+/// it, with the same keys in the same order as the board file has.
+#[test]
+fn the_keyboard_reports_its_layouts() {
+    let project = Project::from_template("Go60", &go60());
+    let (wire, _) = keyboard_running(&project);
+    let mut client = Client::new(wire.clone());
+    let reported = client.physical_layouts().unwrap();
+    assert_eq!(reported.active_layout_index, 0);
+    assert_eq!(reported.layouts.len(), 1);
+    assert_eq!(reported.layouts[0].name, "Go60");
+    let keys: Vec<kc_boards::geometry::Key> = reported.layouts[0]
+        .keys
+        .iter()
+        .map(|k| kc_boards::geometry::Key::from([k.width, k.height, k.x, k.y, k.r, k.rx, k.ry]))
+        .collect();
+    assert_eq!(keys, go60().layout("physical_layout0").unwrap().keys);
+
+    let board = kc_boards::Board::from_studio("Go60", None, &[("Go60".into(), keys)], 0).unwrap();
+    assert_eq!(board.id, "studio-go60");
+    assert_eq!(board.layouts[0].keys.len(), 60);
+
+    wire.keyboard.borrow_mut().unlocked = false;
+    assert!(matches!(
+        client.physical_layouts(),
+        Err(StudioError::Locked)
+    ));
 }
 
 #[test]
