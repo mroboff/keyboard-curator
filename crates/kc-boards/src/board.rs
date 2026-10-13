@@ -310,8 +310,9 @@ impl Family {
             ],
             // Behaviors defined in a layout are not translated to RMK yet.
             Family::Rmk => &[Build, Combos],
-            // Dygma's superkeys and macros are kept as the keyboard has
-            // them until KEY-89 and KEY-90; its own keys are offered.
+            // Dygma's own keys are offered on every Dygma firmware; macros,
+            // combos and per-key timing are the profile's to add, since the
+            // stock firmware and the Curator firmware differ in them.
             Family::Dygma => &[DygmaKeys],
             // QMK's built-in mod-taps, layer-taps, one-shots and VIA's
             // sixteen macros; anything else needs firmware built.
@@ -535,6 +536,36 @@ pub struct DygmaProfile {
     /// follow in order. Without it, the underglow is left as it is.
     #[serde(default)]
     pub underglow_first: Option<usize>,
+    /// The fork of Dygma's firmware this profile stands for, when it is
+    /// one: where its releases come from, and how a keyboard running it
+    /// is told apart from one running Dygma's own.
+    #[serde(default)]
+    pub fork: Option<DygmaFork>,
+}
+
+/// A fork of Dygma's firmware, released on GitHub and installed with
+/// Bazecor's firmware update (or this app's), then configured over Focus
+/// like the stock firmware, with the commands it adds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DygmaFork {
+    /// What the app calls it in messages, such as `Curator firmware`.
+    pub name: String,
+    /// The GitHub repository the releases are on, as `owner/name`.
+    pub repository: String,
+    /// The release tag this profile is pinned to.
+    pub tag: String,
+    /// The commit of `repository` the release was built from.
+    pub source_commit: String,
+    /// The commit of the Kaleidoscope fork the release was built with.
+    pub kaleidoscope_commit: String,
+    /// What the keyboard's `version` contains when it runs the fork, such
+    /// as `-curator.`; the commands `help` lists are the surer sign.
+    pub version_mark: String,
+    /// The Neuron's firmware file in the release.
+    pub neuron_file: String,
+    /// The sides' firmware file in the release, Dygma's own.
+    pub keyscanner_file: String,
 }
 
 /// How a VIA keyboard's keys map onto its switch matrix, and what its
