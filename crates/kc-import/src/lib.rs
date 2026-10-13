@@ -8,6 +8,7 @@ pub mod dts;
 mod keymap;
 mod moergo;
 mod rmk;
+pub mod zmk_tree;
 
 pub use keymap::{import_conf, import_keymap};
 pub use moergo::import_moergo;

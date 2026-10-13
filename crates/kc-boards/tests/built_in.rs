@@ -469,3 +469,40 @@ fn the_boards_that_ship_by_hand_are_verified() {
         assert!(board(id).verified, "{id}");
     }
 }
+
+/// The boards generated from ZMK's tree: every one loads, puts no two keys
+/// on top of each other, has starter keys for every key or none, and is
+/// built on a controller from the table.
+#[test]
+fn the_generated_zmk_boards_are_whole() {
+    let boards = built_in().expect("built-in boards load");
+    let generated: Vec<&Board> = boards.iter().filter(|b| !b.verified).collect();
+    assert!(
+        generated.len() >= 20,
+        "{} generated boards",
+        generated.len()
+    );
+    for board in &generated {
+        assert_keys_distinct(board);
+    }
+    for board in generated {
+        assert!(!board.usb.is_empty(), "{}", board.id);
+        let keys = board.layout(&board.default_layout).unwrap().keys.len();
+        assert!(
+            board.starter_keys.is_empty() || board.starter_keys.len() == keys,
+            "{}",
+            board.id
+        );
+        for profile in &board.firmware {
+            let controller = profile.controller.as_deref().expect(&board.id);
+            assert!(kc_boards::controller(controller).is_some(), "{}", board.id);
+            for build in &profile.builds {
+                assert!(
+                    board.bootloader(profile, build.side).is_some(),
+                    "{}",
+                    board.id
+                );
+            }
+        }
+    }
+}

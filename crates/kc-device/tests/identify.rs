@@ -53,7 +53,10 @@ fn boards_are_recognized_by_ids_and_name() {
     assert_eq!(found[1].boards, [index("cyboard-imprint")]);
     assert!(found[1].certain);
 
-    assert_eq!(found[2].boards, [index("cyboard-imprint")]);
+    // ZMK's shared IDs with a name no board has: every ZMK keyboard is
+    // possible, and the user picks.
+    assert!(found[2].boards.contains(&index("cyboard-imprint")));
+    assert!(found[2].boards.len() > 1);
     assert!(!found[2].certain);
 
     assert_eq!(found[3].boards, [index("moergo-glove80")]);

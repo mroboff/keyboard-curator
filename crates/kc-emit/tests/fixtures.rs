@@ -593,11 +593,13 @@ fn fixtures_match_the_emitter() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
     let update = std::env::var_os("UPDATE_FIXTURES").is_some();
     let mut stale = Vec::new();
-    // Only boards with ZMK firmware have a ZMK config to generate.
+    // Only boards with ZMK firmware have a ZMK config to generate, and only
+    // the hand-checked ones are built by CI; the boards generated from
+    // ZMK's tree are many, small, and covered by the emitter's own tests.
     let boards: Vec<Board> = kc_boards::built_in()
         .unwrap()
         .into_iter()
-        .filter(|board| board.firmware[0].family == kc_boards::Family::Zmk)
+        .filter(|board| board.verified && board.firmware[0].family == kc_boards::Family::Zmk)
         .collect();
     let lit = boards
         .iter()
