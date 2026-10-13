@@ -65,6 +65,16 @@ Repeat this block for each row of the table at the end.
 - [ ] Restore a Backup…: pick the backup taken before the first write; the keyboard returns to how it was, except lights and wireless settings, which stay. Bazecor agrees.
 - [ ] On a wired Defy: nothing wireless is read, shown or written.
 
+**Dygma Defy, Curator firmware only** (a wireless Defy; Bazecor closed except for its firmware update)
+- [ ] First, a stock build: flash a build of Dygma's own `N2_Defy_v2.2.1` tag from the fork's toolchain with Bazecor's firmware update (custom firmware folder: that `Wireless_neuron.hex` with Dygma's `keyscanner.bin`), confirm the keyboard comes back, that Read From Keyboard shows `version` as v2.2.1, and that keys, superkeys, macros, colors and settings are as they were.
+- [ ] Go back: Bazecor's firmware update with Dygma's own release. Everything survives.
+- [ ] Then the fork: the same update with the release's `Wireless_neuron.hex` and `keyscanner.bin`. Read From Keyboard says the keyboard runs the Curator firmware v2.2.1-curator.1; keys, superkeys, macros, colors and settings are as they were; the Combos mode and a key's own feel are offered with the Curator firmware chosen on the board.
+- [ ] Make a two-key combo sending Escape, apply, and confirm it fires on the keyboard; a combo on one layer fires there only; Combo timeout on the board's Settings tab changes how far apart the keys may land.
+- [ ] Set two home-row keys to different hold times (say 150 ms and 400 ms) and apply; feel the difference. A key with a second tap and its own time between taps behaves accordingly.
+- [ ] Read From Keyboard brings the combos and the keys' feels back as they were set; applying that layout unchanged writes nothing.
+- [ ] Restore a Backup… taken on the Curator firmware brings combos and timing back after they were erased.
+- [ ] Go back to stock with Bazecor's firmware update and confirm everything survived: keys, superkeys, macros, colors and settings. A layout with combos is refused on Dygma's firmware, with the firmware named.
+
 ## The matrix
 
 | Board | Firmware | How the layout gets there | Checked by | Date | Result |
@@ -80,6 +90,7 @@ Repeat this block for each row of the table at the end.
 | MoErgo Glove80 | ZMK with community per-key lighting | Build & Flash | | | |
 | MoErgo Glove80 | RMK for MoErgo (community) | Release firmware, then live over Rynk | | | |
 | Dygma Defy wireless | Dygma's firmware | Live over USB | | | |
+| Dygma Defy wireless | Curator firmware v2.2.1-curator.1 | Bazecor custom firmware, then live over USB | | | |
 | Dygma Defy wired | Dygma's firmware | Live over USB | | | |
 
 ## Launch
