@@ -4,6 +4,8 @@ name: Release
 # with ci/bundle-macos.sh and, on a version tag, attaches it to the GitHub
 # release. Signing and notarization happen only when the secrets exist;
 # without them the workflow still succeeds with an ad-hoc signed DMG.
+# A second job builds the Linux x86_64 binary, packages it as a tarball
+# with ci/bundle-linux.sh and attaches that to the same release.
 on:
   push:
     tags: ["v*"]
@@ -103,3 +105,67 @@ jobs:
       - name: Remove the signing keychain
         if: ${{ always() && env.MACOS_SIGNING_IDENTITY != '' }}
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+  linux:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The same libraries as the CI check. The binary links them
+      # dynamically; every desktop distribution ships them.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config cmake clang libclang-dev \
+            libfontconfig1-dev libfreetype-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev \
+            libxcb1-dev libxcb-xkb-dev libxcb-cursor-dev libxcb-randr0-dev \
+            libxcb-xinput-dev libxcb-xfixes0-dev libxcb-shape0-dev libxcb-render0-dev \
+            libvulkan-dev libasound2-dev libudev-dev libssl-dev desktop-file-utils
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build for x86_64
+        run: cargo build --release --locked -p kc-app --target x86_64-unknown-linux-gnu
+
+      - name: Bundle
+        run: ci/bundle-linux.sh x86_64-unknown-linux-gnu
+
+      - name: Verify the tarball
+        run: |
+          tar -tzf dist/Keyboard-Curator-*-linux-x86_64.tar.gz
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -C "$RUNNER_TEMP/unpacked" -xzf dist/Keyboard-Curator-*-linux-x86_64.tar.gz
+          desktop-file-validate "$RUNNER_TEMP"/unpacked/keyboard-curator-*/keyboard-curator.desktop
+          test -x "$RUNNER_TEMP"/unpacked/keyboard-curator-*/keyboard-curator
+
+      - name: Upload the tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: Keyboard-Curator-linux-x86_64
+          path: dist/Keyboard-Curator-*-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+      # The same draft-or-reuse rule as the macOS job; whichever job gets
+      # there first creates the draft.
+      - name: Attach the tarball to the release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --draft --title "$tag" --notes "Keyboard Curator $tag"
+          fi
+          gh release upload "$tag" dist/Keyboard-Curator-*-linux-x86_64.tar.gz --clobber
