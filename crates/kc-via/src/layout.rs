@@ -104,12 +104,12 @@ pub fn to_project(
     Ok(project)
 }
 
+/// Each placed macro's keycode, and the macro buffer holding them all.
+type Placed = (HashMap<BehaviorId, u16>, Vec<u8>);
+
 /// Places every macro a key uses into a slot, first use first, and
 /// returns each macro's keycode with the new buffer.
-fn place_macros(
-    project: &Project,
-    image: &Image,
-) -> Result<(HashMap<BehaviorId, u16>, Vec<u8>), (Location, String)> {
+fn place_macros(project: &Project, image: &Image) -> Result<Placed, (Location, String)> {
     let mut codes = HashMap::new();
     let mut table: Vec<Vec<macros::Action>> = Vec::new();
     for layer in &project.layers {

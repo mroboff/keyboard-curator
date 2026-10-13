@@ -3911,6 +3911,7 @@ dependencies = [
  "kc-model",
  "kc-sound",
  "kc-studio",
+ "kc-via",
  "kc-zmk",
  "serde",
  "serde_json",
@@ -3984,6 +3985,7 @@ dependencies = [
  "kc-rmk",
  "kc-rynk",
  "kc-studio",
+ "kc-via",
  "kc-zmk",
  "thiserror 2.0.21",
 ]

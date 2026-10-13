@@ -45,10 +45,7 @@ pub fn parse(buffer: &[u8], count: usize) -> Vec<Vec<Action>> {
     let mut bytes = buffer.iter().copied();
     for _ in 0..count {
         let mut actions = Vec::new();
-        loop {
-            let Some(byte) = bytes.next() else {
-                break;
-            };
+        while let Some(byte) = bytes.next() {
             if byte == 0 {
                 break;
             }
@@ -64,15 +61,10 @@ pub fn parse(buffer: &[u8], count: usize) -> Vec<Vec<Action>> {
                     let mut ms: u32 = 0;
                     // The byte that ends the digits is used up, as the
                     // firmware uses it up.
-                    loop {
-                        match bytes.next() {
-                            Some(digit @ b'0'..=b'9') => {
-                                ms = ms
-                                    .saturating_mul(10)
-                                    .saturating_add(u32::from(digit - b'0'));
-                            }
-                            _ => break,
-                        }
+                    while let Some(digit @ b'0'..=b'9') = bytes.next() {
+                        ms = ms
+                            .saturating_mul(10)
+                            .saturating_add(u32::from(digit - b'0'));
                     }
                     actions.push(Action::Delay(ms));
                 }

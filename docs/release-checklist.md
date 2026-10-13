@@ -51,6 +51,8 @@ Repeat this block for each row of the table at the end.
 
 **A keyboard added from ZMK Studio** (Add Connected Board with a keyboard whose name the app does not know, Studio unlocked): the offered model names the keyboard and its key count; the editor shows its keys where they are; Read From Keyboard brings the layers and keys; a changed key applies and survives the keyboard being unplugged; a backup layout file is written first. Try it with an Imprint, Go60 or Glove80 whose USB name has been changed, so the app does not recognize it.
 
+**A QMK keyboard with VIA** (VIA closed throughout; the keyboard on its cable): Add a VIA Keyboard… with the maker's definition file; the keys in the editor sit where they do on the keyboard; Read From Keyboard brings every layer, a macro and the lighting values; a changed key, a new macro and a changed brightness apply and survive the keyboard being unplugged; a backup file is written first and restores. Try a key the app cannot name: it reads as a number and writes back unchanged.
+
 **ZMK shields** (the boards under `crates/kc-boards/boards/zmk`): none is covered by this checklist. They ship unverified and say so; a shield is struck off that list only once someone has run "Every board, every firmware" on it with a real keyboard and its controller.
 
 **Dygma Defy only** (Bazecor closed throughout; reopen it only where it says)

@@ -534,11 +534,15 @@ impl BoardPage {
                 saved.name,
                 backups.display()
             ),
-            _ => format!(
-                "This changes “{}” at once: its keys and colors on every layer, the superkeys and macros they need, and the settings that differ from the board's. Nothing else is touched. What the keyboard holds now is saved first, in {}.",
-                saved.name,
-                backups.display()
-            ),
+            _ => {
+                kc_firmware::live::words(
+                    &self.board,
+                    &saved.firmware,
+                    &saved.name,
+                    &backups.display().to_string(),
+                )
+                .apply_prompt
+            }
         };
         let answer = window.prompt(
             PromptLevel::Warning,
@@ -1752,10 +1756,14 @@ impl BoardPage {
     }
 
     /// Reading from and writing to a keyboard whose firmware is configured
-    /// live.
+    /// live, in the words of its firmware family.
     fn render_keyboard_section(&self, saved: &Keyboard, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
         let muted = theme.muted_foreground;
+        let backups = dirs::config_dir()
+            .map(|d| d.join("Keyboard Curator").join("backups"))
+            .map_or_else(String::new, |d| d.display().to_string());
+        let words = kc_firmware::live::words(&self.board, &saved.firmware, &saved.name, &backups);
         let current = match &saved.current {
             Some(path) => format!(
                 "The current layout is “{}”.",
@@ -1777,12 +1785,12 @@ impl BoardPage {
             .flex()
             .flex_col()
             .gap_4()
-            .child(
-                panel(
-                    "Read from the keyboard",
-                    "Opens what the keyboard holds now as a new layout: every layer's keys, superkeys as key setups, macros, the colors under the keys and the underglow. The keyboard's settings are offered to the board. Nothing is written to the keyboard. Close Dygma's Bazecor first; only one program can talk to the keyboard at a time.".into(),
-                )
-                .when(!self.live_busy, |panel| {
+            .when_some(words.intro.clone(), |page, intro| {
+                page.child(help(intro, cx))
+            })
+            .child(panel("Read from the keyboard", words.read.clone()).when(
+                !self.live_busy,
+                |panel| {
                     panel.child(
                         div().flex().child(
                             Button::new("read-keyboard")
@@ -1791,102 +1799,12 @@ impl BoardPage {
                                 .on_click(cx.listener(|this, _, _, cx| this.read_keyboard(cx))),
                         ),
                     )
-                }),
-            )
-            .child(
-                panel(
-                    "Apply to the keyboard",
-                    format!(
-                        "{current} Applying writes it to the keyboard at once, with no build. Only what differs is written: keys and colors, the superkeys and macros they need, and settings. The keyboard's configuration is saved to disk first."
-                    ),
-                )
-                .when(!self.live_busy && saved.current.is_some(), |panel| {
-                    panel.child(
-                        div().flex().child(
-                            Button::new("apply-keyboard")
-                                .label("Apply To Keyboard…")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.apply_to_keyboard(window, cx);
-                                })),
-                        ),
-                    )
-                }),
-            )
-            .child(
-                panel(
-                    "Restore a backup",
-                    "Every write saves what the keyboard held first, as one file holding everything the keyboard lists. Restoring writes a chosen file back to the keyboard it came from: everything in it that differs, except the lights and the wireless side, which are left as they are. The keyboard is saved again first.".into(),
-                )
-                .when(!self.live_busy, |panel| {
-                    panel.child(
-                        div().flex().child(
-                            Button::new("restore-backup")
-                                .ghost()
-                                .label("Restore a Backup…")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.restore_backup(window, cx);
-                                })),
-                        ),
-                    )
-                }),
-            )
-            .when_some(self.live.clone(), |page, status| {
-                page.child(div().w(px(640.)).text_sm().child(status))
-            })
-    }
-
-    /// A keyboard the app has no file for, edited as it is over ZMK Studio:
-    /// reading and applying the layers and keys, and nothing else.
-    fn render_studio_section(&self, saved: &Keyboard, cx: &mut Context<Self>) -> Div {
-        let theme = cx.theme();
-        let muted = theme.muted_foreground;
-        let current = match &saved.current {
-            Some(path) => format!(
-                "The current layout is “{}”.",
-                path.file_stem()
-                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
-            ),
-            None => "This board has no current layout yet.".to_string(),
-        };
-        let panel = |title: &'static str, text: String| {
-            card(false, cx)
-                .w(px(640.))
-                .flex()
-                .flex_col()
-                .gap_3()
-                .child(subheading(title, cx))
-                .child(div().text_sm().text_color(muted).child(text))
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap_4()
-            .child(help(
-                "This board was made from what the keyboard reported over ZMK Studio, so the app knows its keys but not its firmware. Its layers and keys are edited on the keyboard as it is. Combos, new behaviors, settings and lighting would need firmware built for it, which needs a board file. Connect the keyboard by USB and unlock Studio on it (the firmware's unlock key, or ZMK's unlock combination) before reading or applying.",
-                cx,
+                },
             ))
             .child(
                 panel(
-                    "Read from the keyboard",
-                    "Opens what the keyboard holds now as a new layout: every layer, with every key the app can name. Keys bound to behaviors the app does not know are left transparent. Nothing is written to the keyboard.".into(),
-                )
-                .when(!self.live_busy, |panel| {
-                    panel.child(
-                        div().flex().child(
-                            Button::new("read-keyboard")
-                                .primary()
-                                .label("Read From Keyboard")
-                                .on_click(cx.listener(|this, _, _, cx| this.read_keyboard(cx))),
-                        ),
-                    )
-                }),
-            )
-            .child(
-                panel(
                     "Apply to the keyboard",
-                    format!(
-                        "{current} Applying writes it to the keyboard at once and saves it there, so it survives a restart. Only keys that differ are written, and only ones the keyboard's firmware can take; the rest are reported. What the keyboard held is saved to disk first, as a layout file."
-                    ),
+                    format!("{current} {}", words.apply),
                 )
                 .when(!self.live_busy && saved.current.is_some(), |panel| {
                     panel.child(
@@ -1900,6 +1818,22 @@ impl BoardPage {
                     )
                 }),
             )
+            .when_some(words.restore.clone(), |page, restore| {
+                page.child(
+                    panel("Restore a backup", restore).when(!self.live_busy, |panel| {
+                        panel.child(
+                            div().flex().child(
+                                Button::new("restore-backup")
+                                    .ghost()
+                                    .label("Restore a Backup…")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.restore_backup(window, cx);
+                                    })),
+                            ),
+                        )
+                    }),
+                )
+            })
             .when_some(self.live.clone(), |page, status| {
                 page.child(div().w(px(640.)).text_sm().child(status))
             })
@@ -2227,7 +2161,7 @@ impl Render for BoardPage {
                 Delivery::Build => self.render_build_section(&saved, &config, cx),
                 Delivery::Live => self.render_keyboard_section(&saved, cx),
                 Delivery::Released => self.render_released_section(&saved, &config, cx),
-                Delivery::Studio => self.render_studio_section(&saved, cx),
+                Delivery::Studio => self.render_keyboard_section(&saved, cx),
             }),
             // The tester fills the page instead of sitting in its column.
             Section::Tester => None,

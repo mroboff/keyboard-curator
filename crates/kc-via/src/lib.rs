@@ -15,6 +15,7 @@ pub mod codec;
 pub mod definition;
 pub mod layout;
 pub mod macros;
+pub mod settings;
 pub mod transport;
 
 use std::collections::BTreeMap;
@@ -83,59 +84,7 @@ pub const WRITES: [u8; 6] = [
     command::SET_BUFFER,
 ];
 
-/// A lighting (or audio) channel QMK exposes through VIA's custom values:
-/// its ID, and each value with its length in bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Channel {
-    pub name: &'static str,
-    pub id: u8,
-    /// `(value ID, name, bytes)`.
-    pub values: &'static [(u8, &'static str, usize)],
-}
-
-/// QMK's channels, from `via.h`: brightness, effect, speed and color where
-/// the kind of lighting has them; audio has its two switches.
-pub const CHANNELS: [Channel; 5] = [
-    Channel {
-        name: "backlight",
-        id: 1,
-        values: &[(1, "brightness", 1), (2, "effect", 1)],
-    },
-    Channel {
-        name: "rgblight",
-        id: 2,
-        values: &[
-            (1, "brightness", 1),
-            (2, "effect", 1),
-            (3, "effect_speed", 1),
-            (4, "color", 2),
-        ],
-    },
-    Channel {
-        name: "rgb_matrix",
-        id: 3,
-        values: &[
-            (1, "brightness", 1),
-            (2, "effect", 1),
-            (3, "effect_speed", 1),
-            (4, "color", 2),
-        ],
-    },
-    Channel {
-        name: "audio",
-        id: 4,
-        values: &[(1, "enable", 1), (2, "clicky_enable", 1)],
-    },
-    Channel {
-        name: "led_matrix",
-        id: 5,
-        values: &[
-            (1, "brightness", 1),
-            (2, "effect", 1),
-            (3, "effect_speed", 1),
-        ],
-    },
-];
+pub use kc_boards::board::{ViaChannel as Channel, VIA_CHANNELS as CHANNELS};
 
 pub fn channel(name: &str) -> Option<&'static Channel> {
     CHANNELS.iter().find(|c| c.name == name)
@@ -255,6 +204,43 @@ impl Image {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("an image always serializes")
+    }
+
+    /// The lighting values as the board's settings.
+    pub fn carried(&self) -> kc_model::Carried {
+        let mut carried = kc_model::Carried::default();
+        for setting in settings::SETTINGS {
+            let Some(ids) = kc_boards::board::via_value(setting.key) else {
+                continue;
+            };
+            if let Some(bytes) = self.lighting.get(&(ids[0], ids[1])) {
+                if let Some(value) = settings::value_of(setting.key, bytes) {
+                    carried.settings.insert(setting.key.to_string(), value);
+                }
+            }
+        }
+        carried
+    }
+
+    /// The image with the board's settings written in, where the keyboard
+    /// has the value; the rest of the image is unchanged.
+    pub fn with_settings(&self, config: &kc_model::FirmwareConfig) -> Image {
+        let mut image = self.clone();
+        for setting in settings::SETTINGS {
+            let Some(value) = config.settings.get(setting.key) else {
+                continue;
+            };
+            let Some(ids) = kc_boards::board::via_value(setting.key) else {
+                continue;
+            };
+            let Some(current) = image.lighting.get(&(ids[0], ids[1])).cloned() else {
+                continue;
+            };
+            if let Some(bytes) = settings::bytes_of(setting.key, value, &current) {
+                image.lighting.insert((ids[0], ids[1]), bytes);
+            }
+        }
+        image
     }
 
     pub fn from_json(text: &str) -> Result<Image, ViaError> {

@@ -266,3 +266,46 @@ fn a_keyboard_without_macros_or_a_keycodes_version_still_reads() {
         Err(ViaError::Unhandled(command::GET_LAYER_COUNT))
     ));
 }
+
+#[test]
+fn lighting_values_are_carried_as_settings_and_written_back() {
+    use kc_model::features::SettingValue;
+    use kc_model::FirmwareConfig;
+
+    let mut via = Via::new(Simulated::new());
+    let image = via
+        .read_image(Matrix { rows: 2, cols: 3 }, &rgb_matrix())
+        .unwrap();
+    let carried = image.carried();
+    assert_eq!(
+        carried.settings.get("via.rgb_matrix.brightness"),
+        Some(&SettingValue::Int(200))
+    );
+    assert_eq!(
+        carried.settings.get("via.rgb_matrix.color_hue"),
+        Some(&SettingValue::Int(40))
+    );
+    assert_eq!(
+        carried.settings.get("via.rgb_matrix.color_sat"),
+        Some(&SettingValue::Int(255))
+    );
+    assert!(!carried.settings.contains_key("via.backlight.brightness"));
+
+    let mut config = FirmwareConfig::new("via");
+    config
+        .settings
+        .insert("via.rgb_matrix.color_hue".into(), SettingValue::Int(10));
+    config
+        .settings
+        .insert("via.rgb_matrix.brightness".into(), SettingValue::Int(999));
+    // A channel the keyboard does not have is left alone.
+    config
+        .settings
+        .insert("via.backlight.brightness".into(), SettingValue::Int(5));
+    let new = image.with_settings(&config);
+    assert_eq!(new.lighting[&(3, 4)], [10, 255]);
+    assert_eq!(new.lighting[&(3, 1)], [255]);
+    assert!(!new.lighting.contains_key(&(1, 1)));
+    let sent = via.write_changes(&image, &new).unwrap();
+    assert_eq!(sent, ["rgb_matrix brightness", "rgb_matrix color"]);
+}

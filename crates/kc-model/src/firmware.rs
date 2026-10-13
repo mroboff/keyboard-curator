@@ -135,7 +135,12 @@ impl FirmwareConfig {
             return self.family(board) == Family::Dygma;
         }
         if key.starts_with(VIA_SETTING_PREFIX) {
-            return self.family(board) == Family::Via;
+            return self.family(board) == Family::Via
+                && board
+                    .profile(&self.profile)
+                    .and_then(|p| p.via.as_ref())
+                    .zip(kc_boards::board::via_value(key))
+                    .is_some_and(|(via, ids)| via.lighting.contains(&ids));
         }
         if self.family(board) != Family::Zmk {
             return false;

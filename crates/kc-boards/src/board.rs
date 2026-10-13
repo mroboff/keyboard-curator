@@ -560,6 +560,76 @@ pub struct ViaProfile {
     pub custom_keycodes: Vec<String>,
 }
 
+/// A lighting (or audio) channel QMK exposes through VIA's custom values:
+/// its ID, and each value with its name and length in bytes. Facts from
+/// QMK's `quantum/via.h`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViaChannel {
+    pub name: &'static str,
+    pub id: u8,
+    /// `(value ID, name, bytes)`.
+    pub values: &'static [(u8, &'static str, usize)],
+}
+
+/// QMK's channels: brightness, effect, speed and color where the kind of
+/// lighting has them; audio has its two switches.
+pub const VIA_CHANNELS: [ViaChannel; 5] = [
+    ViaChannel {
+        name: "backlight",
+        id: 1,
+        values: &[(1, "brightness", 1), (2, "effect", 1)],
+    },
+    ViaChannel {
+        name: "rgblight",
+        id: 2,
+        values: &[
+            (1, "brightness", 1),
+            (2, "effect", 1),
+            (3, "effect_speed", 1),
+            (4, "color", 2),
+        ],
+    },
+    ViaChannel {
+        name: "rgb_matrix",
+        id: 3,
+        values: &[
+            (1, "brightness", 1),
+            (2, "effect", 1),
+            (3, "effect_speed", 1),
+            (4, "color", 2),
+        ],
+    },
+    ViaChannel {
+        name: "audio",
+        id: 4,
+        values: &[(1, "enable", 1), (2, "clicky_enable", 1)],
+    },
+    ViaChannel {
+        name: "led_matrix",
+        id: 5,
+        values: &[
+            (1, "brightness", 1),
+            (2, "effect", 1),
+            (3, "effect_speed", 1),
+        ],
+    },
+];
+
+/// The `[channel, value]` IDs a VIA setting key names, such as
+/// `via.rgb_matrix.brightness`; a color's hue and saturation share one
+/// value.
+pub fn via_value(key: &str) -> Option<[u8; 2]> {
+    let mut parts = key.strip_prefix("via.")?.splitn(2, '.');
+    let (channel, value) = (parts.next()?, parts.next()?);
+    let value = value
+        .strip_suffix("_hue")
+        .or_else(|| value.strip_suffix("_sat"))
+        .unwrap_or(value);
+    let channel = VIA_CHANNELS.iter().find(|c| c.name == channel)?;
+    let (id, _, _) = channel.values.iter().find(|v| v.1 == value)?;
+    Some([channel.id, *id])
+}
+
 /// One of a VIA keyboard's layout options: a label and its choices.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

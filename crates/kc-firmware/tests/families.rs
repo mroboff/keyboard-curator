@@ -184,3 +184,72 @@ fn a_keyboard_reported_over_studio_is_live_and_kept_with_the_keyboards() {
     assert_eq!(again.boards(), std::slice::from_ref(&made));
     assert_eq!(again.get(id).unwrap().board, "studio-mystery-board");
 }
+
+/// A QMK keyboard with VIA, from its definition: configured live, with
+/// the lighting settings its definition reaches, and backups it can
+/// restore.
+#[test]
+fn a_via_keyboard_is_configured_live_with_the_settings_its_definition_reaches() {
+    use kc_firmware::Delivery;
+    use kc_model::{KeyExpr, LayerId, Param};
+
+    let definition = r##"{
+      "name": "Curator Via Six",
+      "vendorId": "0x4B43",
+      "productId": "0x0007",
+      "matrix": { "rows": 2, "cols": 3 },
+      "menus": ["qmk_rgb_matrix"],
+      "layouts": { "keymap": [["0,0", "0,1", "0,2"], ["1,0", "1,1", "1,2"]] }
+    }"##;
+    let board = kc_via::definition::parse(definition)
+        .unwrap()
+        .board()
+        .unwrap();
+    let config = FirmwareConfig::stock(&board);
+    assert_eq!(config.delivery(&board), Delivery::Live);
+    assert!(kc_firmware::live::can_restore(&board, &config));
+    assert!(generate(&Project::new("Mine", &board), &board, &config).is_err());
+
+    // The catalog has every channel; the board offers only its own.
+    let settings = kc_firmware::settings(&board, &config);
+    assert!(settings.iter().any(|s| s.key == "via.backlight.brightness"));
+    assert!(config.offers("via.rgb_matrix.brightness", &board));
+    assert!(config.offers("via.rgb_matrix.color_sat", &board));
+    assert!(!config.offers("via.backlight.brightness", &board));
+    assert!(!config.offers("via.audio.enable", &board));
+    assert!(!config.offers("dygma.typing.hold_timeout", &board));
+
+    // What QMK cannot take is said at the key; what it can is offered.
+    let mut project = Project::new("Mine", &board);
+    let base = project.layers[0].id;
+    project
+        .set_binding(base, 0, Binding::layer("mo", LayerId(99)))
+        .unwrap();
+    let problems = check(&project, &board, &config);
+    assert!(problems
+        .iter()
+        .any(|p| p.message.contains("no longer exists")));
+    assert!(expressible(
+        &Binding::new(
+            "mt",
+            vec![
+                Param::Key(KeyExpr::new("LCTRL")),
+                Param::Key(KeyExpr::new("A"))
+            ]
+        ),
+        &project,
+        &board,
+        &config
+    ));
+    assert!(!expressible(
+        &Binding::new("caps_word_x", vec![]),
+        &project,
+        &board,
+        &config
+    ));
+
+    let words = kc_firmware::live::words(&board, &config, "Six", "/tmp/backups");
+    assert!(words.intro.unwrap().contains("VIA"));
+    assert!(words.restore.is_some());
+    assert!(words.apply_prompt.contains("“Six”"));
+}

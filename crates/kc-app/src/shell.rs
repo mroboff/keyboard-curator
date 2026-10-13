@@ -1153,6 +1153,86 @@ impl Shell {
         self.open_form(form, window, cx);
     }
 
+    /// Adds a QMK keyboard from its VIA definition file, the file VIA's
+    /// Design tab takes. The board it makes is kept only if it is chosen.
+    fn add_via(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Load Definition".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = chosen.await else {
+                return;
+            };
+            let Some(file) = paths.into_iter().next() else {
+                return;
+            };
+            let made = std::fs::read_to_string(&file)
+                .map_err(|e| e.to_string())
+                .and_then(|text| kc_via::definition::parse(&text).map_err(|e| e.to_string()))
+                .and_then(|definition| definition.board().map_err(|e| e.to_string()));
+            let _ = this.update_in(cx, |this, window, cx| match made {
+                Ok(board) => {
+                    let keys = board.layout(&board.default_layout).map_or(0, |l| l.keys.len());
+                    let note = format!(
+                        "Made from the definition “{}” ({keys} keys). The keyboard is recognized by the identifiers in the file when it is on its cable; VIA must be closed while this app talks to it.",
+                        file.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+                    );
+                    this.offer_board(board, note, window, cx);
+                }
+                Err(error) => {
+                    this.error = Some(format!("The definition could not be used: {error}."));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Opens the form with a board made at run time as its one choice,
+    /// linked to the connected keyboard it matches, if one is there.
+    fn offer_board(
+        &mut self,
+        board: Board,
+        note: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut boards = (*self.boards).clone();
+        let index = match boards.iter().position(|b| b.id == board.id) {
+            Some(index) => {
+                boards[index] = board;
+                index
+            }
+            None => {
+                boards.push(board);
+                boards.len() - 1
+            }
+        };
+        self.boards = Rc::new(boards);
+        let device = kc_device::detect(&self.boards)
+            .into_iter()
+            .find(|found| found.boards.contains(&index))
+            .map(|found| found.usb);
+        let suggested = self
+            .library
+            .read(cx)
+            .keyboards()
+            .suggest_name(&self.boards[index]);
+        let form = KeyboardForm {
+            choices: vec![index],
+            discovered: vec![index],
+            board: index,
+            firmware: self.boards[index].firmware[0].id.clone(),
+            device,
+            note: Some(note),
+            suggested,
+        };
+        self.open_form(form, window, cx);
+    }
+
     /// Looks for a keyboard on USB and starts adding it, linked to that
     /// device. One that is saved already is opened instead.
     fn add_connected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1210,7 +1290,7 @@ impl Shell {
             }
             (None, None) => {
                 self.notice = Some(format!(
-                    "No supported keyboard was found on USB. {}",
+                    "No supported keyboard was found on USB. {} A QMK keyboard with VIA is added from its definition file, with Add a VIA Keyboard….",
                     connection_hint(&self.boards)
                 ));
                 cx.notify();
@@ -1517,6 +1597,13 @@ impl Shell {
                             .label("Add Connected Board")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.add_connected(window, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("add-via")
+                            .label("Add a VIA Keyboard…")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.add_via(window, cx);
                             })),
                     ),
             )
