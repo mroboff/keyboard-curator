@@ -105,7 +105,7 @@ pub struct ReleasedFirmware {
     pub manifest: Manifest,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct AssetJson {
     name: String,
     browser_download_url: String,
@@ -215,10 +215,57 @@ fn release_error(message: impl Into<String>) -> BuildError {
     BuildError::Release(message.into())
 }
 
-/// Fetches the release's firmware and checks everything about it. A GitHub
-/// token is optional: releases are public, and the token only lifts the
-/// rate limit.
-pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware, BuildError> {
+/// The SHA-256 of some bytes, as lowercase hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    sha256(bytes)
+}
+
+/// A release's assets, each downloaded whole and checked against the
+/// digest GitHub publishes for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Assets {
+    pub tag: String,
+    /// The release's title.
+    pub name: String,
+    /// The release's page on GitHub.
+    pub url: String,
+    /// The assets asked for, in the order asked.
+    pub files: Vec<Firmware>,
+}
+
+/// Downloads the named assets of a release (`owner/name`, tag), each
+/// checked against GitHub's digest for it. Nothing else is checked here;
+/// the caller knows what the files mean. A GitHub token is optional.
+pub fn fetch_assets(
+    repository: &str,
+    tag: &str,
+    names: &[&str],
+    token: Option<&str>,
+) -> Result<Assets, BuildError> {
+    let (found, download) = open_release(repository, tag, token)?;
+    let mut files = Vec::new();
+    for name in names {
+        files.push(Firmware {
+            name: (*name).to_string(),
+            bytes: download(name)?,
+        });
+    }
+    Ok(Assets {
+        tag: found.tag_name,
+        name: found.name,
+        url: found.html_url,
+        files,
+    })
+}
+
+/// Looks a release up and returns it with a way to download one of its
+/// assets, whole and checked against the digest GitHub publishes.
+#[allow(clippy::type_complexity)]
+fn open_release(
+    repository: &str,
+    tag: &str,
+    token: Option<&str>,
+) -> Result<(ReleaseJson, impl Fn(&str) -> Result<Vec<u8>, BuildError>), BuildError> {
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(120))
         .build();
@@ -233,7 +280,7 @@ pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware,
         }
         request
     };
-    let fail = |error: ureq::Error| match error {
+    let fail = move |error: ureq::Error| match error {
         ureq::Error::Status(status, response) => BuildError::Api {
             status,
             message: response
@@ -244,10 +291,7 @@ pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware,
         },
         other => BuildError::Network(other.to_string()),
     };
-    let url = format!(
-        "{API}/repos/{}/releases/tags/{}",
-        release.repository, release.tag
-    );
+    let url = format!("{API}/repos/{repository}/releases/tags/{tag}");
     let found: ReleaseJson = request(&url)
         .call()
         .map_err(fail)?
@@ -256,9 +300,9 @@ pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware,
 
     // One asset, downloaded whole and checked against the digest GitHub
     // publishes for it.
-    let download = |name: &str| -> Result<Vec<u8>, BuildError> {
-        let asset = found
-            .assets
+    let assets = found.assets.clone();
+    let download = move |name: &str| -> Result<Vec<u8>, BuildError> {
+        let asset = assets
             .iter()
             .find(|a| a.name == name)
             .ok_or_else(|| BuildError::NoAsset(name.to_string()))?;
@@ -306,7 +350,14 @@ pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware,
         }
         Ok(bytes)
     };
+    Ok((found, download))
+}
 
+/// Fetches the release's firmware and checks everything about it. A GitHub
+/// token is optional: releases are public, and the token only lifts the
+/// rate limit.
+pub fn fetch(release: &Release, token: Option<&str>) -> Result<ReleasedFirmware, BuildError> {
+    let (found, download) = open_release(&release.repository, &release.tag, token)?;
     let (files, manifest) = match &release.asset {
         Some(asset) => unpack(&download(asset)?, release)?,
         None => {

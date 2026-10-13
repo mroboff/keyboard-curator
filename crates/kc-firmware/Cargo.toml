@@ -23,4 +23,6 @@ kc-rynk = { version = "0.1.0", path = "../kc-rynk" }
 kc-studio = { version = "0.1.0", path = "../kc-studio" }
 kc-via = { version = "0.1.0", path = "../kc-via" }
 kc-zmk = { version = "0.1.0", path = "../kc-zmk" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 thiserror = "2.0.21"

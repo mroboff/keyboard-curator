@@ -69,11 +69,12 @@ Repeat this block for each row of the table at the end.
 **Dygma Defy, Curator firmware only** (a wireless Defy; Bazecor closed except for its firmware update)
 - [ ] First, a stock build: flash a build of Dygma's own `N2_Defy_v2.2.1` tag from the fork's toolchain with Bazecor's firmware update (custom firmware folder: that `Wireless_neuron.hex` with Dygma's `keyscanner.bin`), confirm the keyboard comes back, that Read From Keyboard shows `version` as v2.2.1, and that keys, superkeys, macros, colors and settings are as they were.
 - [ ] Go back: Bazecor's firmware update with Dygma's own release. Everything survives.
-- [ ] Then the fork: the same update with the release's `Wireless_neuron.hex` and `keyscanner.bin`. Read From Keyboard says the keyboard runs the Curator firmware v2.2.1-curator.1; keys, superkeys, macros, colors and settings are as they were; the Combos mode and a key's own feel are offered with the Curator firmware chosen on the board.
+- [ ] Then the fork: on the board's Keyboard tab with the Curator firmware chosen, Fetch Firmware (it reports the commit it was built from and the folder it was kept in), then Bazecor's update pointed at that folder. Read From Keyboard says the keyboard runs the Curator firmware v2.2.1-curator.1; keys, superkeys, macros, colors and settings are as they were; the Combos mode and a key's own feel are offered with the Curator firmware chosen on the board.
 - [ ] Make a two-key combo sending Escape, apply, and confirm it fires on the keyboard; a combo on one layer fires there only; Combo timeout on the board's Settings tab changes how far apart the keys may land.
 - [ ] Set two home-row keys to different hold times (say 150 ms and 400 ms) and apply; feel the difference. A key with a second tap and its own time between taps behaves accordingly.
 - [ ] Read From Keyboard brings the combos and the keys' feels back as they were set; applying that layout unchanged writes nothing.
 - [ ] Restore a Backup… taken on the Curator firmware brings combos and timing back after they were erased.
+- [ ] The app's own installer: with Dygma's firmware on the keyboard again (Bazecor), Install on the Neuron… from the Keyboard tab; the Neuron's light pulses blue, the progress reaches done, the keyboard comes back and reports v2.2.1-curator.1, and everything on it survived. Then unplug during a write on purpose: the Neuron stays in its bootloader, and Install on the Neuron… again (or Bazecor) recovers it.
 - [ ] Go back to stock with Bazecor's firmware update and confirm everything survived: keys, superkeys, macros, colors and settings. A layout with combos is refused on Dygma's firmware, with the firmware named.
 
 ## The matrix

@@ -3987,6 +3987,8 @@ dependencies = [
  "kc-studio",
  "kc-via",
  "kc-zmk",
+ "serde",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

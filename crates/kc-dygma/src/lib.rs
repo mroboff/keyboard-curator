@@ -13,6 +13,7 @@
 
 pub mod chords;
 pub mod codec;
+pub mod flash;
 pub mod macros;
 pub mod settings;
 pub mod superkeys;

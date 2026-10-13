@@ -9,6 +9,8 @@
 //! Firmwares within a family differ only by data, in the board
 //! definitions.
 
+pub mod dygma_fork;
+
 pub use kc_boards::{Delivery, Family};
 pub use kc_emit::GeneratedFile;
 

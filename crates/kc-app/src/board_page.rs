@@ -20,6 +20,8 @@ use kc_model::{file, FirmwareConfig, Keyboard, KeyboardId, Project};
 use kc_zmk::settings::{Setting, SettingKind, BRIGHTNESS_SETTINGS};
 
 use crate::flash_view::FlashView;
+
+mod fork;
 use crate::library::Library;
 use crate::shell::connection_hint;
 use crate::state::AppState;
@@ -98,6 +100,12 @@ pub struct BoardPage {
     build: BuildStatus,
     /// Where fetching the ready-made firmware from its release has got to.
     release: BuildStatus,
+    /// Where fetching a release of a firmware fork has got to, and what it
+    /// brought.
+    fork: BuildStatus,
+    fork_firmware: Option<std::sync::Arc<kc_firmware::dygma_fork::ForkFirmware>>,
+    /// Where installing that firmware on the keyboard has got to.
+    install: BuildStatus,
     /// What reading from or applying to a live-configured keyboard is
     /// doing, or how it went.
     live: Option<String>,
@@ -175,6 +183,9 @@ impl BoardPage {
             tester,
             build: BuildStatus::Idle,
             release: BuildStatus::Idle,
+            fork: BuildStatus::Idle,
+            fork_firmware: None,
+            install: BuildStatus::Idle,
             live: None,
             live_busy: false,
             notice: None,
@@ -2159,7 +2170,15 @@ impl Render for BoardPage {
             Section::Layouts => Some(self.render_layouts(&saved, cx)),
             Section::Build => Some(match config.delivery(&self.board) {
                 Delivery::Build => self.render_build_section(&saved, &config, cx),
-                Delivery::Live => self.render_keyboard_section(&saved, cx),
+                Delivery::Live => div()
+                    .flex()
+                    .flex_col()
+                    .gap_4()
+                    .when(
+                        kc_firmware::dygma_fork::fork(&self.board, &config).is_some(),
+                        |page| page.child(self.render_fork_section(&saved, cx)),
+                    )
+                    .child(self.render_keyboard_section(&saved, cx)),
                 Delivery::Released => self.render_released_section(&saved, &config, cx),
                 Delivery::Studio => self.render_keyboard_section(&saved, cx),
             }),
