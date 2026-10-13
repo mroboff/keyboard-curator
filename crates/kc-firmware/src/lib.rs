@@ -433,7 +433,7 @@ pub mod live {
                 let changed = kc_studio::session::send_board(project).map_err(|e| e.to_string())?;
                 Ok(Applied {
                     changed: changed > 0,
-                    backup: Some(path).filter(|_| changed > 0),
+                    backup: (changed > 0).then_some(path),
                     changes: (changed > 0)
                         .then(|| format!("{changed} keys"))
                         .into_iter()

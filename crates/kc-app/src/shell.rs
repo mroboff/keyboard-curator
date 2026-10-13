@@ -6,8 +6,9 @@ use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::AppMenuBar;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::component::{ActiveTheme as _, TitleBar};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use kc_boards::board::Side;
@@ -83,6 +84,9 @@ pub struct Shell {
     /// How the window was last set to sit on the desktop, to change it
     /// only when the theme asks for something else.
     window_style: Option<crate::theme::WindowStyle>,
+    /// The menus, drawn in the window's title bar where the system has no
+    /// menu bar of its own (everywhere but a Mac).
+    menu_bar: Option<Entity<AppMenuBar>>,
     focus: FocusHandle,
 }
 
@@ -184,6 +188,7 @@ impl Shell {
             shown: None,
             exhibit: None,
             window_style: None,
+            menu_bar: (!cfg!(target_os = "macos")).then(|| AppMenuBar::new(cx)),
             focus,
         };
         shell.refresh_boards(cx);
@@ -195,6 +200,29 @@ impl Shell {
         self.workspace
             .as_ref()
             .is_some_and(|w| w.read(cx).is_dirty())
+    }
+
+    /// Whether the window may close right now: yes when nothing is
+    /// unsaved. Otherwise the user is asked, and the app quits once they
+    /// have agreed.
+    pub fn may_close(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.has_unsaved_changes(cx) {
+            return true;
+        }
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            "Quit without saving?",
+            Some("Your changes to this layout will be lost."),
+            &["Cancel", "Quit Without Saving"],
+            cx,
+        );
+        cx.spawn(async move |_, cx| {
+            if answer.await == Ok(1) {
+                cx.update(|cx| cx.quit());
+            }
+        })
+        .detach();
+        false
     }
 
     fn board_index(&self, id: &str) -> Option<usize> {
@@ -884,7 +912,10 @@ impl Shell {
         self.state.save();
         let (theme, appearance) = (self.state.theme, self.state.appearance);
         crate::theme::apply(theme, appearance, cx);
-        cx.set_menus(crate::menus(theme, appearance, !self.state.updates_off));
+        crate::install_menus(theme, appearance, !self.state.updates_off, cx);
+        if let Some(menu_bar) = &self.menu_bar {
+            menu_bar.update(cx, |menu_bar, cx| menu_bar.reload(cx));
+        }
         cx.notify();
     }
 
@@ -895,12 +926,16 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let width = crate::SHORTCUTS
+        let shortcuts: Vec<(String, &str)> = crate::SHORTCUTS
+            .iter()
+            .map(|(keys, what)| (crate::shortcut(keys), *what))
+            .collect();
+        let width = shortcuts
             .iter()
             .map(|(keys, _)| keys.chars().count())
             .max()
             .unwrap_or(0);
-        let lines: Vec<String> = crate::SHORTCUTS
+        let lines: Vec<String> = shortcuts
             .iter()
             .map(|(keys, what)| format!("{keys:<width$}   {what}"))
             .collect();
@@ -2052,6 +2087,42 @@ impl Shell {
     }
 }
 
+impl Shell {
+    /// The window's own title bar, with the menus and the title, for the
+    /// computers whose system draws none: nothing on a Mac. Its close
+    /// button asks about unsaved changes like the system's would.
+    fn render_title_bar(&self, title: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let menu_bar = self.menu_bar.clone()?;
+        let shell = cx.entity();
+        let muted = cx.theme().muted_foreground;
+        Some(
+            TitleBar::new()
+                .on_close_window(move |_, window, cx| {
+                    let closing = shell.update(cx, |shell, cx| shell.may_close(window, cx));
+                    if closing {
+                        window.remove_window();
+                    }
+                })
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_4()
+                        .h_full()
+                        .min_w_0()
+                        .child(div().flex_shrink_0().child(menu_bar))
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(muted)
+                                .truncate()
+                                .child(title.to_string()),
+                        ),
+                ),
+        )
+    }
+}
+
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.workspace.is_none() && self.page.is_none() {
@@ -2133,6 +2204,7 @@ impl Render for Shell {
             .flex_col()
             .bg(background)
             .text_color(foreground)
+            .children(self.render_title_bar(&title, cx))
             .when_some(error, |page, error| {
                 page.child(
                     div()
