@@ -921,7 +921,7 @@ impl Image {
             FocusError::Unfit(format!(
                 "this keyboard runs {}, which has no {what}; the layout needs the {}",
                 self.firmware_name(fork),
-                fork.map_or("Curator firmware".to_string(), |f| f.name.clone())
+                fork.map_or("board's firmware", |f| f.name.as_str())
             ))
         };
         if features.contains(&Capability::Combos) {

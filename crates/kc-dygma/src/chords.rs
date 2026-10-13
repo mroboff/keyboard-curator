@@ -290,7 +290,7 @@ mod tests {
             timeout: 0,
             keys: (0..6).collect(),
         };
-        assert_eq!(bytes(&[wide.clone()]), 22);
+        assert_eq!(bytes(std::slice::from_ref(&wide)), 22);
         let many: Vec<Chord> = (0..MAX_CHORDS).map(|_| wide.clone()).collect();
         assert!(bytes(&many) > MAP_BYTES);
         assert_eq!(parse(&serialize(&many)), many);

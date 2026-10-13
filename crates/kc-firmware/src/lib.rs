@@ -262,7 +262,7 @@ pub mod live {
                     .contains(&kc_boards::board::Capability::Combos);
                 let (reads, writes) = if fork {
                     (
-                        " Combos and each key's own feel come along on the Curator firmware, and the Keyboard tab says which firmware the keyboard runs.",
+                        " Combos and each key's own feel come along on this firmware, and the notes say which firmware the keyboard runs.",
                         ", combos and each key's own feel",
                     )
                 } else {
