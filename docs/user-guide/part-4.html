@@ -24,7 +24,8 @@
     <tr><td rowspan="3">Go60, Glove80</td><td>MoErgo ZMK v26.09</td><td>The standard choice: MoErgo's own ZMK release, built with ZMK Studio.</td></tr>
     <tr><td>MoErgo ZMK with per-key lighting (community, experimental)</td><td>The community per-key lighting branch, based on an older MoErgo release. No ZMK Studio.</td></tr>
     <tr><td>RMK for MoErgo (community, experimental)</td><td>colonelpanic's moergo-rmk, the firmware behind Moosy Research's TailorKey for RMK, taken ready-made from its release and configured live over USB. RGB with animations, the touchpads on the Go60, bilateral home-row mods, a Magic layer. Not MoErgo firmware; MoErgo does not support it.</td></tr>
-    <tr><td>Defy</td><td>Dygma firmware (experimental in this app)</td><td>The firmware Dygma ships. Configured live over USB; firmware updates stay with Dygma's Bazecor. Writing has so far only been tested against a simulated keyboard.</td></tr>
+    <tr><td rowspan="2">Defy</td><td>Dygma firmware (experimental in this app)</td><td>The firmware Dygma ships. Configured live over USB; firmware updates stay with Dygma's Bazecor. Writing has so far only been tested against a simulated keyboard.</td></tr>
+    <tr><td>Dygma Defy, Curator firmware (experimental)</td><td>This project's own fork of Dygma's 2.2.1 firmware for the wireless Defy, adding combos and a feel of each key's own. Everything else is Dygma's code, unchanged, and it is configured the same way. Installed with Bazecor's firmware update from the release's files. It has not been run on a keyboard yet.</td></tr>
   </table>
   <p>Choosing a firmware here does not touch the keyboard. The keyboard changes when you build and flash, or apply a layout to it (Chapter 13).</p>
 
@@ -105,7 +106,9 @@
     <tr><td>Keyboard</td><td><span class="ui">Keyboard name</span>: the Bluetooth name; write <code>{slot}</code> in it to add the profile's number.</td></tr>
     <tr><td>Lighting</td><td><span class="ui">Brightness</span>, as a share of what the firmware allows (it keeps the board's limit itself). <span class="ui">Lights on</span>: always, never, or only while powered over USB. <span class="ui">Animation</span>, <span class="ui">Animation palette</span>, <span class="ui">Animation brightness</span> and <span class="ui">Animation speed</span>: the animation played under the colors a layout does not set, chosen from the firmware's own effects (Gradient, Flow, Vortex, Sparkle, Ripple, Rain, Reactive, Crosshair, Tracer, Keyfall, Shockwave, Comet) and palettes. <span class="ui">Background color</span> with its hue, saturation, brightness, breathing speed and style: a single color behind everything else, in place of the animation.</td></tr>
     <tr><td>Typing</td><td><span class="ui">Hold time</span> and <span class="ui">Hold decision</span> for mod-taps and layer-taps without their own timing; <span class="ui">Quick tap</span>; <span class="ui">Only hold after a pause</span> and <span class="ui">Pause before a hold</span>; <span class="ui">Tap for the same hand</span> and <span class="ui">Hold only for the other hand</span>, the firmware's bilateral rules; <span class="ui">Combo window</span>; <span class="ui">Sticky key timeout</span> and <span class="ui">Sticky keys let go on the next key</span>; <span class="ui">Tap length</span>.</td></tr></table>
-  <p>Plain RMK on the Imprint and Dygma firmware have no settings to adjust here yet.</p>
+  <h3>Dygma settings</h3>
+  <p>Dygma's firmware keeps its settings on the keyboard, and they are written to it when you apply a layout: the layer on start, typing and superkey timing, mouse keys, lights, idle and the wireless parts, each standing for one of the firmware's own commands. Reading the keyboard offers its values to the board. The Curator firmware adds <span class="ui">Combo timeout</span> under Combos, how long the keys of a combo may arrive apart; it is shown only with that firmware chosen.</p>
+  <p>Plain RMK on the Imprint has no settings to adjust here yet.</p>
 
   <h2>Layouts</h2>
   <p>A layout is what the keys do. The board can have any number of them; the <b>current</b> one is the one that goes into the firmware when it is built, or is written to the keyboard.</p>
@@ -209,7 +212,16 @@
     <tr><td>2Tap</td><td><span class="ui">Double tap</span></td></tr>
     <tr><td>2Tap &amp; Hold</td><td><span class="ui">Double tap, then hold</span></td></tr>
   </table>
-  <p>Superkey timing is one setting for the whole keyboard, under Settings › Superkeys, so a key's <span class="ui">How it feels</span> stays at <span class="ui">Keyboard default</span>; a custom feel, a shift override or a third tap is flagged, since the firmware has no place for them. A superkey the keyboard already holds is reused when a key matches it exactly; otherwise a new one is added, up to the firmware's 128. Macros work the same way, and a pause inside a macro becomes a Bazecor delay.</p>
+  <p>Superkey timing is one setting for the whole keyboard, under Settings › Superkeys, so on Dygma's firmware a key's <span class="ui">How it feels</span> stays at <span class="ui">Keyboard default</span>; a custom feel, a shift override or a third tap is flagged, since the firmware has no place for them. A superkey the keyboard already holds is reused when a key matches it exactly; otherwise a new one is added, up to the firmware's 128. Macros work the same way, and a pause inside a macro becomes a Bazecor delay.</p>
+
+  <h3>The Curator firmware</h3>
+  <p>The Curator firmware is this project's fork of Dygma's 2.2.1 firmware for the wireless Defy. It adds two things, configured over USB like everything else:</p>
+  <ul>
+    <li><b>Combos.</b> The Combos mode works as on ZMK: two to six keys pressed together send a key, a layer switch or a macro, on every layer or on chosen ones, within the board's <span class="ui">Combo timeout</span> or a timeout of the combo's own. The keyboard holds up to 32. "Only after a pause in typing" and "Stay active until every key is released" are kept in the layout but do not apply, and the combo says so.</li>
+    <li><b>A key's own feel.</b> A key with a hold can have its own hold time, and "No hold right after typing"; a key with a second tap its own time between taps. Up to 48 keys, counted over every layer. The firmware keeps one way of deciding hold and tap, so <span class="ui">Decide by</span> and the other choices under More do not apply, and the key says so.</li>
+  </ul>
+  <p>Everything else is Dygma's code, unchanged: keys, superkeys, macros, colors, the underglow and the settings are read and written as on Dygma's firmware, and firmware updates and Bluetooth pairing stay with Bazecor. After <span class="ui">Read From Keyboard</span>, the Keyboard tab says which firmware the keyboard runs. A layout with combos or a key's own feel is refused on Dygma's firmware, with the firmware named, so choose the Curator firmware on the board before using them.</p>
+  <p><b>Installing it.</b> Download the release's two files, <code>Wireless_neuron.hex</code> and <code>keyscanner.bin</code>, into one folder (the keyscanner file is Dygma's own, unchanged). In Bazecor, open the firmware update, choose the custom firmware option, point it at that folder and follow Bazecor's steps; it updates the Neuron and, if they differ, the sides. Keys, superkeys, macros, colors and settings survive. Going back is the same update with Dygma's own release, which Bazecor offers as the current version; everything survives that way too, and the fork's combos and timing stay on the keyboard, unused, until the Curator firmware is installed again.</p>
 
   <h2>The Keyboard tab: RMK for MoErgo and the Imprint fork</h2>
   <p>This firmware is not built. It comes ready-made from its project's release on GitHub, is flashed once, and is then configured on the running keyboard with Rynk, RMK's host protocol. The tab has everything for that, top to bottom.</p>
@@ -344,12 +356,13 @@
   <table class="wrap"><tr><th></th><th></th></tr>
     <tr><td>Models supported</td><td>Wireless and wired. The two share a layout and firmware behavior and differ only in how the Neuron connects.</td></tr>
     <tr><td>Connection</td><td>The Neuron is the USB device. Connect it, and close Dygma's Bazecor: only one program can talk to the keyboard at a time.</td></tr>
-    <tr><td>Flashing</td><td>None from this app. Firmware updates, and pairing and forgetting Bluetooth hosts, are done with Bazecor.</td></tr>
+    <tr><td>Firmware</td><td>Dygma's own, or the Curator firmware: this project's fork of Dygma's 2.2.1 for the wireless Defy, adding combos and a key's own feel (see the Keyboard tab section in Chapter 13). The app says which one the keyboard runs after Read From Keyboard, and refuses combos and a key's own feel on Dygma's firmware.</td></tr>
+    <tr><td>Flashing</td><td>None from this app. Firmware updates, including installing the Curator firmware from its release's files and going back to Dygma's, and pairing and forgetting Bluetooth hosts, are done with Bazecor.</td></tr>
     <tr><td>Edited here</td><td>Keys, superkeys as key setups (see the Keyboard tab section in Chapter 13 for Bazecor's names beside ours), macros, per-key colors and the underglow, and the firmware's settings. Right-hand modifiers are written as the left ones: the firmware has one flag per modifier.</td></tr>
     <tr><td>Starting layout</td><td><span class="ui">Read From Keyboard</span> on the Keyboard tab, which opens what the Defy holds. <span class="ui">New Layout</span> starts with one empty layer.</td></tr>
     <tr><td>Layers</td><td>Ten.</td></tr>
     <tr><td>Lighting</td><td>Per-key colors and the underglow, painted light by light, from a palette of sixteen the whole keyboard shares. No lock or battery lights. No brightness limit.</td></tr>
-    <tr><td>Kept as they are</td><td>Superkeys and macros already on the keyboard that no key uses, and the lights no layout paints. The firmware has no combos, layer rules or per-key timing, so those are not offered.</td></tr>
+    <tr><td>Kept as they are</td><td>Superkeys and macros already on the keyboard that no key uses, and the lights no layout paints. Dygma's firmware has no combos, layer rules or per-key timing, so those are not offered on it; the Curator firmware has combos and a key's own feel, and layer rules are still not offered.</td></tr>
     <tr><td>Backups</td><td>Every write first saves everything the keyboard lists, as one JSON file, the way Bazecor's backup does; <span class="ui">Restore a Backup…</span> on the Keyboard tab writes one back.</td></tr>
     <tr><td>Status</td><td>Reading is proven on a Defy; writing has so far only been tested against a simulated keyboard. A backup of the keyboard's configuration is saved before the first write.</td></tr></table>
   <h2 id="c15-shields">ZMK shields</h2>

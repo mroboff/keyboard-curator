@@ -11,24 +11,30 @@
 //! keyboard's own list of commands, from `help`, gates everything else, so
 //! a firmware that lacks a command is never sent it.
 
+pub mod chords;
 pub mod codec;
 pub mod macros;
 pub mod settings;
 pub mod superkeys;
+pub mod timing;
 
 use std::io::{Read, Write};
 use std::time::Duration;
 
-use kc_boards::board::DygmaProfile;
+use kc_boards::board::{Capability, DygmaFork, DygmaProfile};
 use kc_boards::Board;
 use kc_model::behavior::{BehaviorKind, Macro, MacroStep, Scope};
 use kc_model::features::{KeyLight, Rgb};
-use kc_model::{BehaviorId, Binding, Device, LayerId, Location, Problem, Project, Severity};
+use kc_model::setup::KeySetup;
+use kc_model::{
+    BehaviorId, BehaviorRef, Binding, Device, LayerId, Location, Param, Problem, Project, Severity,
+};
 use serde::{Deserialize, Serialize};
 
 /// The commands this crate reads with. None takes an argument, so none can
-/// change anything.
-const READS: [&str; 14] = [
+/// change anything. The `chords.*` and `timing.*` commands are the
+/// Curator firmware's; stock firmware does not list them.
+const READS: [&str; 19] = [
     "help",
     "version",
     "hardware.version",
@@ -39,6 +45,11 @@ const READS: [&str; 14] = [
     "superkeys.map",
     "macros.map",
     "macros.memory",
+    "chords.map",
+    "chords.memory",
+    "timing.map",
+    "timing.capacity",
+    "timing.defaults",
     "wireless.battery.left.level",
     "wireless.battery.right.level",
     "wireless.battery.left.status",
@@ -47,12 +58,14 @@ const READS: [&str; 14] = [
 
 /// The only commands this crate writes with, besides the settings in
 /// [`settings::MAPPINGS`].
-pub const WRITES: [&str; 5] = [
+pub const WRITES: [&str; 7] = [
     "keymap.custom",
     "palette",
     "colormap.map",
     "superkeys.map",
     "macros.map",
+    "chords.map",
+    "timing.map",
 ];
 
 /// Whether a command may ever be written.
@@ -340,6 +353,15 @@ impl<T: Read + Write> Focus<T> {
             macro_memory: self
                 .read("macros.memory")?
                 .and_then(|t| t.trim().parse().ok()),
+            chords: self.read_numbers_if_any("chords.map")?,
+            chords_memory: self
+                .read("chords.memory")?
+                .and_then(|t| t.trim().parse().ok()),
+            timing: self.read_numbers_if_any("timing.map")?,
+            timing_capacity: self
+                .read("timing.capacity")?
+                .and_then(|t| t.trim().parse().ok()),
+            timing_defaults: self.read_numbers_if_any("timing.defaults")?,
         })
     }
 
@@ -350,10 +372,13 @@ impl<T: Read + Write> Focus<T> {
         current: &Image,
         new: &Image,
     ) -> Result<Vec<String>, FocusError> {
-        // The same sizes, or something is wrong and nothing is sent.
+        // The same sizes, or something is wrong and nothing is sent. A
+        // table only one side has means a command the keyboard lacks.
         if current.keymap.len() != new.keymap.len()
             || current.palette.len() != new.palette.len()
             || current.colormap.len() != new.colormap.len()
+            || current.chords.is_empty() != new.chords.is_empty()
+            || current.timing.is_empty() != new.timing.is_empty()
         {
             return Err(FocusError::Mismatch);
         }
@@ -377,6 +402,16 @@ impl<T: Read + Write> Focus<T> {
         if current.superkeys != new.superkeys {
             self.write("superkeys.map", &new.superkeys)?;
             sent.push("superkeys.map".into());
+        }
+        // The Curator firmware's tables, after the superkeys and macros a
+        // chord may name, and before the keys.
+        if current.timing != new.timing {
+            self.write("timing.map", &new.timing)?;
+            sent.push("timing.map".into());
+        }
+        if current.chords != new.chords {
+            self.write("chords.map", &new.chords)?;
+            sent.push("chords.map".into());
         }
         if current.keymap != new.keymap {
             self.write("keymap.custom", &new.keymap)?;
@@ -450,6 +485,23 @@ pub struct Image {
     /// The room for macros, in bytes, when the keyboard says.
     #[serde(default)]
     pub macro_memory: Option<u32>,
+    /// The chord map as the Curator firmware stores it; empty on firmware
+    /// without chords.
+    #[serde(default)]
+    pub chords: Vec<u16>,
+    /// The room for chords, in bytes, when the keyboard says.
+    #[serde(default)]
+    pub chords_memory: Option<u16>,
+    /// The per-key timing table as the Curator firmware stores it; empty
+    /// on firmware without it.
+    #[serde(default)]
+    pub timing: Vec<u16>,
+    /// How many timing entries the keyboard holds, when it says.
+    #[serde(default)]
+    pub timing_capacity: Option<u16>,
+    /// The keyboard's own seven timing values, when it says.
+    #[serde(default)]
+    pub timing_defaults: Vec<u16>,
 }
 
 fn channels(profile: &DygmaProfile) -> usize {
@@ -531,6 +583,14 @@ impl Image {
         if !self.macros.is_empty() && !backup.macros.is_empty() {
             image.macros = backup.macros.clone();
         }
+        // The Curator firmware's tables come back only between keyboards
+        // that both have them.
+        if !self.chords.is_empty() && !backup.chords.is_empty() {
+            image.chords = backup.chords.clone();
+        }
+        if !self.timing.is_empty() && !backup.timing.is_empty() {
+            image.timing = backup.timing.clone();
+        }
         for (command, value) in &backup.settings {
             if restorable(command) && self.settings.contains_key(command) {
                 image.settings.insert(command.clone(), value.clone());
@@ -600,6 +660,23 @@ impl Image {
         image
     }
 
+    /// Whether the keyboard runs `fork` rather than Dygma's own firmware,
+    /// by the version it reports. The commands it lists are the surer
+    /// sign, and gate every read and write.
+    pub fn runs_fork(&self, fork: &DygmaFork) -> bool {
+        self.version.contains(&fork.version_mark)
+    }
+
+    /// The firmware the keyboard runs, for messages: Dygma's own, or
+    /// `fork` when the keyboard runs it.
+    pub fn firmware_name(&self, fork: Option<&DygmaFork>) -> String {
+        let version = self.version.trim();
+        match fork {
+            Some(fork) if self.runs_fork(fork) => format!("the {} {version}", fork.name),
+            _ => format!("Dygma's firmware {version}"),
+        }
+    }
+
     /// A layout holding what the image holds: every layer, with its keys
     /// and the color under each key.
     pub fn to_project(
@@ -608,6 +685,19 @@ impl Image {
         board: &Board,
         profile: &DygmaProfile,
     ) -> Result<Project, FocusError> {
+        self.to_project_with_notes(name, board, profile)
+            .map(|(project, _)| project)
+    }
+
+    /// [`Image::to_project`], with what could not be brought along: the
+    /// Curator firmware's chords and timing that the layout has no key
+    /// for, or that the app cannot show.
+    pub fn to_project_with_notes(
+        &self,
+        name: &str,
+        board: &Board,
+        profile: &DygmaProfile,
+    ) -> Result<(Project, Vec<String>), FocusError> {
         if !self.fits(profile) {
             return Err(FocusError::Mismatch);
         }
@@ -679,6 +769,20 @@ impl Image {
             lighting.keys = lights;
             lighting.underglow = underglow;
         }
+        // The Curator firmware's chords become combos, and its timing the
+        // keys' feels, once every key is in place.
+        let mut notes = chords::apply(
+            &mut project,
+            &chords::parse(&self.chords),
+            profile,
+            &macro_binding,
+        );
+        notes.extend(timing::apply(
+            &mut project,
+            &timing::parse(&self.timing),
+            profile,
+            &self.timing_defaults,
+        ));
         // A macro several keys share is a template; one key's is its own.
         // They were made as templates so that building the keys, which
         // tidies as it goes, could not drop one before its key was set.
@@ -690,7 +794,7 @@ impl Image {
             }
         }
         project.tidy();
-        Ok(project)
+        Ok((project, notes))
     }
 
     /// A macro definition for every macro the keymap names, on a key or
@@ -758,11 +862,12 @@ impl Image {
         &self,
         project: &Project,
         profile: &DygmaProfile,
+        features: &[Capability],
     ) -> Result<Image, FocusError> {
         if !self.fits(profile) {
             return Err(FocusError::Mismatch);
         }
-        let problems = check(project, profile);
+        let problems = check(project, profile, features);
         if let Some(problem) = problems.iter().find(|p| p.severity == Severity::Error) {
             return Err(FocusError::Unfit(format!(
                 "the layout has {} problem(s) to fix first, such as: {}",
@@ -770,6 +875,7 @@ impl Image {
                 problem.message
             )));
         }
+        let per_key_timing = features.contains(&Capability::PerKeyTiming);
         let mut image = self.clone();
         let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
         let size = channels(profile);
@@ -792,17 +898,60 @@ impl Image {
                     Some(binding) if is_macro(project, binding) => {
                         encode_any(binding, &layers, &codes).map_err(FocusError::Unfit)?
                     }
-                    Some(binding) if binding.user_behavior().is_some() => {
-                        let actions = superkeys::actions(project, binding, &layers, &codes)
-                            .map_err(FocusError::Unfit)?;
-                        let entry =
-                            superkeys::place(&mut table, actions).map_err(FocusError::Unfit)?;
-                        superkeys::FIRST + u16::try_from(entry).expect("few superkeys")
-                    }
+                    Some(binding) if binding.user_behavior().is_some() => setup_code(
+                        project,
+                        binding,
+                        &layers,
+                        &codes,
+                        &mut table,
+                        per_key_timing,
+                    )
+                    .map_err(FocusError::Unfit)?,
                     Some(binding) => codec::encode(binding, &layers).map_err(FocusError::Unfit)?,
                     None => codec::TRANSPARENT,
                 };
                 image.keymap[index * profile.slots + slot] = code;
+            }
+        }
+        // The Curator firmware's chords, from the layout's combos, where
+        // the firmware the board runs has combos. The layout's combos are
+        // the whole map, as its keys are the whole keymap.
+        let fork = profile.fork.as_ref();
+        let needs = |what: &str| {
+            FocusError::Unfit(format!(
+                "this keyboard runs {}, which has no {what}; the layout needs the {}",
+                self.firmware_name(fork),
+                fork.map_or("board's firmware", |f| f.name.as_str())
+            ))
+        };
+        if features.contains(&Capability::Combos) {
+            let memory = self.chords_memory.map_or(chords::MAP_BYTES, usize::from);
+            let placed =
+                chords::from_project(project, &layers, profile, &codes, &mut table, memory)
+                    .map_err(|(_, reason)| FocusError::Unfit(reason))?;
+            if self.chords.is_empty() && !placed.is_empty() {
+                return Err(needs("combos"));
+            }
+            if !self.chords.is_empty() {
+                image.chords = chords::serialize(&placed);
+            }
+        }
+        // Its timing table, from the keys' feels.
+        if per_key_timing {
+            let entries = timing::from_project(project, profile)
+                .map_err(|(_, reason)| FocusError::Unfit(reason))?;
+            if self.timing.is_empty() && !entries.is_empty() {
+                return Err(needs("timing of a key's own"));
+            }
+            let capacity = self.timing_capacity.map_or(timing::CAPACITY, usize::from);
+            if entries.len() > capacity {
+                return Err(FocusError::Unfit(format!(
+                    "the keyboard holds a feel of its own for {capacity} keys, and the layout gives one to {}",
+                    entries.len()
+                )));
+            }
+            if !self.timing.is_empty() {
+                image.timing = timing::serialize(&entries);
             }
         }
         if self.superkeys.is_empty() && !table.is_empty() {
@@ -896,8 +1045,12 @@ impl Image {
     }
 }
 
-/// What stops a layout from being written to Dygma firmware.
-pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
+/// What stops a layout from being written to Dygma firmware, and what the
+/// firmware will not honor of it. `features` is what the board's firmware
+/// profile can do: combos and a key's own timing exist on the Curator
+/// firmware and are refused on Dygma's own.
+pub fn check(project: &Project, profile: &DygmaProfile, features: &[Capability]) -> Vec<Problem> {
+    let per_key_timing = features.contains(&Capability::PerKeyTiming);
     let mut problems = Vec::new();
     let mut error = |location: Location, message: String| {
         problems.push(Problem {
@@ -931,11 +1084,15 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
             let result = if is_macro(project, binding) {
                 encode_any(binding, &layers, &codes).map(|_| ())
             } else if binding.user_behavior().is_some() {
-                superkeys::actions(project, binding, &layers, &codes).map(|actions| {
-                    if !table.contains(&actions) {
-                        table.push(actions);
-                    }
-                })
+                setup_code(
+                    project,
+                    binding,
+                    &layers,
+                    &codes,
+                    &mut table,
+                    per_key_timing,
+                )
+                .map(|_| ())
             } else {
                 codec::encode(binding, &layers).map(|_| ())
             };
@@ -950,6 +1107,20 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
             }
         }
     }
+    // The Curator firmware's chords, where the firmware has combos; on
+    // firmware without them the layout keeps its combos out of the way.
+    if features.contains(&Capability::Combos) {
+        if let Err((location, reason)) = chords::from_project(
+            project,
+            &layers,
+            profile,
+            &codes,
+            &mut table,
+            chords::MAP_BYTES,
+        ) {
+            error(location, reason);
+        }
+    }
     if table.len() > superkeys::SLOTS || superkeys::bytes(&table) > superkeys::MAP_BYTES {
         error(
             Location::Project,
@@ -960,6 +1131,12 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
                 superkeys::MAP_BYTES
             ),
         );
+    }
+    // Its timing table, from the keys' feels, and what it cannot honor.
+    if per_key_timing {
+        if let Err((location, reason)) = timing::from_project(project, profile) {
+            error(location, reason);
+        }
     }
     let mut colors: Vec<Rgb> = Vec::new();
     for lighting in &project.lighting {
@@ -1010,22 +1187,96 @@ pub fn check(project: &Project, profile: &DygmaProfile) -> Vec<Problem> {
             message: "Dygma firmware has no right-hand modifiers: right Control, Shift and Command are written as the left ones".into(),
         });
     }
+    if features.contains(&Capability::Combos) {
+        problems.extend(chords::warnings(project));
+    }
+    if per_key_timing {
+        problems.extend(timing::warnings(project));
+    }
     problems
 }
 
 /// Whether a binding can be written to Dygma firmware, for offering only
-/// what works.
-pub fn expressible(binding: &kc_model::Binding, project: &Project) -> bool {
+/// what works. `features` is what the board's firmware profile can do.
+pub fn expressible(
+    binding: &kc_model::Binding,
+    project: &Project,
+    features: &[Capability],
+) -> bool {
     let layers: Vec<LayerId> = project.layers.iter().map(|l| l.id).collect();
     if is_macro(project, binding) {
         return macro_steps(project, binding)
             .is_some_and(|steps| macros::from_steps(steps, &layers).is_ok());
     }
+    if binding.user_behavior().is_some() {
+        // A key setup: its feel is the keyboard's, or the firmware times
+        // keys one by one.
+        return KeySetup::read(project, binding).is_some_and(|setup| {
+            features.contains(&Capability::PerKeyTiming) || superkeys::keyboard_feel(&setup)
+        });
+    }
     codec::encode(binding, &layers).is_ok()
 }
 
+/// The code for a key that is a key setup: the firmware's own hold and
+/// tap where the setup is only that, otherwise a superkey, placed in
+/// `table`. A feel of the key's own is allowed where the firmware times
+/// keys one by one (`per_key_timing`), as that key's timing entry.
+fn setup_code(
+    project: &Project,
+    binding: &Binding,
+    layers: &[LayerId],
+    codes: &macros::Codes,
+    table: &mut Vec<superkeys::Actions>,
+    per_key_timing: bool,
+) -> Result<u16, String> {
+    let setup = KeySetup::read(project, binding)
+        .ok_or_else(|| "this key is written in a way Dygma firmware cannot hold".to_string())?;
+    if !per_key_timing && !superkeys::keyboard_feel(&setup) {
+        return Err("Dygma firmware keeps one timing for every superkey: choose Keyboard default for this key's feel, and set the timing under Settings".into());
+    }
+    // A hold and tap, and nothing more, is what the firmware's own
+    // dual-use keys are, which it turns such superkeys into anyway.
+    if let Some(dual) = dual_use(&setup) {
+        if let Ok(code) = codec::encode(&dual, layers) {
+            return Ok(code);
+        }
+    }
+    let actions = superkeys::actions(project, binding, layers, codes, per_key_timing)?;
+    let entry = superkeys::place(table, actions)?;
+    Ok(superkeys::FIRST + u16::try_from(entry).expect("few superkeys"))
+}
+
+/// The built-in hold and tap a setup is, when it is only a hold and a
+/// tap: a modifier or a layer held, a key tapped.
+fn dual_use(setup: &KeySetup) -> Option<Binding> {
+    let hold = setup.hold.as_ref()?;
+    if setup.has_taps() || setup.shifted.is_some() || setup.sticky || !setup.more_taps.is_empty() {
+        return None;
+    }
+    let side = |binding: &Binding| -> Option<Param> {
+        match binding {
+            Binding::Behavior {
+                behavior: BehaviorRef::BuiltIn(label),
+                params,
+            } => match (label.as_str(), params.as_slice()) {
+                ("kp", [key @ Param::Key(_)]) => Some(key.clone()),
+                ("mo", [layer @ Param::Layer(_)]) => Some(layer.clone()),
+                _ => None,
+            },
+            _ => None,
+        }
+    };
+    let tap = side(&setup.tap).filter(|p| matches!(p, Param::Key(_)))?;
+    Some(match side(hold)? {
+        key @ Param::Key(_) => Binding::new("mt", vec![key, tap]),
+        layer @ Param::Layer(_) => Binding::new("lt", vec![layer, tap]),
+        _ => return None,
+    })
+}
+
 /// Whether a binding runs one of the layout's macros.
-fn is_macro(project: &Project, binding: &Binding) -> bool {
+pub(crate) fn is_macro(project: &Project, binding: &Binding) -> bool {
     macro_steps(project, binding).is_some()
 }
 
@@ -1168,6 +1419,7 @@ pub fn apply(
     project: &Project,
     board: &Board,
     profile: &DygmaProfile,
+    features: &[Capability],
     config: &kc_model::FirmwareConfig,
     device: Option<&Device>,
     backup: impl FnOnce(&Image) -> std::io::Result<()>,
@@ -1175,7 +1427,9 @@ pub fn apply(
     let port = find_port(board, device).ok_or(FocusError::NotFound)?;
     let mut focus = open(&port)?;
     let before = focus.read_image()?;
-    let new = before.with_project(project, profile)?.with_settings(config);
+    let new = before
+        .with_project(project, profile, features)?
+        .with_settings(config);
     if new == before {
         return Ok(Applied {
             before,

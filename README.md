@@ -71,6 +71,7 @@ Configuration is in two levels. A **board** is one of your keyboards: its firmwa
 | RMK (experimental) | Imprint | Generated project, built on GitHub, flashed as UF2. Compiled, never flashed. |
 | RMK for MoErgo (experimental) | Go60, Glove80, Imprint | colonelpanic's moergo-rmk, taken ready-made from its releases and checked against their checksums, flashed once as UF2. The layout is then written to the running keyboard over USB with Rynk, RMK's host protocol: keys, hold-taps with their timing profiles, tap-dances, mod-morphs, macros, combos, per-key colors with lock and battery lights, and the touchpads. Reads and writes TailorKey's RMK `.toml` files. The Imprint runs it from a fork with a board crate of its own (per-key RGB at the vendor's 50% ceiling, both PMW3610 trackballs, BLE split). Written against the protocol's own client; no keyboard has been connected yet. |
 | Dygma | Defy | Written to the keyboard over USB, with no build. Reading is proven on a Defy; writing has only been run against a simulated keyboard. |
+| Curator firmware (experimental) | Defy (wireless) | This project's fork of Dygma's 2.2.1 firmware, adding combos and a hold and tap feel of each key's own, configured over USB like the stock firmware. Installed with Bazecor's firmware update from the release's files; going back is the same update with Dygma's release. Not yet run on a keyboard. |
 
 Building needs the GitHub CLI signed in (`gh auth login`) or a `GH_TOKEN`.
 

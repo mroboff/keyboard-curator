@@ -84,6 +84,64 @@ key_leds = [
   29, 30, 31, 32, 33, 34, 69, 68, 67, 66, 65, 64, 63, 62,
 ]
 
+[[firmware]]
+id = "dygma-defy-curator"
+name = "Dygma Defy, Curator firmware"
+family = "dygma"
+experimental = true
+# The stock firmware's capabilities, plus what the fork adds: chords
+# (combos) and a hold and tap timing of each key's own.
+capabilities = ["per-key-lighting", "underglow-lighting", "rgb-underglow", "macros", "combos", "per-key-timing"]
+notes = [
+  "Keyboard Curator's own fork of Dygma's 2.2.1 firmware for the wireless Defy, adding combos and a feel of each key's own (its hold time and the time allowed between taps), configured over USB like everything else. The rest is Dygma's firmware, unchanged.",
+  "Installed with Bazecor's firmware update, pointed at the custom firmware folder from the release (Wireless_neuron.hex and keyscanner.bin, both from the release), or from this app's board page once that is built. Going back is Bazecor's firmware update with Dygma's own release. Keys, superkeys, macros, colors and settings survive both ways.",
+  "After Read From Keyboard, the Keyboard tab says which firmware the keyboard runs. A layout with combos or per-key timing is refused on Dygma's own firmware, with the firmware named.",
+  "This firmware has not been run on a keyboard yet.",
+]
+
+[firmware.dygma]
+layers = 10
+# The keymap is a grid of 5 rows of 16; keys the Defy does not have are
+# skipped.
+slots = 80
+# Colors are chosen from a palette of 16, stored as red, green, blue, white.
+palette = 16
+rgbw = true
+# Every light on the keyboard: one under each key, then the underglow.
+leds = 178
+# For each key of the layout, in order: its slot in the keymap grid.
+key_slots = [
+  0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15,
+  16, 17, 18, 19, 20, 21, 22, 25, 26, 27, 28, 29, 30, 31,
+  32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47,
+  48, 49, 50, 51, 52, 53, 58, 59, 60, 61, 62, 63, 64, 65,
+  66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+]
+# The layout's underglow spots are lights 70 to 175, in order. The two
+# lights after them are not drawn by Bazecor and are left as they are.
+underglow_first = 70
+# For each key of the layout, in order: the number of the light under it.
+key_leds = [
+  0, 1, 2, 3, 4, 5, 6, 41, 40, 39, 38, 37, 36, 35,
+  7, 8, 9, 10, 11, 12, 13, 48, 47, 46, 45, 44, 43, 42,
+  14, 15, 16, 17, 18, 19, 20, 55, 54, 53, 52, 51, 50, 49,
+  21, 22, 23, 24, 25, 26, 61, 60, 59, 58, 57, 56, 27, 28,
+  29, 30, 31, 32, 33, 34, 69, 68, 67, 66, 65, 64, 63, 62,
+]
+# The release this profile is pinned to, and how a keyboard running it is
+# told apart from one running Dygma's own firmware. The Focus commands
+# the fork adds (chords.*, timing.*) are facts in kc-dygma's chords.rs
+# and timing.rs, transcribed from the fork's CURATOR.md.
+[firmware.dygma.fork]
+name = "Curator firmware"
+repository = "mroboff/NeuronWireless_defy"
+tag = "v2.2.1-curator.1"
+source_commit = "89dcfeb3ebdbc70a9590da7bbcd0e2fcf68c0ee1"
+kaleidoscope_commit = "fc3e1f83ed8049d8e1c9ad1300646d98f950778c"
+version_mark = "-curator."
+neuron_file = "Wireless_neuron.hex"
+keyscanner_file = "keyscanner.bin"
+
 [[layouts]]
 id = "defy"
 name = "Defy"

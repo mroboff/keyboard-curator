@@ -59,4 +59,7 @@ pub enum Feature {
     /// The keys of Dygma's firmware with no ZMK counterpart: battery
     /// status, Bluetooth pairing, energy status and RF status.
     DygmaKeys,
+    /// Hold and tap timing set per key on the keyboard, beside the one
+    /// timing the firmware keeps for every key.
+    PerKeyTiming,
 }

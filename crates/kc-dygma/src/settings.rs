@@ -99,6 +99,10 @@ pub const MAPPINGS: &[Mapping] = &[
         command: "superkeys.repeat",
     },
     Mapping {
+        key: "dygma.combos.timeout",
+        command: "chords.timeout",
+    },
+    Mapping {
         key: "dygma.mouse.speed",
         command: "mouse.speed",
     },
@@ -248,6 +252,17 @@ pub const SETTINGS: &[Setting] = &[
         "The interval between repeats of a held superkey's action, in milliseconds.",
         int(0, 1000, 10),
     ),
+    // The Curator firmware's `chords.timeout`: offered only where the
+    // board's firmware has combos, and sent only where the keyboard lists
+    // the command.
+    Setting {
+        group: "Combos",
+        key: "dygma.combos.timeout",
+        name: "Combo timeout",
+        description: "How long the keys of a combo may arrive apart and still count as pressed together, in milliseconds. A combo with a timeout of its own uses that instead.",
+        kind: int(10, 1000, 5),
+        requires: Some(kc_zmk::Feature::Combos),
+    },
     setting(
         "Mouse keys",
         "dygma.mouse.speed",
