@@ -4072,6 +4072,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "kc-via"
+version = "0.1.0"
+dependencies = [
+ "async-hid",
+ "futures-util",
+ "kc-boards",
+ "kc-model",
+ "kc-zmk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "kc-zmk"
 version = "0.1.0"
 dependencies = [

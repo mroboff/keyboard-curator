@@ -31,6 +31,7 @@ All are under the SIL Open Font License 1.1.
 | moergo-rmk, the firmware taken from releases for the Go60 and Glove80, and the `rynk` and `moergo-config` crates the app links to talk to it | colonelpanic8/moergo-rmk | MIT |
 | imprint-rmk, the fork of moergo-rmk with the Imprint board crate | mroboff/imprint-rmk | MIT |
 | ZMK Studio protocol (the messages in `kc-studio`, written by hand after zmk-studio-messages at the revision ZMK v0.3.0 pins) | zmkfirmware/zmk-studio-messages | MIT |
+| VIA's protocol (the command numbers, report layout and lighting channels in `kc-via`, transcribed as numbers) | qmk/qmk_firmware, quantum/via.h and via.c | GPL-2.0; facts only, no code copied |
 
 ## Board data
 
