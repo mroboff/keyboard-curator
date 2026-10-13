@@ -11,6 +11,7 @@
 //! [`READS`]. Resetting the keymap, the macros or the EEPROM, and jumping
 //! to the bootloader, are not among them.
 
+pub mod definition;
 pub mod transport;
 
 use std::collections::BTreeMap;

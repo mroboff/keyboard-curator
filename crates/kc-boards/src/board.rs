@@ -247,6 +247,9 @@ pub enum Family {
     Zmk,
     Rmk,
     Dygma,
+    /// QMK with VIA: the vendor's firmware stays, and the layout is written
+    /// to the running keyboard over VIA's raw HID protocol.
+    Via,
 }
 
 /// How a layout gets onto a keyboard.
@@ -280,6 +283,7 @@ impl Family {
             Family::Zmk => "ZMK",
             Family::Rmk => "RMK",
             Family::Dygma => "Dygma",
+            Family::Via => "VIA",
         }
     }
 
@@ -288,7 +292,7 @@ impl Family {
     pub fn delivery(self) -> Delivery {
         match self {
             Family::Zmk | Family::Rmk => Delivery::Build,
-            Family::Dygma => Delivery::Live,
+            Family::Dygma | Family::Via => Delivery::Live,
         }
     }
 
@@ -309,6 +313,9 @@ impl Family {
             // Dygma's superkeys and macros are kept as the keyboard has
             // them until KEY-89 and KEY-90; its own keys are offered.
             Family::Dygma => &[DygmaKeys],
+            // QMK's built-in mod-taps, layer-taps, one-shots and VIA's
+            // sixteen macros; anything else needs firmware built.
+            Family::Via => &[HoldTaps, StickyKeys, Macros],
         }
     }
 }
@@ -358,6 +365,10 @@ pub struct FirmwareProfile {
     /// What an RMK build for this board is made from. RMK only, and
     /// required for it.
     pub rmk: Option<RmkProfile>,
+    /// How this board's keys sit in its switch matrix, and what its VIA
+    /// definition says it has. VIA only, and required for it.
+    #[serde(default)]
+    pub via: Option<ViaProfile>,
     /// The controller board the keyboard's shield is built for, by its ID
     /// in the controller table, when the keyboard is a shield. The
     /// bootloader facts then come from the controller.
@@ -526,6 +537,37 @@ pub struct DygmaProfile {
     pub underglow_first: Option<usize>,
 }
 
+/// How a VIA keyboard's keys map onto its switch matrix, and what its
+/// definition says the keyboard has. Taken from the definition file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViaProfile {
+    pub rows: u8,
+    pub cols: u8,
+    /// For each key of the default layout, its `[row, col]`.
+    pub matrix: Vec<[u8; 2]>,
+    /// The definition's layout options, in its order; choice 0 of each is
+    /// what the default layout shows.
+    #[serde(default)]
+    pub options: Vec<LayoutOption>,
+    /// The lighting values the definition's menus reach, as
+    /// `[channel, value]` IDs of VIA's custom channels.
+    #[serde(default)]
+    pub lighting: Vec<[u8; 2]>,
+    /// Keycodes the keyboard's own firmware adds, in the order of
+    /// `CUSTOM(n)`.
+    #[serde(default)]
+    pub custom_keycodes: Vec<String>,
+}
+
+/// One of a VIA keyboard's layout options: a label and its choices.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LayoutOption {
+    pub label: String,
+    pub choices: Vec<String>,
+}
+
 impl FirmwareProfile {
     /// Everything this firmware can do: its family's base and its own
     /// capabilities.
@@ -645,6 +687,8 @@ pub enum BoardError {
     BadDygma(String),
     #[error("RMK firmware profile `{0}` needs an `rmk` section and a `config_name`")]
     IncompleteRmk(String),
+    #[error("VIA firmware profile `{0}` needs a `via` section giving every key of the default layout a different place in the matrix, within its rows and columns")]
+    BadVia(String),
     #[error("RMK firmware profile `{profile}`: {problem}")]
     BadRmk {
         profile: String,
@@ -675,6 +719,12 @@ impl Board {
         let board: Board = toml::from_str(src).map_err(|e| BoardError::Parse(e.to_string()))?;
         board.validate()?;
         Ok(board)
+    }
+
+    /// A board built in code, checked the way a board file is.
+    pub fn checked(self) -> Result<Self, BoardError> {
+        self.validate()?;
+        Ok(self)
     }
 
     pub fn layout(&self, id: &str) -> Option<&PhysicalLayout> {
@@ -761,6 +811,7 @@ impl Board {
                 lighting: None,
                 dygma: None,
                 rmk: None,
+                via: None,
                 controller: None,
                 studio_only: true,
                 builds: Vec::new(),
@@ -979,6 +1030,22 @@ impl Board {
                 });
                 if !sound {
                     return Err(BoardError::BadDygma(profile.id.clone()));
+                }
+            }
+            if profile.family == Family::Via {
+                let keys = self
+                    .layout(&self.default_layout)
+                    .map_or(0, |l| l.keys.len());
+                let sound = profile.via.as_ref().is_some_and(|via| {
+                    via.matrix.len() == keys
+                        && via
+                            .matrix
+                            .iter()
+                            .all(|[r, c]| *r < via.rows && *c < via.cols)
+                        && via.matrix.iter().collect::<HashSet<_>>().len() == keys
+                });
+                if !sound {
+                    return Err(BoardError::BadVia(profile.id.clone()));
                 }
             }
             let controller =

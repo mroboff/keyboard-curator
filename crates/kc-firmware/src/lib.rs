@@ -50,6 +50,9 @@ pub fn check(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<P
                 problems.extend(kc_dygma::check(project, dygma));
             }
         }
+        Family::Via => {
+            problems.retain(|p| p.severity == Severity::Error);
+        }
     }
     problems
 }
@@ -76,6 +79,7 @@ pub fn expressible(
             rmk(board, config).is_none_or(|rmk| kc_rmk::expressible(binding, project, rmk))
         }
         Family::Dygma => kc_dygma::expressible(binding, project),
+        Family::Via => true,
     }
 }
 
@@ -89,6 +93,7 @@ pub fn settings(board: &Board, config: &FirmwareConfig) -> &'static [Setting] {
         Family::Rmk if config.delivery(board) == Delivery::Released => kc_rmk::settings::SETTINGS,
         Family::Rmk => &[],
         Family::Dygma => kc_dygma::settings::SETTINGS,
+        Family::Via => &[],
     }
 }
 
@@ -453,6 +458,6 @@ pub fn generate(
                 .map(|(path, contents)| GeneratedFile { path, contents })
                 .collect())
         }
-        Family::Dygma => Err(FirmwareError::NoBuild(family.name())),
+        Family::Dygma | Family::Via => Err(FirmwareError::NoBuild(family.name())),
     }
 }

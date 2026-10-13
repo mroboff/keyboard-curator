@@ -20,6 +20,8 @@ pub const RMK_SETTING_PREFIX: &str = "rmk.";
 /// Dygma's settings are keyed `dygma.<section>.<name>`, each standing for
 /// one Focus command.
 pub const DYGMA_SETTING_PREFIX: &str = "dygma.";
+/// VIA's lighting values and layout options are keyed `via.<channel>.<name>`.
+pub const VIA_SETTING_PREFIX: &str = "via.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct FirmwareConfig {
@@ -131,6 +133,9 @@ impl FirmwareConfig {
         }
         if key.starts_with(DYGMA_SETTING_PREFIX) {
             return self.family(board) == Family::Dygma;
+        }
+        if key.starts_with(VIA_SETTING_PREFIX) {
+            return self.family(board) == Family::Via;
         }
         if self.family(board) != Family::Zmk {
             return false;
