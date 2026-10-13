@@ -63,6 +63,8 @@ pub struct Shell {
     workspace: Option<Entity<Workspace>>,
     form: Option<KeyboardForm>,
     name_input: Entity<InputState>,
+    /// Narrows the models offered on the form.
+    search_input: Entity<InputState>,
     /// The last thing that went wrong, shown until the next action.
     error: Option<String>,
     /// A passing remark on the welcome screen.
@@ -152,6 +154,14 @@ impl Shell {
             },
         )
         .detach();
+        let search_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Find a board by name or maker"));
+        cx.subscribe_in(&search_input, window, |_, _, event: &InputEvent, _, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        })
+        .detach();
         Self {
             boards,
             state,
@@ -160,6 +170,7 @@ impl Shell {
             workspace: None,
             form: None,
             name_input,
+            search_input,
             error: None,
             notice: None,
             applying: false,
@@ -1016,6 +1027,8 @@ impl Shell {
         let name = form.suggested.clone();
         self.name_input
             .update(cx, |input, cx| input.set_value(name, window, cx));
+        self.search_input
+            .update(cx, |input, cx| input.set_value("", window, cx));
         self.form = Some(form);
         self.error = None;
         self.notice = None;
@@ -1578,25 +1591,88 @@ impl Shell {
         } else {
             "Add a Board"
         };
-        let models = form
-            .choices
-            .iter()
-            .map(|&index| {
-                let name = format!("{} {}", self.boards[index].vendor, self.boards[index].name);
-                chip(("form-board", index), name, index == form.board, cx).on_click(
-                    cx.listener(move |this, _, window, cx| this.set_form_board(index, window, cx)),
-                )
+        // The models, grouped by maker: the makers of hand-checked boards
+        // first, then the rest by name. A search narrows them.
+        let query = self.search_input.read(cx).value().to_lowercase();
+        let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+        for &index in &form.choices {
+            let candidate = &self.boards[index];
+            let text = format!("{} {}", candidate.vendor, candidate.name).to_lowercase();
+            if !query.split_whitespace().all(|word| text.contains(word)) {
+                continue;
+            }
+            match groups
+                .iter_mut()
+                .find(|(vendor, _)| *vendor == candidate.vendor)
+            {
+                Some((_, members)) => members.push(index),
+                None => groups.push((candidate.vendor.clone(), vec![index])),
+            }
+        }
+        let checked =
+            |group: &(String, Vec<usize>)| group.1.iter().any(|&i| self.boards[i].verified);
+        groups.sort_by(|a, b| {
+            checked(b)
+                .cmp(&checked(a))
+                .then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase()))
+        });
+        let searchable = form.choices.len() > 6;
+        let none_shown = groups.is_empty();
+        let models = groups
+            .into_iter()
+            .map(|(vendor, members)| {
+                div()
+                    .flex()
+                    .items_start()
+                    .gap_2()
+                    .child(
+                        div()
+                            .w_32()
+                            .flex_none()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(muted)
+                            .child(vendor),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_1()
+                            .children(members.into_iter().map(|index| {
+                                chip(
+                                    ("form-board", index),
+                                    self.boards[index].name.clone(),
+                                    index == form.board,
+                                    cx,
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, window, cx| {
+                                        this.set_form_board(index, window, cx)
+                                    },
+                                ))
+                            })),
+                    )
             })
             .collect::<Vec<_>>();
+        // A shield is built around a controller board, and has one firmware
+        // per controller: the chips then name the controller.
+        let shield = board.firmware.iter().all(|p| p.controller.is_some());
         let firmwares = board
             .firmware
             .iter()
             .enumerate()
             .map(|(index, profile)| {
                 let id = profile.id.clone();
+                let name = profile
+                    .controller
+                    .as_deref()
+                    .filter(|_| shield)
+                    .and_then(kc_boards::controller)
+                    .map_or_else(|| profile.name.clone(), |c| c.name.clone());
                 chip(
                     ("form-firmware", index),
-                    profile.name.clone(),
+                    name,
                     profile.id == form.firmware,
                     cx,
                 )
@@ -1635,24 +1711,27 @@ impl Shell {
             .child(label("NAME"))
             .child(div().w_72().child(Input::new(&self.name_input)))
             .child(label("MODEL"))
-            .child(div().flex().flex_wrap().gap_1().children(models))
+            .when(searchable, |page| {
+                page.child(div().w_72().child(Input::new(&self.search_input)))
+            })
+            .when(none_shown, |page| {
+                page.child(div().text_sm().text_color(muted).child(
+                    "No board by that name. Try the maker's name, or part of either.",
+                ))
+            })
+            .child(div().flex().flex_col().gap_2().children(models))
             .when(!board.verified, |page| {
                 page.child(div().text_xs().text_color(muted).child(
                     "This board was made from its firmware's own files and has not been tried on a real keyboard yet. If something is off, say so on the project's issue tracker.",
                 ))
             })
-            .child(label("FIRMWARE"))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_start()
-                    .gap_1()
-                    .children(firmwares),
-            )
-            .child(div().text_xs().text_color(muted).child(
-                "The firmware the keyboard runs, or will be built with. A keyboard cannot report this itself. You can change it, and adjust its settings, on the board's page.",
-            ))
+            .child(label(if shield { "CONTROLLER" } else { "FIRMWARE" }))
+            .child(div().flex().flex_wrap().gap_1().children(firmwares))
+            .child(div().text_xs().text_color(muted).child(if shield {
+                "This keyboard is a shield built around a controller board. Pick the one soldered to yours; the firmware is built and flashed for it, and the way into its bootloader follows. You can change it on the board's page."
+            } else {
+                "The firmware the keyboard runs, or will be built with. A keyboard cannot report this itself. You can change it, and adjust its settings, on the board's page."
+            }))
             .child(
                 div()
                     .flex()

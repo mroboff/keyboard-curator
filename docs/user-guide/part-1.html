@@ -47,13 +47,14 @@
   </ul>
 
   <h2>Which keyboards</h2>
-  <p>This edition supports four split keyboards:</p>
+  <p>This edition has been worked through on four split keyboards:</p>
   <ul>
     <li>the <b>Cyboard Imprint</b> (wireless), in all nine of its key arrangements, including the full 82-key one, on ZMK or on RMK;</li>
     <li>the <b>MoErgo Go60</b>, on MoErgo's ZMK or on RMK;</li>
     <li>the <b>MoErgo Glove80</b>, on MoErgo's ZMK or on RMK;</li>
     <li>the <b>Dygma Defy</b> (wireless or wired), on Dygma's own firmware.</li>
   </ul>
+  <p>It also carries board files for twenty-three more keyboards that run ZMK, made from ZMK's own files: the Corne, Lily58, Kyria, Sofle, Lotus58, Sweep and Cradio; splitkb's Aurora Corne, Lily58, Sofle and Sweep; the Jian, Jiran and Jorne; the A. Dux, Hummingbird, Reviung41, Contra, CRBN, QAZ, MurphPad and Boardsource 5x12. These are <b>shields</b>: a keyboard built around a small controller board such as a nice!nano, which you choose when you add the board. Their key positions come straight from ZMK, so the editor shows them right, but nobody has yet flashed one from this app, and the app says so when you choose one. See <a href="#c15-shields">ZMK shields</a> in Chapter 15.</p>
   <p>Chapter 2 explains what ZMK, RMK and Dygma's firmware are; Chapter 15 lists what is particular to each keyboard.</p>
 
   <h2>What you need</h2>
@@ -84,7 +85,7 @@
   <p>The app knows three <b>firmware families</b>. Which ones your keyboard can run depends on the keyboard.</p>
   <table class="wrap">
     <tr><th>Family</th><th>Keyboards</th><th>What it is</th></tr>
-    <tr><td><b>ZMK</b></td><td>Imprint, Go60, Glove80</td><td>The open-source firmware most wireless keyboards run, and the one most of this guide is written around. It is very capable, but normally configured by editing text files in a programmer's notation and running developer tools. The app does that part for you. The two MoErgo boards run MoErgo's own version of ZMK.</td></tr>
+    <tr><td><b>ZMK</b></td><td>Imprint, Go60, Glove80, and the ZMK shields</td><td>The open-source firmware most wireless keyboards run, and the one most of this guide is written around. It is very capable, but normally configured by editing text files in a programmer's notation and running developer tools. The app does that part for you. The two MoErgo boards run MoErgo's own version of ZMK.</td></tr>
     <tr><td><b>RMK</b></td><td>Imprint, Go60, Glove80</td><td>A newer firmware written in Rust. On the MoErgo boards and the Imprint the app offers a community version, moergo-rmk by colonelpanic, with animated lighting and bilateral home-row mods, which is configured on the running keyboard. The Imprint can also build plain RMK. Both are experimental.</td></tr>
     <tr><td><b>Dygma</b></td><td>Defy</td><td>Dygma's own firmware, which stays on the keyboard. The app writes your layout to it over USB; nothing is built.</td></tr>
   </table>
@@ -124,7 +125,7 @@
   <p>Two special bindings make layers work well together. A <b>transparent</b> key lets the layer beneath show through, so a layer only needs to define the keys it changes. A key set to <b>none</b> does nothing at all and blocks what is underneath.</p>
 
   <h2>Two halves</h2>
-  <p>All four supported keyboards are split into a left and a right half. Each half has its own small computer and its own firmware. One half, the <b>central</b> or main half (the left one on all four), holds the keymap and talks to your Mac. The other, the <b>peripheral</b>, reports its key presses to the central half. This matters at one moment only: when you install new firmware, you install it on each half separately.</p>
+  <p>The four keyboards above, and most of the ZMK shields, are split into a left and a right half. Each half has its own small computer and its own firmware. One half, the <b>central</b> or main half (the left one on all of them), holds the keymap and talks to your Mac. The other, the <b>peripheral</b>, reports its key presses to the central half. This matters at one moment only: when you install new firmware, you install it on each half separately. A keyboard in one piece, such as the Reviung41, is flashed once.</p>
 
   <h2>Building and flashing</h2>
   <p>ZMK cannot be changed while it runs in the way a phone app's settings can. Your design has to be turned into a new firmware file. That step is called a <b>build</b>, and it takes a few minutes on a server. Putting the finished file onto the keyboard is called <b>flashing</b>.</p>
