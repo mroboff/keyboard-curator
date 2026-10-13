@@ -128,19 +128,10 @@ fn sticky_inner(binding: &Binding) -> Option<Binding> {
     }
 }
 
-/// The five actions for a key that is more than one code, or why the
-/// firmware cannot hold it. `macros` has the code of every macro placed
-/// in the keyboard's table.
-pub fn actions(
-    project: &Project,
-    binding: &Binding,
-    layers: &[LayerId],
-    macros: &crate::macros::Codes,
-) -> Result<Actions, String> {
-    let setup = KeySetup::read(project, binding)
-        .ok_or_else(|| "this key is written in a way Dygma firmware cannot hold".to_string())?;
-    // Settings of the key's own that still match the defaults are the
-    // keyboard's timing too; a template or changed settings are not.
+/// Whether a key's feel is the keyboard's own timing. Settings of the
+/// key's own that still match the defaults are the keyboard's timing
+/// too; a template or changed settings are not.
+pub fn keyboard_feel(setup: &KeySetup) -> bool {
     fn default_feel<S: Default + PartialEq>(choice: &kc_model::setup::Choice<S>) -> bool {
         match choice {
             kc_model::setup::Choice::Default => true,
@@ -148,10 +139,26 @@ pub fn actions(
             kc_model::setup::Choice::Template(_) => false,
         }
     }
-    if !default_feel(&setup.feel.hold)
-        || !default_feel(&setup.feel.taps)
-        || !default_feel(&setup.feel.sticky)
-    {
+    default_feel(&setup.feel.hold)
+        && default_feel(&setup.feel.taps)
+        && default_feel(&setup.feel.sticky)
+}
+
+/// The five actions for a key that is more than one code, or why the
+/// firmware cannot hold it. `macros` has the code of every macro placed
+/// in the keyboard's table. A feel of the key's own is refused unless the
+/// firmware times keys one by one (`per_key_timing`), where it becomes
+/// the key's timing entry instead.
+pub fn actions(
+    project: &Project,
+    binding: &Binding,
+    layers: &[LayerId],
+    macros: &crate::macros::Codes,
+    per_key_timing: bool,
+) -> Result<Actions, String> {
+    let setup = KeySetup::read(project, binding)
+        .ok_or_else(|| "this key is written in a way Dygma firmware cannot hold".to_string())?;
+    if !per_key_timing && !keyboard_feel(&setup) {
         return Err("Dygma firmware keeps one timing for every superkey: choose Keyboard default for this key's feel, and set the timing under Settings".into());
     }
     if setup.shifted.is_some() {

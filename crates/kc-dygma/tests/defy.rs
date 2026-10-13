@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 
-use kc_boards::board::DygmaProfile;
+use kc_boards::board::{Capability, DygmaProfile};
 use kc_boards::Board;
 use kc_dygma::codec::{decode, encode, kept, NONE, TRANSPARENT};
 use kc_dygma::{check, expressible, Focus, FocusError};
@@ -11,14 +11,48 @@ use kc_model::features::{KeyLight, LockKind, Rgb};
 use kc_model::{Binding, KeyExpr, LayerId, Param, Severity};
 use kc_zmk::Modifier;
 
-fn defy() -> (Board, DygmaProfile) {
-    let board = kc_boards::built_in()
+fn defy_board() -> Board {
+    kc_boards::built_in()
         .unwrap()
         .into_iter()
         .find(|b| b.id == "dygma-defy")
-        .unwrap();
+        .unwrap()
+}
+
+/// The Defy with Dygma's own firmware profile.
+fn defy() -> (Board, DygmaProfile) {
+    let board = defy_board();
     let profile = board.firmware[0].dygma.clone().unwrap();
     (board, profile)
+}
+
+/// The Defy with the Curator firmware profile.
+fn curator_defy() -> (Board, DygmaProfile) {
+    let board = defy_board();
+    let profile = board
+        .firmware
+        .iter()
+        .find(|f| f.id == "dygma-defy-curator")
+        .unwrap()
+        .dygma
+        .clone()
+        .unwrap();
+    (board, profile)
+}
+
+/// What Dygma's own firmware can do.
+fn stock() -> Vec<Capability> {
+    defy_board().firmware[0].features()
+}
+
+/// What the Curator firmware can do.
+fn curator() -> Vec<Capability> {
+    defy_board()
+        .firmware
+        .iter()
+        .find(|f| f.id == "dygma-defy-curator")
+        .unwrap()
+        .features()
 }
 
 /// A keyboard that speaks Focus: it holds values by command name, answers
@@ -88,6 +122,28 @@ impl Simulated {
             incoming: Vec::new(),
             outgoing: Vec::new(),
         }
+    }
+
+    /// A keyboard running the Curator firmware: the same, with the
+    /// fork's version and the commands it adds, their tables empty.
+    fn curator(profile: &DygmaProfile) -> Self {
+        let mut keyboard = Self::new(profile);
+        keyboard
+            .values
+            .insert("version".into(), "v2.2.1-curator.1".into());
+        for (command, value) in [
+            ("chords.map", "0 0"),
+            ("chords.memory", "512"),
+            ("chords.timeout", "50"),
+            ("timing.map", "0"),
+            ("timing.capacity", "48"),
+            // qukeys.holdTimeout, overlapThreshold, minimumHoldTime,
+            // minimumPriorInterval, superkeys.holdstart, overlap, timeout.
+            ("timing.defaults", "250 80 50 75 200 20 250"),
+        ] {
+            keyboard.values.insert(command.into(), value.into());
+        }
+        keyboard
     }
 
     fn set(&mut self, command: &str, values: &[u16]) {
@@ -341,10 +397,10 @@ fn a_layout_read_from_the_keyboard_writes_nothing_when_applied_unchanged() {
         .underglow
         .iter()
         .all(|l| *l == KeyLight::Color(Rgb(255, 255, 255))));
-    assert!(check(&project, &profile).is_empty());
+    assert!(check(&project, &profile, &stock()).is_empty());
 
     // Unchanged, it is the same image, and nothing is sent.
-    let same = image.with_project(&project, &profile).unwrap();
+    let same = image.with_project(&project, &profile, &stock()).unwrap();
     assert_eq!(same, image);
     assert!(focus.write_changes(&image, &same).unwrap().is_empty());
 }
@@ -380,7 +436,7 @@ fn applying_a_layout_writes_only_what_changed_and_spares_the_rest() {
     lighting.underglow[0] = KeyLight::Color(Rgb(255, 196, 0));
     lighting.underglow[105] = KeyLight::Off;
 
-    let after = before.with_project(&project, &profile).unwrap();
+    let after = before.with_project(&project, &profile, &stock()).unwrap();
     assert_eq!(after.keymap[profile.key_slots[0]], 4);
     assert_eq!(after.keymap[profile.key_slots[1]], 17451);
     // The slot that is not a key is untouched; so are the underglow lights
@@ -393,7 +449,7 @@ fn applying_a_layout_writes_only_what_changed_and_spares_the_rest() {
     // A layer whose underglow was never painted leaves the keyboard's.
     let mut unpainted = project.clone();
     unpainted.lighting_mut(base).unwrap().underglow.clear();
-    let kept = before.with_project(&unpainted, &profile).unwrap();
+    let kept = before.with_project(&unpainted, &profile, &stock()).unwrap();
     assert!(kept.colormap[70..profile.leds].iter().all(|c| *c == 2));
     // The existing amber entry is reused; the new green takes a free
     // entry, with the part all channels share moved to white.
@@ -420,7 +476,7 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
     project
         .set_binding(base, 0, Binding::kp(KeyExpr::new("A")))
         .unwrap();
-    let after = before.with_project(&project, &profile).unwrap();
+    let after = before.with_project(&project, &profile, &stock()).unwrap();
     focus.write_changes(&before, &after).unwrap();
 
     // An image of the wrong size is refused before anything is sent.
@@ -431,7 +487,7 @@ fn only_exact_safe_commands_ever_reach_the_keyboard() {
         Err(FocusError::Mismatch)
     ));
     assert!(matches!(
-        short.with_project(&project, &profile),
+        short.with_project(&project, &profile, &stock()),
         Err(FocusError::Mismatch)
     ));
 
@@ -508,22 +564,30 @@ fn a_layout_dygma_firmware_cannot_hold_is_reported_and_not_written() {
     project
         .set_binding(base, 3, Binding::new("caps_word", vec![]))
         .unwrap();
-    assert!(!expressible(&Binding::new("caps_word", vec![]), &project));
-    assert!(expressible(&Binding::kp(KeyExpr::new("A")), &project));
+    assert!(!expressible(
+        &Binding::new("caps_word", vec![]),
+        &project,
+        &stock()
+    ));
+    assert!(expressible(
+        &Binding::kp(KeyExpr::new("A")),
+        &project,
+        &stock()
+    ));
     project.lighting_mut(base).unwrap().keys[0] = KeyLight::Lock {
         lock: LockKind::Caps,
         off: Rgb(0, 0, 0),
         on: Rgb(255, 0, 0),
     };
     project.add_layer("Eleventh").unwrap();
-    let problems = check(&project, &profile);
+    let problems = check(&project, &profile, &stock());
     assert!(problems.iter().all(|p| p.severity == Severity::Error));
     let said = |text: &str| problems.iter().any(|p| p.message.contains(text));
     assert!(said("nothing for Caps word"));
     assert!(said("no lock or battery lights"));
     assert!(said("11 layers, and this keyboard holds 10"));
     assert!(matches!(
-        image.with_project(&project, &profile),
+        image.with_project(&project, &profile, &stock()),
         Err(FocusError::Unfit(_))
     ));
 
@@ -540,7 +604,7 @@ fn a_layout_dygma_firmware_cannot_hold_is_reported_and_not_written() {
     {
         *light = KeyLight::Color(Rgb(10 + index as u8, 0, 0));
     }
-    assert!(check(&colorful, &profile)
+    assert!(check(&colorful, &profile, &stock())
         .iter()
         .any(|p| p.message.contains("17 different colors")));
 }
@@ -598,7 +662,7 @@ fn superkeys_are_the_slots_of_a_key() {
     assert_eq!(setup.double_tap_hold, None);
 
     // Applied unchanged, nothing is written.
-    let same = before.with_project(&project, &profile).unwrap();
+    let same = before.with_project(&project, &profile, &stock()).unwrap();
     assert_eq!(same, before);
 
     // A new key setup takes a new entry; an identical one shares it.
@@ -612,8 +676,8 @@ fn superkeys_are_the_slots_of_a_key() {
     sticky.sticky = true;
     sticky.double_tap = Some(Binding::new("dygma_battery", vec![]));
     project.apply_setup(base, 3, &sticky).unwrap();
-    assert!(check(&project, &profile).is_empty());
-    let after = before.with_project(&project, &profile).unwrap();
+    assert!(check(&project, &profile, &stock()).is_empty());
+    let after = before.with_project(&project, &profile, &stock()).unwrap();
     assert_eq!(after.keymap[profile.key_slots[1]], 53981);
     assert_eq!(after.keymap[profile.key_slots[2]], 53981);
     assert_eq!(after.keymap[profile.key_slots[3]], 53982);
@@ -644,12 +708,12 @@ fn superkeys_are_the_slots_of_a_key() {
     let mut shifted = KeySetup::plain(Binding::kp(KeyExpr::new("COMMA")));
     shifted.shifted = Some(Binding::kp(KeyExpr::new("SEMI")));
     project.apply_setup(base, 4, &shifted).unwrap();
-    let problems = check(&project, &profile);
+    let problems = check(&project, &profile, &stock());
     let said = |text: &str| problems.iter().any(|p| p.message.contains(text));
     assert!(said("one timing for every superkey"));
     assert!(said("no shift override"));
     assert!(matches!(
-        before.with_project(&project, &profile),
+        before.with_project(&project, &profile, &stock()),
         Err(FocusError::Unfit(_))
     ));
 }
@@ -695,7 +759,10 @@ fn macros_are_macros_on_the_key() {
     assert_eq!(setup.double_tap, Some(Binding::user(id, vec![])));
 
     // Applied unchanged, nothing is written.
-    assert_eq!(before.with_project(&project, &profile).unwrap(), before);
+    assert_eq!(
+        before.with_project(&project, &profile, &stock()).unwrap(),
+        before
+    );
 
     // A new macro on a key, with a pause, takes the next entry.
     let mut project = project;
@@ -723,9 +790,9 @@ fn macros_are_macros_on_the_key() {
     project
         .set_binding(base, 3, Binding::user(own, vec![]))
         .unwrap();
-    assert!(check(&project, &profile).is_empty());
-    assert!(expressible(&Binding::user(own, vec![]), &project));
-    let after = before.with_project(&project, &profile).unwrap();
+    assert!(check(&project, &profile, &stock()).is_empty());
+    assert!(expressible(&Binding::user(own, vec![]), &project, &stock()));
+    let after = before.with_project(&project, &profile, &stock()).unwrap();
     assert_eq!(after.keymap[profile.key_slots[3]], 53853);
     let tail = &after.macros[after.macros.len() - 12..];
     assert_eq!(tail, [8, 11, 5, 0x48, 0xE9, 2, 1, 0xF4, 8, 12, 0, 0]);
@@ -746,9 +813,13 @@ fn macros_are_macros_on_the_key() {
     if let BehaviorKind::Macro(m) = &mut project.behavior_mut(own).unwrap().kind {
         m.steps.push(MacroStep::PauseForRelease);
     }
-    let problems = check(&project, &profile);
+    let problems = check(&project, &profile, &stock());
     assert!(problems.iter().any(|p| p.message.contains("released")));
-    assert!(!expressible(&Binding::user(own, vec![]), &project));
+    assert!(!expressible(
+        &Binding::user(own, vec![]),
+        &project,
+        &stock()
+    ));
 }
 
 #[test]
@@ -795,7 +866,7 @@ fn settings_are_read_and_written_as_the_keyboard_lists_them() {
     );
     let project = before.to_project("Mine", &board, &profile).unwrap();
     let after = before
-        .with_project(&project, &profile)
+        .with_project(&project, &profile, &stock())
         .unwrap()
         .with_settings(&config);
     let sent = focus.write_changes(&before, &after).unwrap();
@@ -830,7 +901,7 @@ fn settings_are_read_and_written_as_the_keyboard_lists_them() {
         .settings
         .contains_key("dygma.wireless.rf_channel_hop"));
     let after = before
-        .with_project(&project, &profile)
+        .with_project(&project, &profile, &stock())
         .unwrap()
         .with_settings(&config);
     let sent = focus.write_changes(&before, &after).unwrap();
@@ -951,4 +1022,369 @@ fn a_backup_holds_everything_the_keyboard_lists_and_restores_what_differs() {
         focus.restore_image(&short, |_| panic!("not reached")),
         Err(FocusError::Mismatch)
     ));
+}
+
+#[test]
+fn the_firmware_a_keyboard_runs_is_named() {
+    use kc_model::features::SettingValue;
+
+    let (_, profile) = curator_defy();
+    let fork = profile
+        .fork
+        .as_ref()
+        .expect("the Curator profile names its fork");
+    assert_eq!(fork.tag, "v2.2.1-curator.1");
+    let stock_keyboard = Focus::new(Simulated::new(&profile)).read_image().unwrap();
+    assert!(!stock_keyboard.runs_fork(fork));
+    assert_eq!(
+        stock_keyboard.firmware_name(Some(fork)),
+        "Dygma's firmware v2.2.1"
+    );
+    assert!(stock_keyboard.chords.is_empty() && stock_keyboard.timing.is_empty());
+    let curator_keyboard = Focus::new(Simulated::curator(&profile))
+        .read_image()
+        .unwrap();
+    assert!(curator_keyboard.runs_fork(fork));
+    assert_eq!(
+        curator_keyboard.firmware_name(Some(fork)),
+        "the Curator firmware v2.2.1-curator.1"
+    );
+    assert_eq!(curator_keyboard.chords, [0, 0]);
+    assert_eq!(curator_keyboard.timing, [0]);
+    assert_eq!(curator_keyboard.chords_memory, Some(512));
+    assert_eq!(curator_keyboard.timing_capacity, Some(48));
+    assert_eq!(
+        curator_keyboard.timing_defaults,
+        [250, 80, 50, 75, 200, 20, 250]
+    );
+    // The combo timeout is a setting, carried only from a keyboard that
+    // lists it, and offered only with combos.
+    assert_eq!(
+        curator_keyboard.carried().settings["dygma.combos.timeout"],
+        SettingValue::Int(50)
+    );
+    assert!(!stock_keyboard
+        .carried()
+        .settings
+        .contains_key("dygma.combos.timeout"));
+    let setting = kc_dygma::settings::SETTINGS
+        .iter()
+        .find(|s| s.key == "dygma.combos.timeout")
+        .unwrap();
+    assert_eq!(setting.requires, Some(Capability::Combos));
+    // The profiles differ in those two capabilities.
+    let (stock, curator) = (stock(), curator());
+    assert!(curator.contains(&Capability::Combos));
+    assert!(curator.contains(&Capability::PerKeyTiming));
+    assert!(!stock.contains(&Capability::Combos));
+    assert!(!stock.contains(&Capability::PerKeyTiming));
+}
+
+#[test]
+fn combos_become_chords_on_the_curator_firmware_and_are_refused_on_stock() {
+    use kc_model::Location;
+
+    let (board, profile) = curator_defy();
+    let mut focus = Focus::new(Simulated::curator(&profile));
+    let before = focus.read_image().unwrap();
+    let mut project = before.to_project("Mine", &board, &profile).unwrap();
+    let second = project.layers[1].id;
+    // Escape from the first two keys on every layer; Tab from three keys
+    // on the second layer, within 80 ms.
+    let escape = project.add_combo("Escape", vec![0, 1], Binding::kp(KeyExpr::new("ESC")));
+    let tab = project.add_combo("Tab", vec![2, 3, 4], Binding::kp(KeyExpr::new("TAB")));
+    let combo = project.combo_mut(tab).unwrap();
+    combo.layers = vec![second];
+    combo.timeout_ms = Some(80);
+    assert!(check(&project, &profile, &curator()).is_empty());
+
+    let after = before.with_project(&project, &profile, &curator()).unwrap();
+    // Each chord: result, layer mask, timeout, the keys' slots plus one,
+    // then 0; the map ends with 0 0. Nothing else changes.
+    assert_eq!(after.chords, [41, 0, 0, 1, 2, 0, 43, 2, 80, 3, 4, 5, 0, 0]);
+    assert_eq!(after.keymap, before.keymap);
+    assert_eq!(after.timing, before.timing);
+    assert_eq!(after.superkeys, before.superkeys);
+    let sent = focus.write_changes(&before, &after).unwrap();
+    assert_eq!(sent, ["chords.map"]);
+    let keyboard = focus.into_inner();
+    assert!(keyboard
+        .received
+        .contains(&"chords.map 41 0 0 1 2 0 43 2 80 3 4 5 0 0".to_string()));
+
+    // Read back, the chords are the layout's combos again, and applying
+    // that layout unchanged writes nothing.
+    let mut focus = Focus::new(keyboard);
+    let image = focus.read_image().unwrap();
+    let (again, notes) = image
+        .to_project_with_notes("Again", &board, &profile)
+        .unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    assert_eq!(again.combos.len(), 2);
+    assert_eq!(again.combos[0].key_positions, [0, 1]);
+    assert_eq!(again.combos[0].binding, Binding::kp(KeyExpr::new("ESC")));
+    assert!(again.combos[0].layers.is_empty());
+    assert_eq!(again.combos[0].timeout_ms, None);
+    assert_eq!(again.combos[1].key_positions, [2, 3, 4]);
+    assert_eq!(again.combos[1].layers, [again.layers[1].id]);
+    assert_eq!(again.combos[1].timeout_ms, Some(80));
+    assert_eq!(
+        image.with_project(&again, &profile, &curator()).unwrap(),
+        image
+    );
+
+    // What the firmware cannot do for a combo is a warning at the combo,
+    // never an error; what it cannot hold is an error there.
+    let combo = project.combo_mut(escape).unwrap();
+    combo.require_prior_idle_ms = Some(100);
+    combo.slow_release = true;
+    let problems = check(&project, &profile, &curator());
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert_eq!(problems[0].severity, Severity::Warning);
+    assert_eq!(problems[0].location, Location::Combo(escape));
+    assert!(problems[0].message.contains("pause in typing"));
+    let wide = project.add_combo("Wide", (0..7).collect(), Binding::kp(KeyExpr::new("A")));
+    let problems = check(&project, &profile, &curator());
+    assert!(problems
+        .iter()
+        .any(|p| p.location == Location::Combo(wide) && p.message.contains("2 to 6 keys")));
+    project.remove_combo(wide).unwrap();
+
+    // The same layout on a keyboard running Dygma's own firmware is
+    // refused, naming the firmware, before anything is written.
+    let stock_keyboard = Focus::new(Simulated::new(&profile)).read_image().unwrap();
+    let refused = stock_keyboard
+        .with_project(&project, &profile, &curator())
+        .unwrap_err();
+    let FocusError::Unfit(message) = refused else {
+        panic!("{refused:?}");
+    };
+    assert!(
+        message.contains("runs Dygma's firmware v2.2.1, which has no combos"),
+        "{message}"
+    );
+    assert!(message.contains("needs the Curator firmware"), "{message}");
+    // With Dygma's own firmware chosen on the board, the combos are kept
+    // out of the way and the keyboard is untouched.
+    let (_, stock_profile) = defy();
+    assert!(check(&project, &stock_profile, &stock()).is_empty());
+    assert_eq!(
+        stock_keyboard
+            .with_project(&project, &stock_profile, &stock())
+            .unwrap(),
+        stock_keyboard
+    );
+}
+
+#[test]
+fn a_keys_own_feel_becomes_a_timing_entry_on_the_curator_firmware() {
+    use kc_model::behavior::{Flavor, HoldTapSettings, TapDanceSettings};
+    use kc_model::setup::{Choice, KeySetup};
+    use kc_model::Location;
+
+    let (board, profile) = curator_defy();
+    let mut focus = Focus::new(Simulated::curator(&profile));
+    let before = focus.read_image().unwrap();
+    let mut project = before.to_project("Mine", &board, &profile).unwrap();
+    let base = project.layers[0].id;
+    // The first key: A, or Control when held after 300 ms.
+    let mut home_row = KeySetup::plain(Binding::kp(KeyExpr::new("A")));
+    home_row.hold = Some(Binding::kp(KeyExpr::new("LCTRL")));
+    home_row.feel.hold = Choice::Custom(HoldTapSettings {
+        tapping_term_ms: 300,
+        ..Default::default()
+    });
+    project.apply_setup(base, 0, &home_row).unwrap();
+    assert!(check(&project, &profile, &curator()).is_empty());
+    let binding = project.binding(base, 0).unwrap();
+    assert!(expressible(binding, &project, &curator()));
+    assert!(!expressible(binding, &project, &stock()));
+
+    let after = before.with_project(&project, &profile, &curator()).unwrap();
+    // The key is the firmware's own hold and tap, timed by one entry: the
+    // slot plus one, the layer plus one, the hold time for a dual-use key
+    // and for a superkey, the rest the keyboard's.
+    let mt = Binding::new(
+        "mt",
+        vec![
+            Param::Key(KeyExpr::new("LCTRL")),
+            Param::Key(KeyExpr::new("A")),
+        ],
+    );
+    let l = layers(10);
+    assert_eq!(after.keymap[profile.key_slots[0]], encode(&mt, &l).unwrap());
+    assert_eq!(
+        after.timing,
+        [1, 1, 300, 65535, 65535, 65535, 300, 65535, 65535, 0]
+    );
+    assert_eq!(after.superkeys, before.superkeys);
+    assert_eq!(after.chords, before.chords);
+    let sent = focus.write_changes(&before, &after).unwrap();
+    assert_eq!(sent, ["timing.map", "keymap.custom"]);
+
+    // Read back, the key has its feel, and written back unchanged nothing
+    // is sent.
+    let image = focus.read_image().unwrap();
+    let (again, notes) = image
+        .to_project_with_notes("Again", &board, &profile)
+        .unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    let setup = KeySetup::of(&again, again.layers[0].id, 0).unwrap();
+    assert_eq!(setup.tap, Binding::kp(KeyExpr::new("A")));
+    assert_eq!(setup.hold, Some(Binding::kp(KeyExpr::new("LCTRL"))));
+    assert_eq!(
+        setup.feel.hold,
+        Choice::Custom(HoldTapSettings {
+            tapping_term_ms: 300,
+            ..Default::default()
+        })
+    );
+    let same = image.with_project(&again, &profile, &curator()).unwrap();
+    assert_eq!(same, image);
+    assert!(focus.write_changes(&image, &same).unwrap().is_empty());
+
+    // A second tap with its own time is a superkey timed on its taps; a
+    // pause before a hold is the entry's `minPrior`; what the firmware
+    // cannot honor is a warning at the key.
+    let mut dance = KeySetup::plain(Binding::kp(KeyExpr::new("B")));
+    dance.hold = Some(Binding::kp(KeyExpr::new("LSHFT")));
+    dance.double_tap = Some(Binding::kp(KeyExpr::new("ESC")));
+    dance.feel.hold = Choice::Custom(HoldTapSettings {
+        flavor: Flavor::Balanced,
+        tapping_term_ms: 180,
+        require_prior_idle_ms: Some(120),
+        ..Default::default()
+    });
+    dance.feel.taps = Choice::Custom(TapDanceSettings {
+        tapping_term_ms: 350,
+    });
+    project.apply_setup(base, 1, &dance).unwrap();
+    let problems = check(&project, &profile, &curator());
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert_eq!(problems[0].severity, Severity::Warning);
+    assert_eq!(
+        problems[0].location,
+        Location::Key {
+            layer: base,
+            position: 1
+        }
+    );
+    assert!(problems[0].message.contains("\"Decide by\" does not"));
+    let after = before.with_project(&project, &profile, &curator()).unwrap();
+    assert_eq!(after.keymap[profile.key_slots[1]], 53981);
+    assert_eq!(
+        after.timing,
+        [
+            1, 1, 300, 65535, 65535, 65535, 300, 65535, 65535, //
+            2, 1, 180, 65535, 65535, 120, 180, 65535, 350, //
+            0
+        ]
+    );
+
+    // On Dygma's own firmware a feel of the key's own is an error at the
+    // key, as before.
+    let (_, stock_profile) = defy();
+    let problems = check(&project, &stock_profile, &stock());
+    assert_eq!(problems.len(), 2, "{problems:?}");
+    assert!(problems
+        .iter()
+        .all(|p| p.severity == Severity::Error
+            && p.message.contains("one timing for every superkey")));
+    let stock_keyboard = Focus::new(Simulated::new(&profile)).read_image().unwrap();
+    assert!(matches!(
+        stock_keyboard.with_project(&project, &stock_profile, &stock()),
+        Err(FocusError::Unfit(_))
+    ));
+    // And with the Curator firmware chosen but Dygma's own running, the
+    // refusal names the firmware.
+    let refused = stock_keyboard
+        .with_project(&project, &profile, &curator())
+        .unwrap_err();
+    assert!(refused
+        .to_string()
+        .contains("runs Dygma's firmware v2.2.1, which has no timing of a key's own"));
+
+    // More keys than the table holds are refused at the first one over.
+    let mut full = before.to_project("Full", &board, &profile).unwrap();
+    for position in 0..49 {
+        full.apply_setup(base, position, &home_row).unwrap();
+    }
+    let problems = check(&full, &profile, &curator());
+    assert!(problems.iter().any(|p| p.severity == Severity::Error
+        && p.location
+            == Location::Key {
+                layer: base,
+                position: 48
+            }
+        && p.message.contains("at most 48 keys")));
+}
+
+#[test]
+fn a_restore_carries_chords_and_timing_between_curator_keyboards() {
+    let (board, profile) = curator_defy();
+    let mut keyboard = Simulated::curator(&profile);
+    // The first key is Control or Enter (seen on a real Defy), timed.
+    let mut keymap = vec![0u16; profile.layers * profile.slots];
+    keymap[profile.key_slots[0]] = 49209;
+    keyboard.set("keymap.custom", &keymap);
+    keyboard.set("chords.map", &[41, 0, 0, 1, 2, 0, 0]);
+    keyboard.set(
+        "timing.map",
+        &[1, 1, 300, 65535, 65535, 65535, 300, 65535, 65535, 0],
+    );
+    keyboard.values.insert("chords.timeout".into(), "60".into());
+    let image = Focus::new(keyboard).read_image().unwrap();
+    assert_eq!(kc_dygma::Image::from_json(&image.to_json()).unwrap(), image);
+    // The read layout holds the combo and the key's feel, with no note.
+    let (project, notes) = image
+        .to_project_with_notes("Mine", &board, &profile)
+        .unwrap();
+    assert!(notes.is_empty(), "{notes:?}");
+    assert_eq!(project.combos.len(), 1);
+
+    // The keyboard is wiped of both; a restore brings them back, after the
+    // superkeys and macros a chord may name and before the keys, with the
+    // setting.
+    let mut focus = Focus::new(Simulated::curator(&profile));
+    let applied = focus.restore_image(&image, |_| Ok(())).unwrap();
+    assert_eq!(
+        applied.sent,
+        [
+            "timing.map",
+            "chords.map",
+            "keymap.custom",
+            "chords.timeout"
+        ]
+    );
+    assert_eq!(focus.read_image().unwrap(), image);
+
+    // A keyboard on Dygma's own firmware takes the rest of the backup and
+    // is never sent what it lacks.
+    let mut focus = Focus::new(Simulated::new(&profile));
+    let applied = focus.restore_image(&image, |_| Ok(())).unwrap();
+    assert_eq!(applied.sent, ["keymap.custom"]);
+    let keyboard = focus.into_inner();
+    assert!(!keyboard
+        .received
+        .iter()
+        .any(|line| line.starts_with("chords.") || line.starts_with("timing.")));
+
+    // A chord on a key the layout does not have, one sending a superkey,
+    // and timing for a key the layout does not have are said in the notes.
+    let mut odd = Simulated::curator(&profile);
+    odd.set("chords.map", &[41, 0, 0, 8, 9, 0, 53984, 0, 0, 1, 2, 0, 0]);
+    odd.set(
+        "timing.map",
+        &[8, 1, 300, 65535, 65535, 65535, 300, 65535, 65535, 0],
+    );
+    let image = Focus::new(odd).read_image().unwrap();
+    let (project, notes) = image
+        .to_project_with_notes("Odd", &board, &profile)
+        .unwrap();
+    assert_eq!(project.combos.len(), 1);
+    assert_eq!(project.combos[0].binding, kept(53984));
+    assert_eq!(notes.len(), 3, "{notes:?}");
+    assert!(notes[0].contains("left out"));
+    assert!(notes[1].contains("Superkey 5"));
+    assert!(notes[2].contains("slot 8"));
 }

@@ -33,8 +33,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!("{read} keys read as bindings, {kept} kept as their codes");
-    println!("problems: {}", kc_dygma::check(&project, profile).len());
-    let again = image.with_project(&project, profile)?;
+    let features = board.firmware[0].features();
+    println!(
+        "problems: {}",
+        kc_dygma::check(&project, profile, &features).len()
+    );
+    let again = image.with_project(&project, profile, &features)?;
     println!(
         "applying it unchanged would write nothing: {}",
         again == image

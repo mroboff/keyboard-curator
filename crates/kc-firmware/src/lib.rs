@@ -47,7 +47,7 @@ pub fn check(project: &Project, board: &Board, config: &FirmwareConfig) -> Vec<P
             // wrong with the layout itself carries over.
             problems.retain(|p| p.severity == Severity::Error);
             if let Some(dygma) = dygma(board, config) {
-                problems.extend(kc_dygma::check(project, dygma));
+                problems.extend(kc_dygma::check(project, dygma, &config.features(board)));
             }
         }
         Family::Via => {
@@ -85,7 +85,7 @@ pub fn expressible(
         Family::Rmk => {
             rmk(board, config).is_none_or(|rmk| kc_rmk::expressible(binding, project, rmk))
         }
-        Family::Dygma => kc_dygma::expressible(binding, project),
+        Family::Dygma => kc_dygma::expressible(binding, project, &config.features(board)),
         Family::Via => {
             via(board, config).is_none_or(|via| kc_via::layout::expressible(binding, project, via))
         }
@@ -254,13 +254,28 @@ pub mod live {
                 apply_prompt: format!("This changes “{name}” at once: its keys on every layer, the macros they use, and the lighting settings that differ from the board's. Nothing else is touched. What the keyboard holds now is saved first, in {backups}."),
                 restore: Some("Every write saves what the keyboard held first: its keymap, macros, layout options and lighting values. Restoring writes a chosen file back to the keyboard it came from, everything in it that differs. The keyboard is saved again first.".into()),
             },
-            _ => Words {
-                intro: None,
-                read: "Opens what the keyboard holds now as a new layout: every layer's keys, superkeys as key setups, macros, the colors under the keys and the underglow. The keyboard's settings are offered to the board. Nothing is written to the keyboard. Close Dygma's Bazecor first; only one program can talk to the keyboard at a time.".into(),
-                apply: "Applying writes it to the keyboard at once, with no build. Only what differs is written: keys and colors, the superkeys and macros they need, and settings. The keyboard's configuration is saved to disk first.".into(),
-                apply_prompt: format!("This changes “{name}” at once: its keys and colors on every layer, the superkeys and macros they need, and the settings that differ from the board's. Nothing else is touched. What the keyboard holds now is saved first, in {backups}."),
-                restore: Some("Every write saves what the keyboard held first, as one file holding everything the keyboard lists. Restoring writes a chosen file back to the keyboard it came from: everything in it that differs, except the lights and the wireless side, which are left as they are. The keyboard is saved again first.".into()),
-            },
+            _ => {
+                // A fork of Dygma's firmware with combos and a feel of each
+                // key's own carries those too.
+                let fork = config
+                    .features(board)
+                    .contains(&kc_boards::board::Capability::Combos);
+                let (reads, writes) = if fork {
+                    (
+                        " Combos and each key's own feel come along on the Curator firmware, and the Keyboard tab says which firmware the keyboard runs.",
+                        ", combos and each key's own feel",
+                    )
+                } else {
+                    ("", "")
+                };
+                Words {
+                    intro: None,
+                    read: format!("Opens what the keyboard holds now as a new layout: every layer's keys, superkeys as key setups, macros, the colors under the keys and the underglow. The keyboard's settings are offered to the board. Nothing is written to the keyboard. Close Dygma's Bazecor first; only one program can talk to the keyboard at a time.{reads}"),
+                    apply: format!("Applying writes it to the keyboard at once, with no build. Only what differs is written: keys and colors, the superkeys and macros they need{writes}, and settings. The keyboard's configuration is saved to disk first."),
+                    apply_prompt: format!("This changes “{name}” at once: its keys and colors on every layer, the superkeys and macros they need{writes}, and the settings that differ from the board's. Nothing else is touched. What the keyboard holds now is saved first, in {backups}."),
+                    restore: Some("Every write saves what the keyboard held first, as one file holding everything the keyboard lists. Restoring writes a chosen file back to the keyboard it came from: everything in it that differs, except the lights and the wireless side, which are left as they are. The keyboard is saved again first.".into()),
+                }
+            }
         }
     }
 
@@ -317,13 +332,31 @@ pub mod live {
             (Family::Dygma, _) => {
                 let profile = dygma(board, config).ok_or_else(|| not_live(board, config))?;
                 let image = kc_dygma::read(board, device).map_err(|e| e.to_string())?;
-                let project = image
-                    .to_project(&name, board, profile)
+                let (project, kept_out) = image
+                    .to_project_with_notes(&name, board, profile)
                     .map_err(|e| e.to_string())?;
+                let mut notes = Vec::new();
+                // Which firmware the keyboard runs, when the board's
+                // profile is a fork of Dygma's or the keyboard runs one.
+                let fork = profile.fork.as_ref().or_else(|| {
+                    board
+                        .firmware
+                        .iter()
+                        .filter_map(|p| p.dygma.as_ref()?.fork.as_ref())
+                        .find(|fork| image.runs_fork(fork))
+                });
+                if let Some(fork) = fork {
+                    notes.push(format!(
+                        "The keyboard runs {}.",
+                        image.firmware_name(Some(fork))
+                    ));
+                }
+                notes.extend(image.battery_summary());
+                notes.extend(kept_out);
                 Ok(Read {
                     project,
                     carried: image.carried(),
-                    notes: image.battery_summary().into_iter().collect(),
+                    notes,
                 })
             }
             (Family::Zmk, Delivery::Studio) => {
@@ -377,18 +410,27 @@ pub mod live {
             (Family::Dygma, _) => {
                 let profile = dygma(board, config).ok_or_else(|| not_live(board, config))?;
                 let mut saved = None;
-                let applied = kc_dygma::apply(project, board, profile, config, device, |before| {
-                    std::fs::create_dir_all(backups)?;
-                    let path = backups.join(format!(
-                        "{}-{}-{}.json",
-                        board.id,
-                        before.chip_id.trim(),
-                        stamp()
-                    ));
-                    std::fs::write(&path, before.to_json())?;
-                    saved = Some(path);
-                    Ok(())
-                })
+                let features = config.features(board);
+                let applied = kc_dygma::apply(
+                    project,
+                    board,
+                    profile,
+                    &features,
+                    config,
+                    device,
+                    |before| {
+                        std::fs::create_dir_all(backups)?;
+                        let path = backups.join(format!(
+                            "{}-{}-{}.json",
+                            board.id,
+                            before.chip_id.trim(),
+                            stamp()
+                        ));
+                        std::fs::write(&path, before.to_json())?;
+                        saved = Some(path);
+                        Ok(())
+                    },
+                )
                 .map_err(|e| e.to_string())?;
                 Ok(Applied {
                     changed: !applied.sent.is_empty(),
@@ -433,7 +475,7 @@ pub mod live {
                 let changed = kc_studio::session::send_board(project).map_err(|e| e.to_string())?;
                 Ok(Applied {
                     changed: changed > 0,
-                    backup: Some(path).filter(|_| changed > 0),
+                    backup: (changed > 0).then_some(path),
                     changes: (changed > 0)
                         .then(|| format!("{changed} keys"))
                         .into_iter()

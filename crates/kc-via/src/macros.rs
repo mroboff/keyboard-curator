@@ -104,7 +104,7 @@ fn text_keys() -> &'static HashMap<(u16, bool), u8> {
     static KEYS: OnceLock<HashMap<(u16, bool), u8>> = OnceLock::new();
     KEYS.get_or_init(|| {
         let mut map = HashMap::new();
-        for byte in (0x20..0x7Fu8).chain([b'\n', b'\t']) {
+        for byte in (0x20..0x7Fu8).chain(*b"\n\t") {
             let Some(expr) = for_char(byte as char).and_then(|e| e.parse::<KeyExpr>().ok()) else {
                 continue;
             };
