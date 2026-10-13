@@ -13,8 +13,124 @@ use kc_boards::Board;
 
 pub use uf2::{Uf2Error, Uf2Info};
 
-/// Where macOS mounts removable drives.
-pub const VOLUMES: &str = "/Volumes";
+/// The directories under which this computer mounts removable drives, each
+/// holding one subdirectory per drive. macOS has one, `/Volumes`. Linux
+/// has several, by distribution: `/run/media/<user>` (udisks on Fedora
+/// and Arch), `/media/<user>` (Ubuntu and Debian), `/media` and `/mnt`.
+pub fn volume_roots() -> Vec<PathBuf> {
+    let mut roots = platform::volume_roots();
+    roots.dedup();
+    roots
+}
+
+/// Every UF2 bootloader drive mounted anywhere this computer puts them,
+/// in name order: the drives under [`volume_roots`], and on Linux every
+/// mounted filesystem too, for a drive mounted by hand somewhere else.
+pub fn scan_all() -> Vec<Bootloader> {
+    let mut found: Vec<Bootloader> = volume_roots().iter().flat_map(|root| scan(root)).collect();
+    found.extend(
+        platform::mount_points()
+            .iter()
+            .filter_map(|mount| bootloader_at(mount)),
+    );
+    found.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
+    found.dedup_by(|a, b| a.path == b.path);
+    found
+}
+
+/// The mount points in a `/proc/mounts` (or `/etc/mtab`) listing: the
+/// second field of each line, with the octal escapes the kernel writes for
+/// spaces and other special characters (`\040`) decoded. Pseudo
+/// filesystems without a device path are left out.
+pub fn mount_points(mounts: &str) -> Vec<PathBuf> {
+    mounts
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let device = fields.next()?;
+            let mount = fields.next()?;
+            device
+                .starts_with('/')
+                .then(|| PathBuf::from(unescape_mount(mount)))
+        })
+        .collect()
+}
+
+fn unescape_mount(field: &str) -> String {
+    let mut out = String::with_capacity(field.len());
+    let mut chars = field.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        let digits: String = chars.clone().take(3).collect();
+        match u8::from_str_radix(&digits, 8) {
+            Ok(byte) if digits.len() == 3 => {
+                out.push(byte as char);
+                for _ in 0..3 {
+                    chars.next();
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use std::path::PathBuf;
+
+    pub fn volume_roots() -> Vec<PathBuf> {
+        vec![PathBuf::from("/Volumes")]
+    }
+
+    pub fn mount_points() -> Vec<PathBuf> {
+        Vec::new()
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod platform {
+    use std::path::PathBuf;
+
+    pub fn volume_roots() -> Vec<PathBuf> {
+        let mut roots = Vec::new();
+        if let Some(user) = std::env::var_os("USER") {
+            let user = user.to_string_lossy();
+            roots.push(PathBuf::from(format!("/run/media/{user}")));
+            roots.push(PathBuf::from(format!("/media/{user}")));
+        }
+        // Other users' drives, and a drive mounted before the user logged in.
+        if let Ok(entries) = std::fs::read_dir("/run/media") {
+            roots.extend(entries.flatten().map(|entry| entry.path()));
+        }
+        roots.push(PathBuf::from("/media"));
+        roots.push(PathBuf::from("/mnt"));
+        roots.sort();
+        roots
+    }
+
+    pub fn mount_points() -> Vec<PathBuf> {
+        std::fs::read_to_string("/proc/mounts")
+            .map(|mounts| super::mount_points(&mounts))
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+mod platform {
+    use std::path::PathBuf;
+
+    pub fn volume_roots() -> Vec<PathBuf> {
+        Vec::new()
+    }
+
+    pub fn mount_points() -> Vec<PathBuf> {
+        Vec::new()
+    }
+}
 
 /// A mounted UF2 bootloader drive.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,24 +149,26 @@ fn info_field(info: &str, field: &str) -> Option<String> {
         .map(|value| value.trim().to_string())
 }
 
-/// Every UF2 bootloader drive mounted under `volumes` (normally
-/// [`VOLUMES`]), in name order.
+/// The bootloader drive mounted at `path`, if that is what is there.
+fn bootloader_at(path: &Path) -> Option<Bootloader> {
+    let info = std::fs::read_to_string(path.join("INFO_UF2.TXT")).ok()?;
+    Some(Bootloader {
+        name: path.file_name()?.to_string_lossy().into_owned(),
+        model: info_field(&info, "Model"),
+        board_id: info_field(&info, "Board-ID"),
+        path: path.to_path_buf(),
+    })
+}
+
+/// Every UF2 bootloader drive mounted under `volumes` (one of
+/// [`volume_roots`]), in name order.
 pub fn scan(volumes: &Path) -> Vec<Bootloader> {
     let Ok(entries) = std::fs::read_dir(volumes) else {
         return Vec::new();
     };
     let mut found: Vec<Bootloader> = entries
         .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            let info = std::fs::read_to_string(path.join("INFO_UF2.TXT")).ok()?;
-            Some(Bootloader {
-                name: entry.file_name().to_string_lossy().into_owned(),
-                model: info_field(&info, "Model"),
-                board_id: info_field(&info, "Board-ID"),
-                path,
-            })
-        })
+        .filter_map(|entry| bootloader_at(&entry.path()))
         .collect();
     found.sort_by(|a, b| a.name.cmp(&b.name));
     found
@@ -210,6 +328,58 @@ mod tests {
         assert_eq!(found[1].board_id.as_deref(), Some("nRF52840-go60-lh"));
         assert_eq!(found[0].model, None);
         assert!(scan(&volumes.0.join("missing")).is_empty());
+    }
+
+    #[test]
+    fn mount_points_are_read_from_proc_mounts() {
+        let mounts = "\
+proc /proc proc rw,nosuid 0 0
+/dev/nvme0n1p2 / ext4 rw,relatime 0 0
+tmpfs /run tmpfs rw,nosuid,nodev 0 0
+/dev/sda1 /run/media/mark/GO60LHBOOT vfat rw,nosuid,nodev,relatime,uid=1000 0 0
+/dev/sdb1 /media/mark/My\\040Drive exfat rw 0 0
+/dev/sdc1 /mnt/odd\\134name vfat rw 0 0
+broken line
+";
+        let points = mount_points(mounts);
+        assert_eq!(
+            points,
+            [
+                PathBuf::from("/"),
+                PathBuf::from("/run/media/mark/GO60LHBOOT"),
+                PathBuf::from("/media/mark/My Drive"),
+                PathBuf::from("/mnt/odd\\name"),
+            ]
+        );
+        assert!(mount_points("").is_empty());
+    }
+
+    #[test]
+    fn a_drive_mounted_anywhere_is_found_by_its_mount_point() {
+        let volumes = Volumes::new("mount");
+        let path = volumes.mount("ASSIMILATOR", Some(INFO));
+        volumes.mount("Other", None);
+        assert_eq!(
+            bootloader_at(&path).map(|b| b.name).as_deref(),
+            Some("ASSIMILATOR")
+        );
+        assert_eq!(bootloader_at(&volumes.0.join("Other")), None);
+    }
+
+    #[test]
+    fn volume_roots_are_known_on_every_platform() {
+        let roots = volume_roots();
+        if cfg!(target_os = "macos") {
+            assert_eq!(roots, [PathBuf::from("/Volumes")]);
+        } else if cfg!(target_os = "linux") {
+            assert!(roots.contains(&PathBuf::from("/media")));
+            assert!(roots.contains(&PathBuf::from("/mnt")));
+        }
+        // No root is listed twice, and scanning them all does not fail.
+        let mut unique = roots.clone();
+        unique.dedup();
+        assert_eq!(unique, roots);
+        let _ = scan_all();
     }
 
     #[test]
