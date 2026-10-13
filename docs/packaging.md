@@ -1,6 +1,11 @@
-# Packaging for macOS
+# Packaging
 
-How Keyboard Curator becomes a `.app` and a `.dmg`, locally and in CI.
+How Keyboard Curator becomes a `.app` and a `.dmg` on macOS and a tarball
+on Linux, locally and in CI. The macOS part comes first; the Linux part is
+at the end.
+
+## macOS
+
 The pieces: `ci/bundle-macos.sh` (the packager), `crates/kc-app/Info.plist`
 (the bundle manifest), `crates/kc-app/entitlements.plist` (hardened
 runtime, deliberately empty), `crates/kc-app/assets/icon/` (the icon's SVG
@@ -116,3 +121,64 @@ keychain.
   of the Gatekeeper prompt.
 - **Sparkle or another updater** is out of scope for v1; releases are
   downloaded from GitHub.
+
+## Linux
+
+The pieces: `ci/bundle-linux.sh` (the packager), `packaging/linux/`
+(the desktop entry `keyboard-curator.desktop` and the udev rules
+`70-keyboard-curator.rules`), `crates/kc-app/assets/icon/icon-256.png`
+(the icon at 256 by 256, rendered from `icon.svg` with Inkscape and
+checked in, so the build needs no SVG renderer) and the `linux` job in
+`.github/workflows/release.yml`.
+
+### Building a release locally
+
+```sh
+cargo build --release --locked -p kc-app
+ci/bundle-linux.sh                              # target/release
+cargo build --release --locked -p kc-app --target x86_64-unknown-linux-gnu
+ci/bundle-linux.sh x86_64-unknown-linux-gnu     # target/<triple>/release
+```
+
+This writes `dist/Keyboard-Curator-<version>-linux-<arch>.tar.gz`, with
+the version from `[workspace.package]` in `Cargo.toml` and the
+architecture from the triple (or `uname -m`). On NixOS, run the build
+inside `nix-shell`. The development packages the build needs on Debian
+and Ubuntu are listed in the README and, in full, in the CI workflow.
+
+### What the tarball holds
+
+One folder, `keyboard-curator-<version>/`:
+
+| File | What it is |
+|---|---|
+| `keyboard-curator` | The app. Fonts, themes and board data are compiled in, as on macOS; it links Vulkan, Wayland or X11, fontconfig, FreeType, ALSA, libudev and libxkbcommon dynamically |
+| `keyboard-curator.desktop` | The desktop entry, for the application menu. `Exec` expects the binary on `PATH`; `StartupWMClass` and the window's `app_id` are both `keyboard-curator`, so desktops match the icon to the window |
+| `keyboard-curator.png` | The icon, for `~/.local/share/icons/hicolor/256x256/apps/` |
+| `70-keyboard-curator.rules` | The udev rules: every USB ID the board definitions list, plus the bootloaders, on `tty`, `hidraw` and `usb`, tagged `uaccess` with a `plugdev` fallback. Numbered 70 so they run before `73-seat-late.rules`, which applies the tag |
+| `LICENSE`, `THIRD-PARTY.md` | The terms |
+| `README.txt` | Where each file goes, written by the script |
+
+Nothing is signed. Linux has no counterpart to notarization; the SHA-256
+sums GitHub shows for each release asset are what a careful user checks.
+
+### The release workflow
+
+The `linux` job runs beside the `macos` one on the same triggers. On
+`ubuntu-24.04` it installs the development packages, builds
+`x86_64-unknown-linux-gnu`, runs the bundle script, validates the desktop
+entry with `desktop-file-validate`, uploads the tarball as a workflow
+artifact and, on a tag, attaches it to the same draft release as the DMG
+(whichever job runs first creates the draft; the other reuses it).
+
+The binary is built on Ubuntu 24.04, so it needs glibc 2.39 or newer: that
+is Ubuntu 24.04, Fedora 40, Debian 13 and anything rolling. Building on an
+older runner would widen that; so would a static or AppImage build, which
+is for later.
+
+### Later
+
+- **An AppImage or Flatpak**, so the udev rules and desktop entry install
+  themselves. The Flatpak sandbox would need the `--device=all` hole for
+  the keyboards, as every keyboard configurator on Flathub has.
+- **An aarch64 build**, once there is a machine to try it on.

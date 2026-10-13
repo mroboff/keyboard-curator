@@ -4,11 +4,34 @@ A native, open-source keymap, feature and per-key lighting editor for programmab
 
 **Status: early development.** Keymap and behavior editing, per-key lighting, import, config generation, GitHub builds, guided flashing and direct updates over ZMK Studio are all built. The generated firmware configs are compiled in CI, but little has been tried on real keyboards yet.
 
-The first release targets macOS and four boards: the Cyboard Imprint (82-key, wireless), the MoErgo Go60 and the MoErgo Glove80, on ZMK or RMK, and the Dygma Defy on Dygma's own firmware. More boards, Windows and Linux are planned afterward.
+The first release targets macOS and Linux and four boards: the Cyboard Imprint (82-key, wireless), the MoErgo Go60 and the MoErgo Glove80, on ZMK or RMK, and the Dygma Defy on Dygma's own firmware. More boards and Windows are planned afterward.
+
+## Installing
+
+Each release on GitHub carries a disk image for macOS and a tarball for Linux (x86_64).
+
+**macOS**: open the `.dmg` and drag Keyboard Curator into Applications.
+
+**Linux**: unpack `Keyboard-Curator-<version>-linux-x86_64.tar.gz`. It holds the `keyboard-curator` binary, a desktop entry and icon, the udev rules, the license files and a `README.txt` with the same steps as here:
+
+```sh
+tar -xzf Keyboard-Curator-*-linux-x86_64.tar.gz && cd keyboard-curator-*/
+install -Dm755 keyboard-curator ~/.local/bin/keyboard-curator
+install -Dm644 keyboard-curator.desktop ~/.local/share/applications/keyboard-curator.desktop
+install -Dm644 keyboard-curator.png ~/.local/share/icons/hicolor/256x256/apps/keyboard-curator.png
+sudo cp 70-keyboard-curator.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+The udev rules (`packaging/linux/70-keyboard-curator.rules`) give the logged-in user access to the keyboards' serial ports and raw HID interfaces; unplug and replug the keyboard after installing them. Without the rules, the serial port alone works for members of the `dialout` group (Debian, Ubuntu) or `uucp` (Arch), and writing a layout over HID (RMK, VIA) does not. The app needs Vulkan, Wayland or X11, fontconfig, ALSA and libudev, which every desktop distribution has. Keyboard shortcuts use Control on Linux where the guide says ⌘.
 
 ## Building
 
-Requires the stable Rust toolchain (pinned in `rust-toolchain.toml`) and, on macOS, the full Xcode app: the GUI framework compiles Metal shaders at build time, which the Command Line Tools alone cannot do. If `xcrun -f metal` fails, either run `sudo xcode-select -s /Applications/Xcode.app` or set `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` when building.
+Requires the stable Rust toolchain (pinned in `rust-toolchain.toml`).
+
+On macOS, the full Xcode app: the GUI framework compiles Metal shaders at build time, which the Command Line Tools alone cannot do. If `xcrun -f metal` fails, either run `sudo xcode-select -s /Applications/Xcode.app` or set `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` when building.
+
+On Linux, the development packages the GUI framework, the key tester's sound and the USB crates link against: on Debian and Ubuntu, `pkg-config cmake clang libclang-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libxcb1-dev libvulkan-dev libasound2-dev libudev-dev libssl-dev` (the full list is in `.github/workflows/ci.yml`). On NixOS, `shell.nix` provides them: `nix-shell --run "cargo run -p kc-app"`.
 
 ```sh
 cargo build --workspace
@@ -86,7 +109,7 @@ cargo test --workspace
 ci/check-gui-boundary.sh
 ```
 
-`CONTRIBUTING.md` explains how the crates fit together and how a board is added. `docs/packaging.md` covers the macOS release build and `docs/release-checklist.md` the checks a release goes through on real keyboards. `docs/user-guide` holds the user guide; `docs/user-guide/build.py` prints it to PDF.
+`CONTRIBUTING.md` explains how the crates fit together and how a board is added. `docs/packaging.md` covers the macOS and Linux release builds and `docs/release-checklist.md` the checks a release goes through on real keyboards. `docs/user-guide` holds the user guide; `docs/user-guide/build.py` prints it to PDF.
 
 ## License
 
