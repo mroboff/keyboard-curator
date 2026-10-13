@@ -1,0 +1,53 @@
+# Keyboard Curator: lets the logged-in user talk to the keyboards it supports
+# without root.
+#
+# Install:  sudo cp 70-keyboard-curator.rules /etc/udev/rules.d/
+#           sudo udevadm control --reload-rules && sudo udevadm trigger
+# then unplug the keyboard and plug it back in.
+#
+# Each keyboard gets three lines: its serial port (ZMK Studio and Dygma's
+# Focus protocol), its raw HID interface (Rynk and VIA) and the USB device
+# itself (recognizing the board). The `uaccess` tag gives the user at the
+# seat access while they are logged in; the mode and group are a fallback
+# for systems without systemd-logind, where the user must be in the plugdev
+# group. Without this file the serial ports still work for members of the
+# dialout group (Debian, Ubuntu) or uucp (Arch), but raw HID does not.
+#
+# The USB IDs are the ones the board definitions under crates/kc-boards
+# list, plus the bootloaders the keyboards restart into.
+
+# MoErgo Go60 and Glove80: 16c0:27db on ZMK and on moergo-rmk.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="27db", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="27db", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="16c0", ATTR{idProduct}=="27db", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Cyboard Imprint, and every ZMK keyboard that keeps ZMK's default IDs
+# (1d50:615e, the OpenMoko vendor); the Imprint's RMK fork uses the same.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="615e", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="615e", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="615e", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Any other device under ZMK's default vendor ID, for a keyboard with a
+# product ID of its own.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1d50", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1d50", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Dygma Defy, wireless (35ef:0012) and wired (35ef:0010).
+SUBSYSTEM=="tty", ATTRS{idVendor}=="35ef", ATTRS{idProduct}=="0012", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="35ef", ATTRS{idProduct}=="0012", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="35ef", ATTR{idProduct}=="0012", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="35ef", ATTRS{idProduct}=="0010", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+KERNEL=="hidraw*", ATTRS{idVendor}=="35ef", ATTRS{idProduct}=="0010", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="35ef", ATTR{idProduct}=="0010", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# Dygma Defy bootloader (35ef:0013).
+SUBSYSTEM=="tty", ATTRS{idVendor}=="35ef", ATTRS{idProduct}=="0013", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="35ef", ATTR{idProduct}=="0013", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+
+# UF2 bootloaders, which mount as small drives: Adafruit's nRF52 bootloader
+# (vendor 239a: nice!nano and the other nRF52840 controllers, and the
+# MoErgo and Cyboard boards' own builds of it) and the RP2040's (2e8a:0003,
+# RPI-RP2). Mounting is udisks' job; this lets the app see the device.
+SUBSYSTEM=="usb", ATTR{idVendor}=="239a", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="2e8a", ATTR{idProduct}=="0003", TAG+="uaccess", MODE="0660", GROUP="plugdev"

@@ -10,10 +10,10 @@ let
     wayland
     libxkbcommon
     vulkan-loader
-    xorg.libX11
-    xorg.libxcb
-    xorg.libXcursor
-    xorg.libXi
+    (pkgs.libx11 or pkgs.xorg.libX11)
+    (pkgs.libxcb or pkgs.xorg.libxcb)
+    (pkgs.libxcursor or pkgs.xorg.libXcursor)
+    (pkgs.libxi or pkgs.xorg.libXi)
     fontconfig
     freetype
     alsa-lib

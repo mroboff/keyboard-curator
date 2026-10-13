@@ -39,6 +39,46 @@ jobs:
       - name: GUI boundary (only kc-app may depend on GPUI)
         run: ci/check-gui-boundary.sh
 
+  check-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # What the GUI framework, the key tester's sound and the USB crates
+      # link against on Linux; the same list as shell.nix's.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config cmake clang libclang-dev \
+            libfontconfig1-dev libfreetype-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev \
+            libxcb1-dev libxcb-xkb-dev libxcb-cursor-dev libxcb-randr0-dev \
+            libxcb-xinput-dev libxcb-xfixes0-dev libxcb-shape0-dev libxcb-render0-dev \
+            libvulkan-dev libasound2-dev libudev-dev libssl-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings denied)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: GUI boundary (only kc-app may depend on GPUI)
+        run: ci/check-gui-boundary.sh
+
   audit:
     runs-on: ubuntu-22.04
     steps:

@@ -17,6 +17,7 @@ or configured any keyboard apart from reading a Dygma Defy over USB.
 - [ ] `THIRD-PARTY.md` is regenerated (`ci/third-party.py`) and the TailorKey template's redistribution terms are confirmed with its author.
 - [ ] The user guide (`docs/user-guide`) builds and its screenshots match the app.
 - [ ] The release DMG is built by the release workflow, signed and notarized, and installs on a clean machine (a fresh user account is enough) without a Gatekeeper warning.
+- [ ] The Linux tarball is built by the release workflow and runs on a clean Ubuntu and a clean Fedora (a fresh virtual machine is enough): the window opens on Wayland and on X11 with its menus in the title bar, the desktop entry and icon show in the application menu, and with the udev rules installed a connected keyboard is recognized and read without root. A bootloader drive that the desktop mounts is found by Build & Flash.
 
 ## Every board, every firmware
 
@@ -85,6 +86,6 @@ Repeat this block for each row of the table at the end.
 ## Launch
 
 - [ ] Known limitations are listed in the release notes: what has not been run on hardware, the unverified Imprint LED order if it is still unverified, which firmware is experimental.
-- [ ] The version in `Cargo.toml` is bumped, the tag `vX.Y.Z` is pushed, the release workflow attaches the DMG, the release notes are written, and the release is published (not a draft).
+- [ ] The version in `Cargo.toml` is bumped, the tag `vX.Y.Z` is pushed, the release workflow attaches the DMG and the Linux tarball, the release notes are written, and the release is published (not a draft).
 - [ ] The README's download link points at the release.
-- [ ] Follow-up projects are opened in Linear: more boards, Windows and Linux, local builds.
+- [ ] Follow-up projects are opened in Linear: more boards, Windows, local builds.

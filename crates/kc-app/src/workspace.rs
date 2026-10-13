@@ -2455,7 +2455,14 @@ impl Workspace {
                 status.child(
                     div()
                         .font_family(mono)
-                        .child("←↑↓→ move   ⇧←→ add to selection   ⌫ clear   ⌘[ ⌘] layer   ⌘C ⌘V copy, paste   ⌘Z undo"),
+                        .child(format!(
+                            "←↑↓→ move   ⇧←→ add to selection   ⌫ clear   {} {} layer   {} {} copy, paste   {} undo",
+                            crate::shortcut("⌘["),
+                            crate::shortcut("⌘]"),
+                            crate::shortcut("⌘C"),
+                            crate::shortcut("⌘V"),
+                            crate::shortcut("⌘Z"),
+                        )),
                 )
             })
             .child(location)

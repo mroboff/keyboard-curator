@@ -3,11 +3,18 @@
   <p>Launching the app, adding your keyboard as a board, starting your first layout, and saving it.</p></header>
 
   <h2>Launching the app</h2>
-  <p>The app is published as a signed disk image for macOS on the project's GitHub releases page. Open the <code>.dmg</code>, drag <span class="ui">Keyboard Curator</span> into Applications and launch it. When a newer release is out, the app offers its page as it starts; <span class="ui">Help › Check for Updates…</span> asks at any time, and <span class="ui">Help › Check for Updates at Launch</span> turns the automatic check off. The check sends nothing but the request.</p>
-  <p>You can also run the app from its source code. You need <b>Rust</b> (from rustup.rs) and Apple's <b>Xcode</b> (from the App Store) installed. Then, in Terminal, from the folder that holds the app's source:</p>
+  <p>The app is published on the project's GitHub releases page, for macOS and for Linux. When a newer release is out, the app offers its page as it starts; <span class="ui">Help › Check for Updates…</span> asks at any time, and <span class="ui">Help › Check for Updates at Launch</span> turns the automatic check off. The check sends nothing but the request.</p>
+  <p><b>On a Mac</b>, download the signed disk image. Open the <code>.dmg</code>, drag <span class="ui">Keyboard Curator</span> into Applications and launch it.</p>
+  <p><b>On Linux</b>, download the tarball (<code>Keyboard-Curator-…-linux-x86_64.tar.gz</code>) and unpack it. Inside are the app itself, <code>keyboard-curator</code>, a launcher and icon for your desktop's application menu, a file of udev rules, and a <code>README.txt</code> that says where each one goes. Two steps matter:</p>
+  <ol class="steps">
+    <li>Put <code>keyboard-curator</code> somewhere on your path, such as <code>~/.local/bin</code>, and install the launcher and icon beside it if you want the app in your menu. It is one file and needs nothing else installed on a desktop system.</li>
+    <li>Install the udev rules, so the app can talk to your keyboard without root: copy <code>70-keyboard-curator.rules</code> to <code>/etc/udev/rules.d/</code> as root, run <code>sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</code>, then unplug the keyboard and plug it back in. Without the rules, the keyboard's serial port still works if your user is in the <code>dialout</code> group (Debian, Ubuntu) or <code>uucp</code> (Arch), but the Defy, RMK and VIA keyboards, which are configured over HID, cannot be written to.</li>
+  </ol>
+  <p>On Linux the menus are in the window's own title bar rather than at the top of the screen, and the shortcuts use <kbd>Ctrl</kbd> where this guide says <kbd>⌘</kbd>.</p>
+  <p>You can also run the app from its source code. You need <b>Rust</b> (from rustup.rs) and, on a Mac, Apple's <b>Xcode</b> (from the App Store); on Linux, your distribution's development packages for Wayland, X11, Vulkan, fontconfig, ALSA and libudev, listed in the project's README. Then, in a terminal, from the folder that holds the app's source:</p>
   <pre>cargo run -p kc-app</pre>
   <p>The first launch compiles the app and takes a few minutes. Later launches start in seconds.</p>
-  <div class="box note"><div class="h">If the build stops with an error about "metal"</div>
+  <div class="box note"><div class="h">If the build stops with an error about "metal" (Mac)</div>
   <p>The app's graphics need a tool that ships only with the full Xcode app. Either run <code>sudo xcode-select -s /Applications/Xcode.app</code> once, or start the app like this:</p>
   <pre>DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer cargo run -p kc-app</pre></div>
   <p>A layout given on the command line opens straight away, and a keymap file is imported the same way:</p>

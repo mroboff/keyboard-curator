@@ -14,6 +14,7 @@ mod workspace;
 
 use std::rc::Rc;
 
+use gpui_kit::component::TitleBar;
 use gpui_kit::*;
 
 use crate::shell::Shell;
@@ -68,8 +69,9 @@ actions!(
 /// The GitHub project whose releases are the app's own.
 pub const REPOSITORY: &str = "mroboff/keyboard-curator";
 
-/// Every keyboard shortcut, for the reference under Help. Kept beside the
-/// bindings below; the two must agree.
+/// Every keyboard shortcut, for the reference under Help, written as a
+/// Mac writes it; [`shortcut`] spells one for the computer the app runs
+/// on. Kept beside the bindings below; the two must agree.
 pub const SHORTCUTS: &[(&str, &str)] = &[
     ("⌘N", "New board or layout, for where you are"),
     ("⌘O", "Open a layout"),
@@ -91,8 +93,53 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
     ("⌘Q", "Quit"),
 ];
 
+/// A shortcut as this computer writes it: `⇧⌘S` on a Mac, and
+/// `Ctrl+Shift+S` elsewhere, where Control stands in for Command (the
+/// bindings below say `secondary`, which GPUI reads the same way).
+pub fn shortcut(keys: &str) -> String {
+    if cfg!(target_os = "macos") {
+        keys.to_string()
+    } else {
+        spelled_out(keys)
+    }
+}
+
+/// `⇧⌘S` as `Ctrl+Shift+S`. Each word holding the Command glyph is
+/// rewritten; the rest ("Arrow keys", "to") is left alone.
+fn spelled_out(keys: &str) -> String {
+    keys.split(' ')
+        .map(|word| {
+            if !word.contains('⌘') {
+                return word.to_string();
+            }
+            let (mut alt, mut shift) = (false, false);
+            let mut key = String::new();
+            for c in word.chars() {
+                match c {
+                    '⌘' => {}
+                    '⌥' => alt = true,
+                    '⇧' => shift = true,
+                    other => key.push(other),
+                }
+            }
+            let mut parts = vec!["Ctrl"];
+            if alt {
+                parts.push("Alt");
+            }
+            if shift {
+                parts.push("Shift");
+            }
+            parts.push(&key);
+            parts.join("+")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// The menu bar. The theme and appearance in use are checked in the View
 /// menu, and whether the app looks for a newer release at launch in Help.
+/// A Mac has an application menu as well; elsewhere Quit closes the File
+/// menu.
 fn menus(theme: ThemeId, appearance: Appearance, checks_for_updates: bool) -> Vec<Menu> {
     let themes = ThemeId::ALL.map(|id| {
         let item = match id {
@@ -103,24 +150,31 @@ fn menus(theme: ThemeId, appearance: Appearance, checks_for_updates: bool) -> Ve
         };
         item.checked(theme == id)
     });
-    vec![
-        Menu::new("Keyboard Curator").items([
+    let mut file = vec![
+        MenuItem::action("New", NewProject),
+        MenuItem::action("Open Layout…", OpenProject),
+        MenuItem::action("Import Keymap…", ImportProject),
+        MenuItem::separator(),
+        MenuItem::action("Save", Save),
+        MenuItem::action("Save As…", SaveAs),
+        MenuItem::separator(),
+        MenuItem::action("Export Firmware Config…", ExportConfig),
+        MenuItem::separator(),
+        MenuItem::action("Close", CloseProject),
+    ];
+    let mut bar = Vec::new();
+    if cfg!(target_os = "macos") {
+        bar.push(Menu::new("Keyboard Curator").items([
             MenuItem::os_submenu("Services", SystemMenuType::Services),
             MenuItem::separator(),
             MenuItem::action("Quit Keyboard Curator", Quit),
-        ]),
-        Menu::new("File").items([
-            MenuItem::action("New", NewProject),
-            MenuItem::action("Open Layout…", OpenProject),
-            MenuItem::action("Import Keymap…", ImportProject),
-            MenuItem::separator(),
-            MenuItem::action("Save", Save),
-            MenuItem::action("Save As…", SaveAs),
-            MenuItem::separator(),
-            MenuItem::action("Export Firmware Config…", ExportConfig),
-            MenuItem::separator(),
-            MenuItem::action("Close", CloseProject),
-        ]),
+        ]));
+    } else {
+        file.push(MenuItem::separator());
+        file.push(MenuItem::action("Quit", Quit));
+    }
+    bar.extend([
+        Menu::new("File").items(file),
         Menu::new("Edit").items([
             MenuItem::action("Undo", Undo),
             MenuItem::action("Redo", Redo),
@@ -160,7 +214,46 @@ fn menus(theme: ThemeId, appearance: Appearance, checks_for_updates: bool) -> Ve
             MenuItem::action("Check for Updates at Launch", ToggleUpdateCheck)
                 .checked(checks_for_updates),
         ]),
-    ]
+    ]);
+    bar
+}
+
+/// Puts the menus where this computer shows them: in the menu bar at the
+/// top of the screen on a Mac, and otherwise in the window's own title
+/// bar, which the [`Shell`] draws from the same list.
+pub fn install_menus(
+    theme: ThemeId,
+    appearance: Appearance,
+    checks_for_updates: bool,
+    cx: &mut App,
+) {
+    let menus = menus(theme, appearance, checks_for_updates);
+    if cfg!(target_os = "macos") {
+        cx.set_menus(menus);
+    } else {
+        let owned = menus.into_iter().map(Menu::owned).collect();
+        gpui_kit::component::GlobalState::global_mut(cx).set_app_menus(owned);
+    }
+}
+
+/// How the window is opened. On a Mac the system draws the title bar. On
+/// Linux the window draws its own frame and title bar, with the menus in
+/// it: Wayland compositors do not all decorate windows, and the title bar
+/// component owns moving, resizing and closing the window.
+fn window_options(bounds: Bounds<Pixels>) -> WindowOptions {
+    let base = if cfg!(target_os = "macos") {
+        WindowOptions::default()
+    } else {
+        TitleBar::window_options()
+    };
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(760.), px(480.))),
+        window_decorations: (!cfg!(target_os = "macos")).then_some(WindowDecorations::Client),
+        // Matches the desktop entry, so Linux desktops can find the icon.
+        app_id: Some("keyboard-curator".to_string()),
+        ..base
+    }
 }
 
 fn main() {
@@ -172,30 +265,31 @@ fn main() {
             cx.open_url("https://github.com/mroboff/keyboard-curator#readme");
         });
         cx.on_action(|_: &OpenZmkDocs, cx| cx.open_url("https://zmk.dev/docs"));
+        // `secondary` is Command on a Mac and Control elsewhere.
         cx.bind_keys([
-            KeyBinding::new("cmd-q", Quit, None),
-            KeyBinding::new("cmd-n", NewProject, Some("Shell")),
-            KeyBinding::new("cmd-o", OpenProject, Some("Shell")),
-            KeyBinding::new("cmd-i", ImportProject, Some("Shell")),
-            KeyBinding::new("cmd-e", ExportConfig, Some("Shell")),
-            KeyBinding::new("cmd-c", Copy, Some("Workspace")),
-            KeyBinding::new("cmd-v", Paste, Some("Workspace")),
-            KeyBinding::new("cmd-]", NextLayer, Some("Workspace")),
-            KeyBinding::new("cmd-[", PreviousLayer, Some("Workspace")),
-            KeyBinding::new("cmd-1", Layer1, Some("Workspace")),
-            KeyBinding::new("cmd-2", Layer2, Some("Workspace")),
-            KeyBinding::new("cmd-3", Layer3, Some("Workspace")),
-            KeyBinding::new("cmd-4", Layer4, Some("Workspace")),
-            KeyBinding::new("cmd-5", Layer5, Some("Workspace")),
-            KeyBinding::new("cmd-6", Layer6, Some("Workspace")),
-            KeyBinding::new("cmd-7", Layer7, Some("Workspace")),
-            KeyBinding::new("cmd-8", Layer8, Some("Workspace")),
-            KeyBinding::new("cmd-9", Layer9, Some("Workspace")),
-            KeyBinding::new("cmd-s", Save, Some("Shell")),
-            KeyBinding::new("cmd-shift-s", SaveAs, Some("Shell")),
-            KeyBinding::new("cmd-w", CloseProject, Some("Shell")),
-            KeyBinding::new("cmd-z", Undo, Some("Shell")),
-            KeyBinding::new("cmd-shift-z", Redo, Some("Shell")),
+            KeyBinding::new("secondary-q", Quit, None),
+            KeyBinding::new("secondary-n", NewProject, Some("Shell")),
+            KeyBinding::new("secondary-o", OpenProject, Some("Shell")),
+            KeyBinding::new("secondary-i", ImportProject, Some("Shell")),
+            KeyBinding::new("secondary-e", ExportConfig, Some("Shell")),
+            KeyBinding::new("secondary-c", Copy, Some("Workspace")),
+            KeyBinding::new("secondary-v", Paste, Some("Workspace")),
+            KeyBinding::new("secondary-]", NextLayer, Some("Workspace")),
+            KeyBinding::new("secondary-[", PreviousLayer, Some("Workspace")),
+            KeyBinding::new("secondary-1", Layer1, Some("Workspace")),
+            KeyBinding::new("secondary-2", Layer2, Some("Workspace")),
+            KeyBinding::new("secondary-3", Layer3, Some("Workspace")),
+            KeyBinding::new("secondary-4", Layer4, Some("Workspace")),
+            KeyBinding::new("secondary-5", Layer5, Some("Workspace")),
+            KeyBinding::new("secondary-6", Layer6, Some("Workspace")),
+            KeyBinding::new("secondary-7", Layer7, Some("Workspace")),
+            KeyBinding::new("secondary-8", Layer8, Some("Workspace")),
+            KeyBinding::new("secondary-9", Layer9, Some("Workspace")),
+            KeyBinding::new("secondary-s", Save, Some("Shell")),
+            KeyBinding::new("secondary-shift-s", SaveAs, Some("Shell")),
+            KeyBinding::new("secondary-w", CloseProject, Some("Shell")),
+            KeyBinding::new("secondary-z", Undo, Some("Shell")),
+            KeyBinding::new("secondary-shift-z", Redo, Some("Shell")),
         ]);
         let state = AppState::load();
         theme::init(cx);
@@ -206,7 +300,7 @@ fn main() {
             .and_then(|name| serde_json::from_value(serde_json::Value::String(name)).ok())
             .unwrap_or(state.theme);
         theme::apply(shown, state.appearance, cx);
-        cx.set_menus(menus(shown, state.appearance, !state.updates_off));
+        install_menus(shown, state.appearance, !state.updates_off, cx);
         catalog::start(cx);
 
         let bounds = match state.window {
@@ -216,12 +310,7 @@ fn main() {
             },
             None => Bounds::centered(None, size(px(1180.), px(720.)), cx),
         };
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            window_min_size: Some(size(px(760.), px(480.))),
-            ..Default::default()
-        };
-        let (window, shell) = gpui_kit::open_window(options, cx, |window, cx| {
+        let (window, shell) = gpui_kit::open_window(window_options(bounds), cx, |window, cx| {
             cx.new(|cx| Shell::new(boards, state, window, cx))
         })
         .expect("failed to open window");
@@ -249,26 +338,37 @@ fn main() {
             }
             // Closing the window with unsaved changes asks first.
             window.on_window_should_close(cx, move |window, cx| {
-                if !shell.read(cx).has_unsaved_changes(cx) {
-                    return true;
-                }
-                let answer = window.prompt(
-                    PromptLevel::Warning,
-                    "Quit without saving?",
-                    Some("Your changes to this layout will be lost."),
-                    &["Cancel", "Quit Without Saving"],
-                    cx,
-                );
-                cx.spawn(async move |cx| {
-                    if answer.await == Ok(1) {
-                        cx.update(|cx| cx.quit());
-                    }
-                })
-                .detach();
-                false
+                shell.update(cx, |shell, cx| shell.may_close(window, cx))
             });
         });
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         cx.activate(true);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    // Named, not globbed: the GUI crate's glob carries a `test` macro of
+    // its own that would shadow Rust's.
+    use super::{spelled_out, SHORTCUTS};
+
+    #[test]
+    fn shortcuts_are_spelled_out_with_control_off_a_mac() {
+        assert_eq!(spelled_out("⌘N"), "Ctrl+N");
+        assert_eq!(spelled_out("⇧⌘S"), "Ctrl+Shift+S");
+        assert_eq!(spelled_out("⌥⌘I"), "Ctrl+Alt+I");
+        assert_eq!(spelled_out("⌘1 to ⌘9"), "Ctrl+1 to Ctrl+9");
+        assert_eq!(spelled_out("⌘["), "Ctrl+[");
+        assert_eq!(spelled_out("Arrow keys"), "Arrow keys");
+        assert_eq!(spelled_out("Backspace or Delete"), "Backspace or Delete");
+    }
+
+    #[test]
+    fn every_shortcut_in_the_list_can_be_spelled_out() {
+        for (keys, _) in SHORTCUTS {
+            let spelled = spelled_out(keys);
+            assert!(!spelled.contains('⌘'), "{keys} keeps its Command glyph");
+            assert!(!spelled.contains("++"), "{keys} spells out as {spelled}");
+        }
+    }
 }

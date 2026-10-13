@@ -16,6 +16,15 @@ On macOS the GUI framework compiles Metal shaders at build time, which
 needs the full Xcode app: if `xcrun -f metal` fails, run with
 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 
+On Linux the build links the system's Wayland, X11, xkbcommon, Vulkan,
+fontconfig, FreeType, ALSA, libudev and OpenSSL development packages; the
+Debian and Ubuntu names are in `.github/workflows/ci.yml`. On NixOS,
+`shell.nix` supplies them: `nix-shell --run "cargo run -p kc-app"`.
+
+Platform differences stay behind `cfg(target_os)` in the smallest
+functions that can hold them (see CLAUDE.md); the UI itself branches on
+the platform only for the shortcuts and the menu bar.
+
 Before a commit, the same four checks CI runs:
 
 ```sh

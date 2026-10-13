@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Curator
+Comment=Keymap, feature and lighting editor for programmable keyboards
+Exec=keyboard-curator %f
+Icon=keyboard-curator
+Terminal=false
+Categories=Utility;Settings;HardwareSettings;
+Keywords=keyboard;keymap;layout;firmware;ZMK;RMK;Dygma;VIA;
+StartupWMClass=keyboard-curator

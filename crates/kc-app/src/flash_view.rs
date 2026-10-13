@@ -1,7 +1,7 @@
 //! Guided flashing: choose firmware files, put each half into its
 //! bootloader, and copy the right file to the right half.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -47,7 +47,7 @@ impl FlashView {
         let steps = Self::steps(&board, &profile);
         // Watch for bootloader drives for as long as this view exists.
         cx.spawn(async move |this, cx| loop {
-            let drives = kc_flash::scan(Path::new(kc_flash::VOLUMES));
+            let drives = kc_flash::scan_all();
             let alive = this.update(cx, |this, cx| {
                 if this.drives != drives {
                     this.drives = drives;

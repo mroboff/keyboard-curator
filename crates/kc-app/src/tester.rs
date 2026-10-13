@@ -794,13 +794,15 @@ impl Render for KeyTester {
                 .child(section_title(title, cx))
         };
         let help = format!(
-            "{} Press keys on the keyboard, or click them here to play. The computer only reports what a key sends, never which key or layer, so the tester shows the layer the keyboard must be on: a press that no key of the shown layer sends moves to the first layer that has one and outlines the keys that lead there. Choose a layer above to test it by hand. A key with more than one function is drawn in slices, one per function. Keep the mouse still while testing mouse keys; a click beside the keys counts as a left click.{} ⌘Q and ⌘W still work; every other press is tested.",
+            "{} Press keys on the keyboard, or click them here to play. The computer only reports what a key sends, never which key or layer, so the tester shows the layer the keyboard must be on: a press that no key of the shown layer sends moves to the first layer that has one and outlines the keys that lead there. Choose a layer above to test it by hand. A key with more than one function is drawn in slices, one per function. Keep the mouse still while testing mouse keys; a click beside the keys counts as a left click.{} {} and {} still work; every other press is tested.",
             self.source,
             match untestable {
                 0 => String::new(),
                 1 => " One key on this layer sends nothing to the computer and cannot be tested here; it is shown hollow.".to_string(),
                 n => format!(" {n} keys on this layer, such as Bluetooth and lighting keys, send nothing to the computer and cannot be tested here; they are shown hollow."),
-            }
+            },
+            crate::shortcut("⌘Q"),
+            crate::shortcut("⌘W"),
         );
 
         div()
