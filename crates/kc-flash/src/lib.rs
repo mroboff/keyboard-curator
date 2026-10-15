@@ -7,6 +7,7 @@
 pub mod uf2;
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use kc_boards::board::{FirmwareProfile, Side};
 use kc_boards::Board;
@@ -236,17 +237,41 @@ pub fn check(
     }
 }
 
+/// How long a drive gets to disappear after a failed write before the
+/// failure is believed.
+const LEAVING: Duration = Duration::from_secs(5);
+
 /// Copies firmware onto a bootloader drive.
 ///
-/// The half restarts as soon as it has the last block, which can pull the
-/// drive out from under the copy. So a write error counts as success when
-/// the drive has gone: that is what a completed flash looks like.
+/// The half restarts as soon as it has the last block, which pulls the
+/// drive out from under the copy: the write fails with an input/output
+/// error, and the system unmounts the drive a moment later. So a write
+/// error counts as success when the drive goes away within a few seconds.
+/// That is what a completed flash looks like. A drive that stays mounted
+/// and refuses the write is a real failure.
 pub fn flash(bootloader: &Bootloader, firmware: &[u8]) -> Result<(), FlashError> {
+    flash_within(bootloader, firmware, LEAVING)
+}
+
+fn flash_within(
+    bootloader: &Bootloader,
+    firmware: &[u8],
+    leaving: Duration,
+) -> Result<(), FlashError> {
     let target = bootloader.path.join("firmware.uf2");
-    match std::fs::write(&target, firmware) {
-        Ok(()) => Ok(()),
-        Err(_) if !bootloader.path.join("INFO_UF2.TXT").exists() => Ok(()),
-        Err(error) => Err(FlashError::Write(error)),
+    let Err(error) = std::fs::write(&target, firmware) else {
+        return Ok(());
+    };
+    let info = bootloader.path.join("INFO_UF2.TXT");
+    let deadline = Instant::now() + leaving;
+    loop {
+        if !info.exists() {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(FlashError::Write(error));
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -451,8 +476,23 @@ broken line
         std::fs::create_dir(stuck.join("firmware.uf2")).unwrap();
         let stuck = scan(&volumes.0).remove(0);
         assert!(matches!(
-            flash(&stuck, &firmware),
+            flash_within(&stuck, &firmware, Duration::from_millis(300)),
             Err(FlashError::Write(_))
         ));
+
+        // The write failed, and the system unmounted the drive a moment
+        // later: the half took the firmware.
+        let leaving = volumes.mount("LEAVING", Some(INFO));
+        std::fs::create_dir(leaving.join("firmware.uf2")).unwrap();
+        let bootloader = scan(&volumes.0)
+            .into_iter()
+            .find(|drive| drive.name == "LEAVING")
+            .unwrap();
+        let unmount = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            std::fs::remove_dir_all(&leaving).unwrap();
+        });
+        assert!(flash_within(&bootloader, &firmware, Duration::from_secs(5)).is_ok());
+        unmount.join().unwrap();
     }
 }

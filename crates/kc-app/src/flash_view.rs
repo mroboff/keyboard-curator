@@ -17,6 +17,7 @@ use crate::workspace::{help, subheading};
 #[derive(Debug, Clone, PartialEq)]
 enum Progress {
     Waiting,
+    Flashing,
     Done,
     Failed(String),
 }
@@ -209,19 +210,44 @@ impl FlashView {
         })
     }
 
+    /// Copies the step's firmware to its drive, off the UI thread: the
+    /// copy takes a moment, and a copy the half cuts short waits a few
+    /// seconds more for the drive to go.
     fn flash(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(drive) = self.drive_for(index).cloned() else {
             return;
         };
         let step = &mut self.steps[index];
-        let Some((_, firmware)) = &step.firmware else {
+        let Some((_, firmware)) = step.firmware.clone() else {
             return;
         };
-        step.progress = match kc_flash::flash(&drive, firmware) {
-            Ok(()) => Progress::Done,
-            Err(error) => Progress::Failed(error.to_string()),
-        };
+        step.progress = Progress::Flashing;
         cx.notify();
+        cx.spawn(async move |this, cx| {
+            let outcome = cx
+                .background_spawn(async move { kc_flash::flash(&drive, &firmware) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                // Unless the steps were reset while the copy ran.
+                if this.steps[index].progress == Progress::Flashing {
+                    this.steps[index].progress = match outcome {
+                        Ok(()) => Progress::Done,
+                        Err(error) => Progress::Failed(error.to_string()),
+                    };
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Takes a failed step as done, on the user's word that the half runs
+    /// the new firmware, so the next half can be flashed.
+    fn take_as_flashed(&mut self, index: usize, cx: &mut Context<Self>) {
+        if matches!(self.steps[index].progress, Progress::Failed(_)) {
+            self.steps[index].progress = Progress::Done;
+            cx.notify();
+        }
     }
 
     fn start_over(&mut self, cx: &mut Context<Self>) {
@@ -251,8 +277,10 @@ impl Render for FlashView {
                     path.file_name()
                         .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
                 });
+                let failed = matches!(step.progress, Progress::Failed(_));
                 let (status, color) = match (&step.progress, &file, drive) {
                     (Progress::Done, _, _) => ("Flashed.".to_string(), success),
+                    (Progress::Flashing, _, _) => ("Flashing…".to_string(), accent),
                     (Progress::Failed(error), _, _) => (format!("Failed: {error}"), danger),
                     (_, None, _) => ("No firmware chosen for this half yet.".to_string(), muted),
                     (_, Some(_), true) => ("Bootloader found. Ready to flash.".to_string(), accent),
@@ -266,7 +294,9 @@ impl Render for FlashView {
                     ),
                     (_, Some(_), false) => ("Waiting for the previous half.".to_string(), muted),
                 };
-                let ready = drive && file.is_some() && step.progress != Progress::Done;
+                let ready = drive
+                    && file.is_some()
+                    && matches!(step.progress, Progress::Waiting | Progress::Failed(_));
                 div()
                     .flex()
                     .items_center()
@@ -296,7 +326,12 @@ impl Render for FlashView {
                                     .text_color(muted)
                                     .child(file.unwrap_or_else(|| "No file".to_string())),
                             )
-                            .child(div().text_xs().text_color(color).child(status)),
+                            .child(div().text_xs().text_color(color).child(status))
+                            .when(failed, |column| {
+                                column.child(div().text_xs().text_color(muted).child(
+                                    "If the half restarted and runs the new firmware anyway, continue. Otherwise put it back into its bootloader and flash it again.",
+                                ))
+                            }),
                     )
                     .when(ready, |row| {
                         row.child(
@@ -304,6 +339,15 @@ impl Render for FlashView {
                                 .primary()
                                 .label(format!("Flash {}", step.side.title()))
                                 .on_click(cx.listener(move |this, _, _, cx| this.flash(index, cx))),
+                        )
+                    })
+                    .when(failed, |row| {
+                        row.child(
+                            Button::new(("flashed-anyway", index))
+                                .label("It runs, continue")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.take_as_flashed(index, cx)
+                                })),
                         )
                     })
             })
