@@ -102,17 +102,14 @@ impl FlashView {
     }
 
     /// Takes firmware from a build, replacing anything chosen before.
-    pub fn set_firmware(&mut self, firmware: Vec<(String, Vec<u8>)>, cx: &mut Context<Self>) {
+    /// Takes firmware a build or a fetch brought, one file per half. The
+    /// path is where the file was kept, or just its name when it was not.
+    pub fn set_firmware(&mut self, firmware: Vec<(PathBuf, Vec<u8>)>, cx: &mut Context<Self>) {
         for step in &mut self.steps {
             step.firmware = None;
             step.progress = Progress::Waiting;
         }
-        self.assign(
-            firmware
-                .into_iter()
-                .map(|(name, bytes)| (PathBuf::from(name), bytes)),
-            cx,
-        );
+        self.assign(firmware.into_iter(), cx);
     }
 
     fn add_files(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {

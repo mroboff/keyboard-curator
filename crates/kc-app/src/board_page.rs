@@ -67,6 +67,11 @@ pub enum BoardEvent {
 impl EventEmitter<BoardEvent> for BoardPage {}
 
 /// Where a firmware build has got to.
+/// Where built firmware is kept, one folder per build under the board.
+fn builds_dir() -> Option<PathBuf> {
+    dirs::config_dir().map(|d| d.join("Keyboard Curator").join("builds"))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum BuildStatus {
     Idle,
@@ -98,6 +103,8 @@ pub struct BoardPage {
     flash: Entity<FlashView>,
     tester: Entity<KeyTester>,
     build: BuildStatus,
+    /// Where the last build's firmware was kept on disk.
+    build_folder: Option<PathBuf>,
     /// Where fetching the ready-made firmware from its release has got to.
     release: BuildStatus,
     /// Where fetching a release of a firmware fork has got to, and what it
@@ -182,6 +189,7 @@ impl BoardPage {
             flash,
             tester,
             build: BuildStatus::Idle,
+            build_folder: None,
             release: BuildStatus::Idle,
             fork: BuildStatus::Idle,
             fork_firmware: None,
@@ -718,7 +726,7 @@ impl BoardPage {
                         let files = fetched
                             .files
                             .into_iter()
-                            .map(|f| (f.name, f.bytes))
+                            .map(|f| (PathBuf::from(f.name), f.bytes))
                             .collect();
                         this.flash.update(cx, |flash, cx| flash.set_firmware(files, cx));
                         this.release = BuildStatus::Succeeded(format!(
@@ -988,6 +996,8 @@ impl BoardPage {
             |n| n.to_string_lossy().into_owned(),
         );
         self.build = BuildStatus::Working("Pushing the config to GitHub…".into());
+        self.build_folder = None;
+        let board_id = self.board.id.clone();
         cx.notify();
 
         cx.spawn(async move |this, cx| {
@@ -1091,22 +1101,49 @@ impl BoardPage {
                     for archive in archives {
                         firmware.extend(kc_build::extract_uf2(&archive)?);
                     }
-                    Ok::<_, kc_build::BuildError>(firmware)
+                    // Kept on disk so the files outlive the app; a build
+                    // that cannot be kept can still be flashed.
+                    let kept = match builds_dir() {
+                        Some(root) if !firmware.is_empty() => {
+                            kc_build::keep(&root, &board_id, run_id, &firmware).map_err(|e| e.to_string())
+                        }
+                        _ => Err("there is no folder to keep them in".to_string()),
+                    };
+                    Ok::<_, kc_build::BuildError>((firmware, kept))
                 })
                 .await;
             match downloaded {
-                Ok(firmware) if firmware.is_empty() => status(&this, cx, BuildStatus::Failed {
+                Ok((firmware, _)) if firmware.is_empty() => status(&this, cx, BuildStatus::Failed {
                     message: "The build finished but produced no firmware files.".into(),
                     url: Some(run_url),
                 }),
-                Ok(firmware) => {
+                Ok((firmware, kept)) => {
                     let count = firmware.len();
                     let _ = this.update(cx, |this, cx| {
-                        let files = firmware.into_iter().map(|f| (f.name, f.bytes)).collect();
+                        let (files, text) = match &kept {
+                            Ok(folder) => (
+                                firmware
+                                    .into_iter()
+                                    .map(|f| (folder.join(&f.name), f.bytes))
+                                    .collect(),
+                                format!(
+                                    "Built {count} firmware file(s), kept in {}. Flash each half below.",
+                                    folder.display()
+                                ),
+                            ),
+                            Err(problem) => (
+                                firmware
+                                    .into_iter()
+                                    .map(|f| (PathBuf::from(f.name), f.bytes))
+                                    .collect(),
+                                format!(
+                                    "Built {count} firmware file(s). They could not be kept on disk: {problem}. Flash each half below before closing the app."
+                                ),
+                            ),
+                        };
                         this.flash.update(cx, |flash, cx| flash.set_firmware(files, cx));
-                        this.build = BuildStatus::Succeeded(format!(
-                            "Built {count} firmware file(s). Flash each half below."
-                        ));
+                        this.build = BuildStatus::Succeeded(text);
+                        this.build_folder = kept.ok();
                         cx.notify();
                     });
                 }
@@ -1735,9 +1772,16 @@ impl BoardPage {
         let panel = match &self.build {
             BuildStatus::Idle => panel,
             BuildStatus::Working(text) => panel.child(div().text_sm().child(text.clone())),
-            BuildStatus::Succeeded(text) => {
-                panel.child(div().text_sm().text_color(success).child(text.clone()))
-            }
+            BuildStatus::Succeeded(text) => panel
+                .child(div().text_sm().text_color(success).child(text.clone()))
+                .when_some(self.build_folder.clone(), |panel, folder| {
+                    panel.child(
+                        Button::new("reveal-build")
+                            .ghost()
+                            .label(crate::reveal_label())
+                            .on_click(move |_, _, cx| cx.reveal_path(&folder)),
+                    )
+                }),
             BuildStatus::Failed { message, url } => {
                 let lines = message
                     .lines()

@@ -173,7 +173,7 @@
     <li>Click <span class="ui">Build Firmware</span>.</li>
   </ol>
   <p>The app then reports what it is doing: pushing the configuration to GitHub, waiting for the build to start, building (with a running clock), and downloading the firmware. A first build takes several minutes; later ones are usually quicker. If the build fails, the app shows the end of GitHub's log and <span class="ui">Open on GitHub</span> shows the build in your browser.</p>
-  <p>When it finishes you see "Built 2 firmware file(s). Flash each half below." and the files appear in the flashing section.</p>
+  <p>When it finishes you see "Built 2 firmware file(s), kept in …. Flash each half below." and the files appear in the flashing section. Every build is kept on disk, in a <i>builds</i> folder inside the app's own folder in Library › Application Support, under the board's name and the build's date; <span class="ui">Reveal in Finder</span> opens it. The files stay after the app is closed, so you can flash them later with <span class="ui">Choose Firmware Files…</span> or by dragging them onto the bootloader drive yourself.</p>
   <div class="box note"><div class="h">If the firmware does not build</div><p>The cause is nearly always text typed by hand: a binding in the Binding box that ZMK does not accept, something in the editor's Advanced boxes, or a line under Extra settings. Look for the name of a key or behavior in the log, fix it and build again. An add-on can fail to build too; remove it and try again.</p></div>
   <div class="box tip"><div class="h">Building some other way</div><p><span class="ui">Export Firmware Config…</span> (<kbd>⌘</kbd><kbd>E</kbd>) writes the generated files into a folder of your choice, laid out as a standard ZMK configuration or RMK project, together with a copy of the layout. Use it if you already have your own firmware repository or build on your own computer.</p></div>
 
@@ -183,7 +183,7 @@
   <ol class="steps">
     <li>Connect the half named in the first step to your computer with a USB cable.</li>
     <li>Put it into its bootloader. The step tells you how for your keyboard; see also Chapter 15. The app is waiting for the drive and says "Bootloader found. Ready to flash." when it appears.</li>
-    <li>Click <span class="ui">Flash Left Half</span> or <span class="ui">Flash Right Half</span>. The app checks that the file really is for this half of this keyboard before copying it. It then says "Flashed."</li>
+    <li>Click <span class="ui">Flash Left Half</span> or <span class="ui">Flash Right Half</span>. The app checks that the file really is for this half of this keyboard before copying it. It says "Flashing…" while the copy runs, and then "Flashed." A half restarts the moment it has the whole file, which can cut the copy short; the app waits a few seconds for the drive to disappear and counts that as success. Should a step still say "Failed" although the half restarted and runs the new firmware, <span class="ui">It runs, continue</span> moves on to the next half.</li>
     <li>Repeat for the other half.</li>
   </ol>
   <p>When both are done, the halves restart and reconnect to each other. macOS may complain that a disk "was not ejected properly" when a half restarts. That is normal.</p>

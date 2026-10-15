@@ -104,6 +104,16 @@ pub fn shortcut(keys: &str) -> String {
     }
 }
 
+/// What showing a folder in the system's file browser is called here:
+/// Finder on a Mac, the file manager elsewhere.
+pub fn reveal_label() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Reveal in Finder"
+    } else {
+        "Show in file manager"
+    }
+}
+
 /// `⇧⌘S` as `Ctrl+Shift+S`. Each word holding the Command glyph is
 /// rewritten; the rest ("Arrow keys", "to") is left alone.
 fn spelled_out(keys: &str) -> String {
