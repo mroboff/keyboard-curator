@@ -10,13 +10,13 @@
       "archived": false,
       "pushed": "2026-09-10",
       "revision": "b31aa0a357343535a56d535edd0c2ad64d3d7230",
-      "stars": 83
+      "stars": 84
     },
     "zmk-helpers": {
       "archived": false,
       "pushed": "2026-09-10",
       "revision": "b1548efd28d2cc64b9506654e6883695c258190f",
-      "stars": 421
+      "stars": 422
     },
     "zmk-leader-key": {
       "archived": false,
@@ -38,40 +38,40 @@
     },
     "zmk-unicode": {
       "archived": false,
-      "pushed": "2026-09-09",
+      "pushed": "2026-10-08",
       "revision": "3e8ca744e5c3b6f430b3713f3e45b806ce89be7b",
-      "stars": 41
+      "stars": 42
     }
   },
   "candidates": [
     {
       "description": "vertical widgets for oled and niceview screens using zmk (for split and non-split keyboards)",
       "name": "mctechnology17/zmk-nice-oled",
-      "stars": 493,
+      "stars": 498,
       "url": "https://github.com/mctechnology17/zmk-nice-oled"
     },
     {
       "description": "A sleek customization for the nice!view shield",
       "name": "M165437/nice-view-gem",
-      "stars": 390,
+      "stars": 391,
       "url": "https://github.com/M165437/nice-view-gem"
     },
     {
       "description": "Custom status screen for zmk dongles",
       "name": "englmaxi/zmk-dongle-display",
-      "stars": 268,
+      "stars": 269,
       "url": "https://github.com/englmaxi/zmk-dongle-display"
     },
     {
       "description": "YADS  - Yet another Dongle Screen for ZMK",
       "name": "janpfischer/zmk-dongle-screen",
-      "stars": 264,
+      "stars": 265,
       "url": "https://github.com/janpfischer/zmk-dongle-screen"
     },
     {
       "description": "A PS/2 mouse & trackpoint driver module for keyboards running the zmk firmware",
       "name": "infused-kim/kb_zmk_ps2_mouse_trackpoint_driver",
-      "stars": 241,
+      "stars": 243,
       "url": "https://github.com/infused-kim/kb_zmk_ps2_mouse_trackpoint_driver"
     },
     {
@@ -101,7 +101,7 @@
     {
       "description": "ZMK module to support hall-effect switches and features",
       "name": "cr3eperall/zmk-feature-hall-effect",
-      "stars": 38,
+      "stars": 39,
       "url": "https://github.com/cr3eperall/zmk-feature-hall-effect"
     },
     {
@@ -125,7 +125,7 @@
     {
       "description": "Helpers for localizing ZMK keymaps",
       "name": "joelspadin/zmk-locales",
-      "stars": 32,
+      "stars": 33,
       "url": "https://github.com/joelspadin/zmk-locales"
     },
     {
@@ -155,10 +155,10 @@
     {
       "description": "ZMK module to dynamically shift keyboard layouts at runtime",
       "name": "kot149/zmk-layout-shift",
-      "stars": 17,
+      "stars": 18,
       "url": "https://github.com/kot149/zmk-layout-shift"
     }
   ],
-  "checked": "2026-10-06",
+  "checked": "2026-10-26",
   "format": 1
 }
